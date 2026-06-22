@@ -10,6 +10,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getDatabase, ref, onValue, update, push }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCKzCIluCSXOoJR1RtbavOQkPYKXdGKvVY",
   authDomain: "winterfest30.firebaseapp.com",
@@ -19,6 +20,8 @@ const firebaseConfig = {
   messagingSenderId: "927755122816",
   appId: "1:927755122816:web:3abeaf35c87457ff634e65"
 };
+
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
@@ -63,15 +66,21 @@ function bindFirebase() {
     });
     updateProgress(data);
     setSyncBar("● Verbunden","ok");
+  }, err => {
+    setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
   });
 
   onValue(ref(db,"comments"), snap => {
     window._allComments = snap.val() || {};
     renderOpenComment();
+  }, err => {
+    setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
   });
 
   onValue(ref(db,"chat"), snap => {
     renderChat(snap.val() || {});
+  }, err => {
+    setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
   });
 }
 
@@ -219,7 +228,7 @@ function buildUI() {
     phase.categories.forEach((cat,ci) => {
       const catEl=document.createElement("div");
       catEl.className="category";
-      catEl.innerHTML=`<div class="category-title">${cat.title}</div>`;
+      catEl.innerHTML=`<div class="category-title">${esc(cat.title)}</div>`;
       const ul=document.createElement("ul");
       ul.className="tasks";
       cat.tasks.forEach((task,ti) => {
@@ -230,7 +239,7 @@ function buildUI() {
           <div class="task-check" onclick="APP.toggleTask('${key}')"></div>
           <span class="task-priority ${task.prio}">${prioLabel[task.prio]||""}</span>
           <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text)}</span>
-          <button class="comment-btn" onclick="APP.openComments('${key}',${JSON.stringify(task.text)})" title="Kommentare">💬</button>
+          <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Kommentare">💬</button>
           <div class="task-meta"></div>`;
         ul.appendChild(li);
       });
