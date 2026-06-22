@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Das 30. Winterfest – Planung</title>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, update, push }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCKzCIluCSXOoJR1RtbavOQkPYKXdGKvVY",
+  authDomain: "winterfest30.firebaseapp.com",
+  databaseURL: "https://winterfest30-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "winterfest30",
+  storageBucket: "winterfest30.firebasestorage.app",
+  messagingSenderId: "927755122816",
+  appId: "1:927755122816:web:3abeaf35c87457ff634e65"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+let currentUser = localStorage.getItem("wf_user") || "";
+let openCommentKey = null;
+let pendingCb = null;
+
+const esc = s => String(s)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+  .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+const ts2str = ts => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})
+    +" "+d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+};
+
+const taskKey = (phaseId,ci,ti) => `${phaseId}_c${ci}_t${ti}`;
+
+const setSyncBar = (msg,cls) => {
+  const el = document.getElementById("syncBar");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = "sync-bar"+(cls?" "+cls:"");
+};
+
+// ── Firebase listeners ────────────────────────
+function bindFirebase() {
+  onValue(ref(db,"tasks"), snap => {
+    const data = snap.val() || {};
+    document.querySelectorAll(".task[data-key]").forEach(el => {
+      const s = data[el.dataset.key] || {};
+      const meta = el.querySelector(".task-meta");
+      if (s.done) {
+        el.classList.add("done");
+        if (meta) meta.textContent = "✓ "+(s.by||"?")+" · "+ts2str(s.at);
+      } else {
+        el.classList.remove("done");
+        if (meta) meta.textContent = "";
+      }
+    });
+    updateProgress(data);
+    setSyncBar("● Verbunden","ok");
+  });
+
+  onValue(ref(db,"comments"), snap => {
+    window._allComments = snap.val() || {};
+    renderOpenComment();
+  });
+
+  onValue(ref(db,"chat"), snap => {
+    renderChat(snap.val() || {});
+  });
+}
+
+function updateProgress(taskData) {
+  const all  = document.querySelectorAll(".task[data-key]").length;
+  const done = Object.values(taskData||{}).filter(s=>s.done).length;
+  const pct  = all ? Math.round(done/all*100) : 0;
+  const fill = document.getElementById("progressFill");
+  if (fill) fill.style.width = pct+"%";
+  const d=document.getElementById("pDone"),
+        t=document.getElementById("pTotal"),
+        p=document.getElementById("pPct");
+  if(d) d.textContent=done+" erledigt";
+  if(t) t.textContent=all+" Aufgaben";
+  if(p) p.textContent=pct+" %";
+}
+
+function renderOpenComment() {
+  if (!openCommentKey) return;
+  const list = document.getElementById("commentList");
+  if (!list) return;
+  const msgs = Object.values(window._allComments[openCommentKey]||{})
+    .sort((a,b)=>a.ts-b.ts);
+  list.innerHTML = msgs.length===0
+    ? "<p class=\"empty-state\">Noch keine Kommentare.</p>"
+    : msgs.map(m=>`<div class="msg-item ${m.user===currentUser?"own":""}">
+        <span class="msg-user">${esc(m.user)}</span>
+        <span class="msg-ts">${ts2str(m.ts)}</span>
+        <p class="msg-text">${esc(m.text)}</p>
+      </div>`).join("");
+  list.scrollTop = list.scrollHeight;
+}
+
+function renderChat(data) {
+  const list = document.getElementById("chatList");
+  if (!list) return;
+  const msgs = Object.values(data).sort((a,b)=>a.ts-b.ts);
+  list.innerHTML = msgs.length===0
+    ? "<p class=\"empty-state\">Noch keine Nachrichten.</p>"
+    : msgs.map(m=>`<div class="msg-item ${m.user===currentUser?"own":""}">
+        <span class="msg-user">${esc(m.user)}</span>
+        <span class="msg-ts">${ts2str(m.ts)}</span>
+        <p class="msg-text">${esc(m.text)}</p>
+      </div>`).join("");
+  list.scrollTop = list.scrollHeight;
+}
+
+// ── APP actions ───────────────────────────────
+window.APP = {
+  toggleTask(key) {
+    if (!currentUser) { pendingCb=()=>window.APP.toggleTask(key); window.APP.showName(); return; }
+    const el = document.querySelector(`.task[data-key="${key}"]`);
+    const isDone = el && el.classList.contains("done");
+    update(ref(db,`tasks/${key}`), isDone
+      ? {done:false,by:null,at:null}
+      : {done:true,by:currentUser,at:Date.now()});
+  },
+
+  openComments(key,text) {
+    openCommentKey = key;
+    document.getElementById("commentTaskTitle").textContent =
+      text.substring(0,90)+(text.length>90?"…":"");
+    document.getElementById("commentPanel").classList.add("open");
+    renderOpenComment();
+    setTimeout(()=>document.getElementById("commentInput").focus(),300);
+  },
+
+  closeComments() {
+    document.getElementById("commentPanel").classList.remove("open");
+    openCommentKey = null;
+  },
+
+  sendComment() {
+    if (!openCommentKey) return;
+    if (!currentUser) { pendingCb=window.APP.sendComment; window.APP.showName(); return; }
+    const inp = document.getElementById("commentInput");
+    const text = inp.value.trim();
+    if (!text) return;
+    push(ref(db,`comments/${openCommentKey}`),{user:currentUser,text,ts:Date.now()});
+    inp.value = "";
+  },
+
+  sendChat() {
+    if (!currentUser) { pendingCb=window.APP.sendChat; window.APP.showName(); return; }
+    const inp = document.getElementById("chatInput");
+    const text = inp.value.trim();
+    if (!text) return;
+    push(ref(db,"chat"),{user:currentUser,text,ts:Date.now()});
+    inp.value = "";
+  },
+
+  toggleChat() {
+    document.getElementById("chatPanel").classList.toggle("open");
+  },
+
+  scrollTo(id) {
+    document.getElementById(id)?.scrollIntoView({behavior:"smooth",block:"start"});
+  },
+
+  showName() {
+    document.getElementById("nameModal").classList.add("open");
+    document.getElementById("nameInput").value = currentUser||"";
+    setTimeout(()=>document.getElementById("nameInput").focus(),100);
+  },
+
+  confirmName() {
+    const name = document.getElementById("nameInput").value.trim();
+    if (!name) return;
+    currentUser = name;
+    localStorage.setItem("wf_user",name);
+    document.getElementById("userLabel").textContent = name;
+    document.getElementById("nameModal").classList.remove("open");
+    if (pendingCb) { const cb=pendingCb; pendingCb=null; cb(); }
+  },
+
+  changeName() { window.APP.showName(); }
+};
+
+// ── Build UI ──────────────────────────────────
+function buildUI() {
+  const container = document.getElementById("mainContainer");
+  const prioLabel = {"prio-1":"Kritisch","prio-2":"Wichtig","prio-3":"Optional"};
+  window._allComments = {};
+
+  PHASES_DATA.forEach((phase,pi) => {
+    const ph = document.createElement("div");
+    ph.className="phase"; ph.id=phase.id;
+    ph.innerHTML=`<div class="phase-header">
+      <span class="phase-label">${esc(phase.label)}</span>
+      <span class="phase-title">${esc(phase.title)}</span>
+      <span class="phase-subtitle">${esc(phase.subtitle)}</span>
+    </div>`;
+
+    if (phase.timeline?.length) {
+      const tl=document.createElement("div");
+      tl.className="timeline-strip";
+      tl.innerHTML=phase.timeline.map(t=>`
+        <div class="tl-item">
+          <div class="tl-date">${esc(t.time)}</div>
+          <div class="tl-text">${esc(t.text)}</div>
+        </div>`).join("");
+      ph.appendChild(tl);
+    }
+
+    phase.categories.forEach((cat,ci) => {
+      const catEl=document.createElement("div");
+      catEl.className="category";
+      catEl.innerHTML=`<div class="category-title">${cat.title}</div>`;
+      const ul=document.createElement("ul");
+      ul.className="tasks";
+      cat.tasks.forEach((task,ti) => {
+        const key=taskKey(phase.id,ci,ti);
+        const li=document.createElement("li");
+        li.className="task"; li.dataset.key=key;
+        li.innerHTML=`
+          <div class="task-check" onclick="APP.toggleTask('${key}')"></div>
+          <span class="task-priority ${task.prio}">${prioLabel[task.prio]||""}</span>
+          <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text)}</span>
+          <button class="comment-btn" onclick="APP.openComments('${key}',${JSON.stringify(task.text)})" title="Kommentare">💬</button>
+          <div class="task-meta"></div>`;
+        ul.appendChild(li);
+      });
+      catEl.appendChild(ul);
+      ph.appendChild(catEl);
+    });
+
+    container.appendChild(ph);
+    if (pi<PHASES_DATA.length-1) {
+      const div=document.createElement("div");
+      div.className="divider"; div.textContent="⸻ ✦ ⸻";
+      container.appendChild(div);
+    }
+  });
+}
+
+// ── Init ──────────────────────────────────────
+document.addEventListener("DOMContentLoaded",()=>{
+  document.getElementById("commentInput")
+    .addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendComment();} });
+  document.getElementById("chatInput")
+    .addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendChat();} });
+
+  if (currentUser) document.getElementById("userLabel").textContent=currentUser;
+  else window.APP.showName();
+
+  buildUI();
+  setSyncBar("⟳ Verbinde mit Firebase…");
+  bindFirebase();
+});
+</script>
+
+<script>
+const PHASES_DATA = [{"id": "phase1", "label": "Phase 1", "title": "Fundament legen", "subtitle": "Juni – Juli 2026", "categories": [{"title": "📍 Datum & Gelände", "tasks": [{"prio": "prio-1", "text": "Datum 29.05.2027 beim Grundstückseigentümer verbindlich anfragen und schriftlich bestätigen lassen"}, {"prio": "prio-1", "text": "Aufbautag (27.05. oder 28.05.) und Abbautag (30.05.) ebenfalls reservieren"}, {"prio": "prio-1", "text": "Fragen: Feuer erlaubt? Lautstärke-/Musikbeschränkungen? Übernachtung erlaubt? Verantwortung / Haftung?"}, {"prio": "prio-1", "text": "Strom: Gibt es Anschluss oben und unten? Welche Leistung? Brauchen wir Aggregat?"}, {"prio": "prio-1", "text": "Wasser: Wasseranschluss auf dem Gelände? Falls nicht, Planung Wasserkanister / Wassertank"}, {"prio": "prio-1", "text": "Toilettenwagen: Zufahrt möglich? Standfläche rechts oben prüfen. Welche Mindesthöhe / -breite braucht die Zufahrt?"}, {"prio": "prio-2", "text": "Parken klären: Wo parken 20–25 Leute? Shuttle nötig? Parkhinweis auf Einladung einplanen"}, {"prio": "prio-2", "text": "Foto-/Videodokumentation des aktuellen Geländezustands machen (Referenz für Planung)"}, {"prio": "prio-2", "text": "Einfachen Lageplan skizzieren: Zonen markieren (Eingang, Rampe, Hauptfläche, Wettkampf, Küche, Toilette, Chill)"}]}, {"title": "💰 Grobbudget", "tasks": [{"prio": "prio-1", "text": "Toilettenwagen: 3 Angebote einholen (für Wochenende 28.–30.05.2027, ca. 20–25 Personen)"}, {"prio": "prio-2", "text": "Gesamtbudget festlegen: Was kannst du maximal ausgeben? Was sollen ggf. Gäste via Spendenkasse beisteuern?"}, {"prio": "prio-2", "text": "Budget in drei Kategorien aufteilen: Muss (Toilette, Essen, Getränke, Licht) / Sollte (Deko, Pavillons) / Luxus (Dinnie Handles, Extras)"}, {"prio": "prio-3", "text": "Entscheidung Dinnie Stone Handles (ca. 160 €): Kauf sinnvoll wenn langfristiger Trainingsnutzen? Jetzt oder später entscheiden"}]}, {"title": "👥 Gästeliste & Helfer", "tasks": [{"prio": "prio-2", "text": "Gästeliste erstellen: Wer kommt definitiv, wer wahrscheinlich? Realistisches Ziel: 20 Personen, max. 25–30"}, {"prio": "prio-2", "text": "Kernhelfer identifizieren: Wer hilft beim Aufbau? Wer bei der Küche? Wer kann Axt-/Bogensicherheit übernehmen? Direkt ansprechen"}, {"prio": "prio-2", "text": "Freund mit Bogenbaukurs: Termin und Ablauf für den Eventtag konkret absprechen. Will er das übernehmen?"}]}], "timeline": []}, {"id": "phase2", "label": "Phase 2", "title": "Infrastruktur sichern", "subtitle": "August 2026", "categories": [{"title": "🚽 Toilettenwagen", "tasks": [{"prio": "prio-1", "text": "Toilettenwagen verbindlich buchen. Anbieter aus Phase 1 vergleichen und beauftragen"}, {"prio": "prio-1", "text": "Liefertermin: 28.05. morgens. Abholtermin: 30.05. oder 31.05. Vertraglich festhalten"}, {"prio": "prio-2", "text": "Strom-/Wasseranforderungen des Wagens klären und mit Geländesituation abgleichen"}, {"prio": "prio-2", "text": "Toilettenpapier, Seife, Handtücher: Wer stellt was? Mit Vermieter klären"}]}, {"title": "⛺ Pavillons & Struktur", "tasks": [{"prio": "prio-1", "text": "Inventur: Welche Pavillons sind vorhanden? Maße, Zustand, fehlende Heringe/Stangen prüfen"}, {"prio": "prio-2", "text": "Fehlende Pavillons kaufen oder leihen. Mindestens 3×3m-Pavilllons für: Essbereich, Küche, 1–2 Chillbereiche"}, {"prio": "prio-2", "text": "Abspannmaterial: Heringe (mind. 6 pro Pavillon), Seile, Gewichte für Hartboden. Kaufen oder leihen"}, {"prio": "prio-2", "text": "Stoffbahnen / Sonnensegel: Maße bestimmen, Bezugsquellen prüfen (Baumwollstoff, Juteoptik, Leinen – kein Kunststoff-Look)"}, {"prio": "prio-3", "text": "Spannseile für Sonnensegel zwischen Bäumen testen: Welche Abstände? Welche Befestigung an Baumstämmen ohne Schaden?"}]}, {"title": "⚔️ Wettkampf-Material", "tasks": [{"prio": "prio-1", "text": "Finale Wettkampfliste festlegen: Bogenschießen, Axtwerfen, Tauziehen, Metkrug halten, Sandsack Team-Carry. Nicht mehr als 5 Events"}, {"prio": "prio-2", "text": "Axtwerfen: Geeignete Wurfäxte kaufen oder leihen. Zielscheibe (Baumscheibe mind. 40 cm dick). Sicheren Wurfbereich auf Lageplan einzeichnen"}, {"prio": "prio-2", "text": "Bogenschießen: Bögen, Pfeile (mind. 2× Personenanzahl), Zielscheiben, Pfeilfang mit Strohballen oder Teppich sichern"}, {"prio": "prio-2", "text": "Tauziehen: Dickes Tau min. 20 m (mind. 25–30 mm Durchmesser), Markierung in der Mitte, ebene sichere Zone ohne Wurzeln definieren"}, {"prio": "prio-2", "text": "Metkrug halten: 20–25 identische Krüge oder Becher (gleiche Größe!), standardisierte Füllung (z.B. 0,5 l Wasser), Stoppuhr"}, {"prio": "prio-2", "text": "Sandsack Team-Carry: 90 kg und/oder >100 kg Sack für Team-Event, 80 kg für Einzeloption. Tragebereich (ca. 20–30 m) auf Gelände markieren"}, {"prio": "prio-2", "text": "Punktesystem ausarbeiten: Punkte je Platzierung, Teampunkte, Sondertitel. Schriftlich fixieren"}, {"prio": "prio-3", "text": "Dinnie Handles: Entscheidung treffen und ggf. bestellen (ca. 160 €, Lieferzeit beachten)"}, {"prio": "prio-3", "text": "Sieger-Schärpe, Titel-Schild oder Pokal beschaffen oder selbst basteln"}]}], "timeline": []}, {"id": "phase3", "label": "Phase 3", "title": "Deko- & Ess-Konzept finalisieren", "subtitle": "September 2026", "categories": [{"title": "🪵 Deko & Atmosphäre", "tasks": [{"prio": "prio-2", "text": "Deko-Inventur: Was ist vorhanden? (Tau, Laternen, Felle, Bierbänke, Campingstühle, Baumstümpfe)"}, {"prio": "prio-2", "text": "Einkaufsliste Deko erstellen: Tau, LED-Laternen, Pfosten, Jutestoff, Holzschilder, Wimpel/Banner. Budget-Deckel setzen"}, {"prio": "prio-2", "text": "Lichtkonzept: Wegeleuchten Rampe, LED-Laternen Sitzbereiche, Lichterketten unter Pavillons. Welcher Strom woher?"}, {"prio": "prio-2", "text": "Eingangs-Inszenierung konkret planen: Pfosten + Tau Rampe, Eingangsschild (was steht drauf?), LED-Fackeloptik. Materialien bestimmen"}, {"prio": "prio-3", "text": "Holzschilder selbst machen oder kaufen? Pyrographie / Farbe / Laser? Beschriftungen festlegen (Zonen, Wettkampfbereich, Küche, Toilette)"}, {"prio": "prio-3", "text": "Musik-Konzept: Mittelalter-/Folkmusik-Playlist für Hintergrund, Lautsprecher / Bluetooth-Box im Außenbereich. Wetterfest?"}]}, {"title": "🍲 Essens-Konzept", "tasks": [{"prio": "prio-1", "text": "Finale Rezepte festlegen: 1) DailyVegan-Grillfleisch, 2) Vegane Bratwurst, 3) Kesselgericht (Linsen-Kartoffel oder Bohnen-Chili), 4) Beilagenliste"}, {"prio": "prio-1", "text": "Mengenplanung für 25 Personen erstellen: Gramm pro Person pro Komponente, dann ×25, +20% Reserve"}, {"prio": "prio-2", "text": "Getränkemengen schätzen: Bier/Met/Cider (ca. 3–4 l pro Person alkoholisch), Wasser (min. 3 l pro Person), Cola/Limo, alkoholfreies Bier"}, {"prio": "prio-2", "text": "Kühlung planen: Wie viele Kühlboxen / Kühlzelte nötig? Wie viel Eis? Wo kaufen (Großmengen)?"}, {"prio": "prio-2", "text": "Küchenequipment-Inventur: Was ist vorhanden, was fehlt? (Grill, Dreibein 14L, Schüsseln, Zangen, Messer, Schneidebretter, GN-Behälter)"}, {"prio": "prio-2", "text": "Einweggeschirr vs. Mehrweg: Entscheidung treffen. Mehrweg weniger Müll, aber Abwasch. Robuste Campingteller / -becher sind Kompromiss"}]}], "timeline": []}, {"id": "phase4", "label": "Phase 4", "title": "Einkauf & Beschaffung", "subtitle": "Oktober 2026", "categories": [{"title": "🛒 Langlebige Anschaffungen (jetzt kaufen)", "tasks": [{"prio": "prio-2", "text": "Tau kaufen: Dickes Naturhanf-/Sisal-Tau für Rampe und Tauziehen (20+ m, mind. 25 mm ⌀ für Tauziehen)"}, {"prio": "prio-2", "text": "LED-Laternen (6–10 Stück), Solarbetrieben oder Batterie. Outdoor-geeignet, Metalloptik bevorzugt"}, {"prio": "prio-2", "text": "Wegeleuchten Rampe: Solar-Erdspieße oder LED-Lichterkette auf Pfosten. Menge nach Lampenlänge berechnen"}, {"prio": "prio-2", "text": "Stoffbahnen: Naturtöne (beige, braun, grau), Baumwolle/Leinen, je nach Zonengröße. Gesamtmenge aus Lageplan ableiten"}, {"prio": "prio-2", "text": "Holzschilder / Schreibmaterial: Rohholzschilder, Brandeisen oder Farbe, Befestigungsschnur"}, {"prio": "prio-2", "text": "Kabeltrommel (2×), Verlängerungskabel Outdoor (je mind. 25 m), Kabelbrücken, Gaffa-Tape"}, {"prio": "prio-2", "text": "Erste-Hilfe-Set (groß), Zeckenzangen, Kühlpacks, Desinfektionsmittel, Pflaster-Sortiment"}, {"prio": "prio-2", "text": "Feuerlöscher (1–2 Stück) und Wassereimer für Grillbereich"}, {"prio": "prio-3", "text": "Bierbankgarnituren leihen oder kaufen (falls zu wenige vorhanden)"}, {"prio": "prio-3", "text": "Müllstationen: große stabile Mülleimer oder Ständer mit Mülltüten. Mindestens 3 Stellen verteilt"}]}, {"title": "📨 Einladungen", "tasks": [{"prio": "prio-1", "text": "Einladungen verschicken (spätestens Oktober, damit alle den Termin blockieren). Format: digital reicht, aber thematisch gestaltet"}, {"prio": "prio-2", "text": "Einladung enthält: Datum, Ort (grob), Dress Code Hinweis (kein Pflichtkostüm, aber Hinweis auf Outdoor), Parkhinweis, Übernachtungsinfo"}, {"prio": "prio-2", "text": "Freiwillige Spendenkasse kommunizieren: klare, entspannte Formulierung ohne Druck. QR-Code für digitale Option vorbereiten"}, {"prio": "prio-2", "text": "RSVP bis Anfang Dezember einfordern. Verbindliche Zusagen nötig für Essensmenge und Kostenplanung"}]}], "timeline": []}, {"id": "phase5", "label": "Phase 5", "title": "Probekochen & Pretests", "subtitle": "November 2026 – Januar 2027", "categories": [{"title": "🥩 Probekochen", "tasks": [{"prio": "prio-1", "text": "DailyVegan-Grillfleisch: Probekochen für 4–6 Personen. Marinade testen, Grillverhalten dokumentieren, Menge pro Person festhalten"}, {"prio": "prio-1", "text": "Vegane Bratwürste: Rezept (Foto vom Rezept sichern!) einmal durchkochen. Konsistenz, Grillbarkeit, Geschmack beurteilen"}, {"prio": "prio-1", "text": "Kesselgericht im 14-Liter-Kessel testen: Kochzeit, Wärmehaltung, wie lange heiß? Außentemperatur-Test sinnvoll"}, {"prio": "prio-2", "text": "Beilagen festlegen: Was wird direkt vorbereitet, was kaufe ich fertig (Hummus, Saucen)? Liste finalisieren"}, {"prio": "prio-2", "text": "Prep-Zeitplan erstellen: Was kann am Vortag vorbereitet werden? Was erst am Tag selbst? Wer macht was in der Küche?"}, {"prio": "prio-2", "text": "Finale Einkaufsliste schreiben: alle Zutaten, Mengen für 25 Personen (+20% Reserve), aufgeteilt nach Supermarkt vs. Großhandel vs. Online"}]}, {"title": "🏹 Wettkampf-Pretests", "tasks": [{"prio": "prio-2", "text": "Bogenschießen einmal probeschiessen (mit Freund der den Kurs leitet). Sicherheitsabstand und Pfeilfang im Geländeplan testen"}, {"prio": "prio-2", "text": "Axtwerfen: Sicherheitsprotokoll ausarbeiten. Wer überwacht? Wie werden Leute eingewiesen? Schild mit Regeln machen"}, {"prio": "prio-2", "text": "Metkrug-Variante testen: Welches Gewicht ist fair für Normalgast und trotzdem herausfordernd? Krug-Standardisierung prüfen"}, {"prio": "prio-3", "text": "Punktesystem einmal Probelauf: Werte und Regeln mit 2–3 Freunden durchgehen, ob es fair und verständlich wirkt"}]}, {"title": "🎟 Gästemanagement", "tasks": [{"prio": "prio-1", "text": "RSVP auswerten (Deadline Anfang Dezember). Finale Personenzahl für Essen, Getränke, Sitzplätze festhalten"}, {"prio": "prio-2", "text": "Übernachtungsfrage klären: Wer bleibt? Brauchen wir Schlafbereich? Wer fährt wann? Taxi/Fahrlogik kommunizieren"}, {"prio": "prio-2", "text": "Helferrollen verbindlich vergeben: Aufbau (28.05.), Küche (29.05.), Axt/Bogen-Aufsicht, Getränke, Abbau (30.05.)"}]}], "timeline": []}, {"id": "phase6", "label": "Phase 6", "title": "Feinschliff & Gelände-Vorbereitung", "subtitle": "Februar – April 2027", "categories": [{"title": "🗺 Geländeplanung final", "tasks": [{"prio": "prio-1", "text": "Geländebegehung im März/April: Wuchs, Zustand nach Winter, Problemstellen (Löcher, Wurzeln, Matsch) prüfen"}, {"prio": "prio-1", "text": "Geländeplan finalisieren: Zonen, Wege, Lichtpunkte, Stromanschlüsse, Wettkampfbereiche, Küche, Toilette einzeichnen"}, {"prio": "prio-2", "text": "Mähplan: Wann wird gemäht? (1–2 Wochen vor Event, nicht zu früh). Wer macht es? Freischneider für Waldrand nötig?"}, {"prio": "prio-2", "text": "Rampe Rutschgefahr lösen: Hackschnitzel, Anti-Rutsch-Matte, Sand oder Planken auf feuchtem Untergrund? Material beschaffen"}, {"prio": "prio-2", "text": "Streckplan Kabel: Wo laufen welche Kabel? Kabelbrücken an Querungspunkten einplanen. Keinen Kabel quer über Laufwege"}]}, {"title": "📋 Ablaufplan", "tasks": [{"prio": "prio-1", "text": "Detaillierten Ablaufplan für 29.05. schreiben: Uhrzeiten, Zuständigkeiten, Buffer-Zeiten einbauen"}, {"prio": "prio-1", "text": "Ablaufplan ausdrucken und an alle Helfer verteilen. Jeder Helfer hat seine eigene Rolle schriftlich"}, {"prio": "prio-2", "text": "Sicherheitsplan ausarbeiten: Axt/Bogen nur bis 19:00 Uhr, danach wegschließen. Wer hat Schlüssel? Verantwortliche benennen"}, {"prio": "prio-2", "text": "Schlechtwetter-Plan: Was passiert bei Regen? Pavillons reichen aus? Gibt es einen Alternativraum (Hütte)? Was verschiebt sich?"}, {"prio": "prio-2", "text": "Notfallkontakte notieren: Nächste Klinik, Notruf, Taxi-Nummern, Grundstückseigentümer. Auf Zettel, nicht nur im Handy"}]}, {"title": "🛒 Finale Besorgungen", "tasks": [{"prio": "prio-2", "text": "Fehlende Deko-Materialien kaufen (alles, was nicht verderblich ist, jetzt besorgen)"}, {"prio": "prio-2", "text": "Wettkampf-Material vollständig: alle Bögen, Pfeile, Äxte, Seile, Krüge, Sandsäcke vorhanden und geprüft"}, {"prio": "prio-2", "text": "Küchen-Equipment komplett: alle Töpfe, Behälter, Besteck, Teller, Becher vorhanden"}, {"prio": "prio-3", "text": "Holzschilder fertigstellen und beschriften (Zonen, Wettkampfregeln, Hinweisschilder)"}]}], "timeline": []}, {"id": "phase7", "label": "Phase 7", "title": "Endspurt", "subtitle": "Mai 2027 (1.–28. Mai)", "categories": [{"title": "🌿 Gelände & Aufbau (Woche davor)", "tasks": [{"prio": "prio-1", "text": "14.–16. Mai: Gelände mähen, Grünschnitt, Wege freischneiden. Genug Vorlauf, damit Gras etwas trocknet"}, {"prio": "prio-1", "text": "Getränke-Großeinkauf: Bier, Met, Cider, Cola, Wasser. Wann wird geliefert / abgeholt? Kühlung organisieren"}, {"prio": "prio-1", "text": "Lebensmittel-Einkauf: nicht-verderbliches früh, Frisches 1–2 Tage vorher. Einkaufsliste nach Priorität sortieren"}, {"prio": "prio-1", "text": "Wettervorhersage ab 22. Mai täglich checken. Bei schlechter Prognose: Regenplan aktivieren, zusätzliche Planen/Pavillons?"}]}, {"title": "🔨 Aufbautag 28. Mai", "tasks": [{"prio": "prio-1", "text": "Morgens: Toilettenwagen wird geliefert und positioniert. Zufahrt freihalten!"}, {"prio": "prio-1", "text": "Pavillons aufstellen, abspannen, mit Stoffbahnen verkleiden. Reihenfolge: Küche zuerst (wetterkritisch), dann Chillbereiche"}, {"prio": "prio-1", "text": "Rampe: Tau spannen, Pfosten setzen, LED-Laternen montieren, Anti-Rutsch sichern"}, {"prio": "prio-1", "text": "Strom: Kabeltrommeln verlegen, Kabelbrücken setzen, alle Verbraucher anschließen und testen"}, {"prio": "prio-1", "text": "Wettkampfbereiche markieren: Bogenschießen (Schusslinie, Pfeilfang), Axtwerfen (Wartezone, Scheibe), Tauziehen (Linie)"}, {"prio": "prio-2", "text": "Deko aufhängen: Stoffbahnen, Schilder, Wimpel, Lichterketten. Abends Licht-Check in Dunkelheit machen"}, {"prio": "prio-2", "text": "Küche einrichten: Dreibein aufbauen, Grill positionieren, Arbeitsflächen, Küchenequipment auspacken, Wasserversorgung prüfen"}, {"prio": "prio-2", "text": "Getränkestation aufbauen: Kühlboxen befüllen, Wasserstellen markieren, Becher/Krüge bereitstellen"}, {"prio": "prio-2", "text": "Sicherheits-Check abends: Stolperstellen? Kabel ok? Rampe sicher? Feuerlöscher da? Erste Hilfe griffbereit?"}, {"prio": "prio-2", "text": "Kesselgericht vorbereiten: Gemüse schneiden, Zutaten portionieren. Kochen erst morgen früh"}, {"prio": "prio-3", "text": "Spendenkasse aufstellen und beschriften. QR-Code für digitale Zahlungen ausdrucken und wetterfest schützen"}]}, {"title": "🍳 Vorbereitung Küche (28.05. abends)", "tasks": [{"prio": "prio-1", "text": "DailyVegan-Grillfleisch marinieren und über Nacht kühlen"}, {"prio": "prio-1", "text": "Gemüse für Kesselgericht vorreinigen und schneiden, in Behälter verpackt kühlen"}, {"prio": "prio-2", "text": "Beilagen vorbereiten: Krautsalat, Gurken-Tomatensalat, Dips können schon fertig sein"}]}], "timeline": []}, {"id": "phase8", "label": "29. Mai 2027", "title": "Eventtag – Ablaufplan", "subtitle": "Das 30. Winterfest", "categories": [{"title": "✅ Eventtag-Checkliste (Morgens)", "tasks": [{"prio": "prio-1", "text": "Strom läuft – alle Bereiche beleuchtet und mit Strom versorgt"}, {"prio": "prio-1", "text": "Wasser sichtbar und frei zugänglich (Kanister, Becher, Hinweisschild)"}, {"prio": "prio-1", "text": "Toilettenwagen zugänglich, beleuchtet, Papier und Seife vorhanden"}, {"prio": "prio-1", "text": "Erste-Hilfe-Set griffbereit (nicht im Kofferraum, sondern am Küchen-/Helferbereich)"}, {"prio": "prio-1", "text": "Feuerlöscher / Wassereimer beim Grill- und Kessel-Bereich positioniert"}, {"prio": "prio-1", "text": "Axt- und Bogenbereich: Aufsichtsperson gebrieft, Wartezone markiert, Sicherheitsregeln-Schild vorhanden"}, {"prio": "prio-2", "text": "Punkteliste vorbereitet (ausgedruckt, Stift dabei, Verantwortlicher bestimmt)"}, {"prio": "prio-2", "text": "Rampe: trocken, beleuchtet, kein Stolperrisiko"}, {"prio": "prio-2", "text": "Musik läuft, Atmosphäre ist da wenn erste Gäste ankommen"}, {"prio": "prio-2", "text": "Begrüßungsgetränk bereit (z.B. kleiner Met-Becher oder Cider beim Eingang)"}]}, {"title": "🏕 Abbau 30. Mai", "tasks": [{"prio": "prio-1", "text": "Toilettenwagen: Abholzeit bestätigt? Zufahrt freihalten"}, {"prio": "prio-1", "text": "Müll komplett entfernen – nichts auf dem Gelände lassen"}, {"prio": "prio-2", "text": "Pavillons, Stühle, Bänke, Equipment verstauen"}, {"prio": "prio-2", "text": "Gelände final abgehen: Heringe gezogen, Kabel eingerollt, keine Werkzeuge vergessen"}, {"prio": "prio-2", "text": "Grundstückseigentümer kurz informieren / Gelände übergeben"}]}], "timeline": [{"time": "07:00 – 08:00", "text": "Frühaufbau-Helfer: Letzte Checks, Kesselgericht ansetzen, Grill vorbereiten, Stromanschlüsse kontrollieren"}, {"time": "08:00 – 10:00", "text": "Küche startet: Kesselgericht auf dem Dreibein, Bratwürste vorbereiten, Saucen und Beilagen anrichten"}, {"time": "10:00 – 11:00", "text": "Finale Checks: Wettkampfbereiche nochmals prüfen, Bogenschießen-Sicherheit kontrollieren, Axtwerfen-Bereich absperren bis Aufsicht da ist"}, {"time": "12:00", "text": "Tore öffnen – Gäste kommen an. Begrüßungsgetränk bereit. Gelände wirkt sofort. Snacks vorhanden"}, {"time": "12:00 – 14:00", "text": "Ankunftsphase: Freies Erkunden, Begrüßung, Getränke, Bogenbaukurs mit Freund (optional), Teamlisten aushängen"}, {"time": "14:00 – 16:00", "text": "Wettkämpfe Block 1: Bogenschießen + Axtwerfen. Nüchtern oder halbwegs nüchtern. Aufsicht aktiv. Punkte werden notiert"}, {"time": "16:00 – 17:30", "text": "Festessen: Grillstation läuft, Kesselgericht ausgeben, Brot, Beilagen, Saucen. Kein Stress, kein Buffet-Chaos – strukturierte Ausgabe"}, {"time": "17:30 – 19:00", "text": "Wettkämpfe Block 2: Tauziehen, Sandsack Team-Carry, Metkrug halten. Punkte werden addiert"}, {"time": "19:00", "text": "Bögen und Äxte wegschließen. Kein Ausnahmen. Verantwortliche Person übernimmt"}, {"time": "19:00 – 20:00", "text": "Siegerehrung: Punkteauszählung, Titel vergeben, Schärpe übergeben, Sondertitel für lustige Kategorien"}, {"time": "20:00 – open end", "text": "Tavernenabend: Kesselgericht für Spätkommer, Getränke, Musik, Lichtinszenierung, Lagerfeuer (falls erlaubt), Chillbereiche"}, {"time": "Nacht", "text": "Wasser sichtbar halten, Müll sammeln, Ruhezone für Übernachter, Taxi-Koordination für Heimfahrer"}]}] ;
+</script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+:root{--ink:#1a1410;--parchment:#f0e8d6;--parch2:#e8dcc4;--ember:#8b3a0f;--gold:#c49a2a;--moss:#4a5c3a;--ash:#6b6055;--rule:#c49a2a44}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--parchment);color:var(--ink);font-family:'Crimson Text',Georgia,serif;font-size:17px;line-height:1.65}
+.topbar{position:sticky;top:0;z-index:100;background:var(--ink);display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;border-bottom:2px solid var(--gold)}
+.topbar-title{font-family:'Cinzel',serif;font-size:.82rem;color:var(--gold);font-weight:700;letter-spacing:.08em;flex:1}
+.topbar-user{font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--ash);letter-spacing:.1em;white-space:nowrap}
+.topbar-user span{color:var(--parchment);cursor:pointer;text-decoration:underline}
+.topbar-btn{background:none;border:1px solid var(--gold);color:var(--gold);font-family:'JetBrains Mono',monospace;font-size:.62rem;padding:.3rem .6rem;cursor:pointer;border-radius:2px;white-space:nowrap}
+.topbar-btn:hover{background:var(--gold);color:var(--ink)}
+.sync-bar{background:var(--ink);color:var(--ash);font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:.1em;text-align:center;padding:.3rem;border-bottom:1px solid var(--rule)}
+.sync-bar.ok{color:#7db87d}.sync-bar.err{color:var(--ember)}
+header{background:var(--ink);color:var(--parchment);text-align:center;padding:2.5rem 2rem 2rem;position:relative;overflow:hidden}
+header::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(-45deg,transparent,transparent 18px,rgba(196,154,42,.04) 18px,rgba(196,154,42,.04) 19px)}
+.header-eyebrow{font-family:'JetBrains Mono',monospace;font-size:.62rem;letter-spacing:.25em;text-transform:uppercase;color:var(--gold);margin-bottom:.6rem}
+header h1{font-family:'Cinzel',serif;font-size:clamp(1.8rem,5vw,3rem);font-weight:900;color:var(--parchment);position:relative}
+header h1 span{color:var(--gold)}
+.header-date{font-family:'Cinzel',serif;font-size:.88rem;color:var(--gold);margin-top:.6rem;letter-spacing:.08em}
+.container{max-width:860px;margin:0 auto;padding:0 1rem 4rem}
+.progress-section{background:var(--parch2);border:1px solid var(--rule);padding:1.25rem;margin:2rem 0}
+.progress-title{font-family:'Cinzel',serif;font-size:.78rem;color:var(--ash);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.65rem}
+.progress-bar-wrap{height:7px;background:var(--parchment);border:1px solid var(--rule);overflow:hidden}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--moss),var(--ember));width:0%;transition:width .4s ease}
+.progress-stats{display:flex;justify-content:space-between;margin-top:.4rem;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ash)}
+.phase-nav{display:flex;gap:0;margin-bottom:2.5rem;border:1px solid var(--rule);overflow:hidden;flex-wrap:wrap}
+.pni{flex:1;min-width:70px;text-align:center;padding:.6rem .3rem;font-family:'JetBrains Mono',monospace;font-size:.56rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ash);border-right:1px solid var(--rule);cursor:pointer;transition:background .2s,color .2s}
+.pni:last-child{border-right:none}.pni:hover{background:var(--parch2);color:var(--ember)}
+.pni .pm{display:block;font-family:'Cinzel',serif;font-size:.8rem;font-weight:700;color:var(--ember);margin-bottom:.1rem}
+.phase{margin-bottom:3rem}
+.phase-header{display:flex;align-items:baseline;gap:.75rem;border-bottom:1px solid var(--gold);padding-bottom:.4rem;margin-bottom:1.5rem;flex-wrap:wrap}
+.phase-label{font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ash)}
+.phase-title{font-family:'Cinzel',serif;font-size:1.2rem;font-weight:700;color:var(--ember)}
+.phase-subtitle{font-size:.85rem;color:var(--ash);font-style:italic;margin-left:auto}
+.category{margin-bottom:1.75rem}
+.category-title{font-family:'Cinzel',serif;font-size:.85rem;font-weight:700;color:var(--moss);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem}
+.category-title::after{content:'';flex:1;height:1px;background:var(--moss);opacity:.2}
+.tasks{list-style:none;display:grid;gap:.25rem}
+.task{display:grid;grid-template-columns:20px auto 1fr auto;grid-template-rows:auto auto;gap:.3rem .5rem;align-items:start;padding:.5rem .6rem;background:var(--parch2);border-radius:1px;border-left:2px solid transparent;transition:background .15s,border-color .15s}
+.task:hover{background:#dfd4bc}
+.task.done{background:rgba(74,92,58,.08);border-left-color:var(--moss)}
+.task.done .task-text{text-decoration:line-through;color:var(--ash);opacity:.65}
+.task-check{width:18px;height:18px;border:1.5px solid var(--ash);border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,border-color .15s;margin-top:2px;grid-row:1}
+.task.done .task-check{background:var(--moss);border-color:var(--moss)}
+.task.done .task-check::after{content:'✓';font-size:11px;color:#fff;font-weight:700}
+.task-priority{font-family:'JetBrains Mono',monospace;font-size:.56rem;letter-spacing:.08em;padding:2px 5px;border-radius:2px;text-transform:uppercase;white-space:nowrap;align-self:start;grid-row:1}
+.prio-1{background:#8b3a0f20;color:var(--ember);border:1px solid #8b3a0f44}
+.prio-2{background:#c49a2a20;color:#7a5c10;border:1px solid #c49a2a44}
+.prio-3{background:#4a5c3a20;color:var(--moss);border:1px solid #4a5c3a44}
+.task-text{font-size:.9rem;line-height:1.45;cursor:pointer;grid-row:1}
+.comment-btn{background:none;border:none;cursor:pointer;font-size:.82rem;opacity:.4;padding:0 .2rem;line-height:1;align-self:start;grid-row:1;transition:opacity .15s}
+.comment-btn:hover{opacity:1}
+.task-meta{grid-column:2/5;grid-row:2;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--moss);letter-spacing:.05em}
+.timeline-strip{position:relative;padding-left:2rem;margin:1.5rem 0}
+.timeline-strip::before{content:'';position:absolute;left:6px;top:6px;bottom:0;width:1px;background:var(--gold);opacity:.4}
+.tl-item{position:relative;margin-bottom:1rem}
+.tl-item::before{content:'';position:absolute;left:-1.7rem;top:6px;width:9px;height:9px;background:var(--ember);border-radius:50%;border:2px solid var(--parchment);box-shadow:0 0 0 1px var(--ember)}
+.tl-date{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ash);letter-spacing:.1em;text-transform:uppercase}
+.tl-text{font-size:.9rem}
+.divider{text-align:center;margin:2.5rem 0;color:var(--gold);font-size:.72rem;letter-spacing:.3em;opacity:.5}
+footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ash);letter-spacing:.1em;text-transform:uppercase}
+.side-panel{position:fixed;top:0;right:0;width:min(400px,100vw);height:100%;background:var(--ink);color:var(--parchment);display:flex;flex-direction:column;z-index:200;transform:translateX(105%);transition:transform .3s ease;border-left:2px solid var(--gold)}
+.side-panel.open{transform:translateX(0)}
+.panel-header{padding:1rem;border-bottom:1px solid #fff2;display:flex;align-items:flex-start;gap:.75rem}
+.panel-header h3{font-family:'Cinzel',serif;font-size:.85rem;color:var(--gold);flex:1;line-height:1.4}
+.close-btn{background:none;border:none;color:var(--ash);cursor:pointer;font-size:1.2rem;line-height:1;flex-shrink:0}
+.close-btn:hover{color:var(--parchment)}
+.panel-task-title{padding:.65rem 1rem;font-size:.8rem;color:#fff9;font-style:italic;border-bottom:1px solid #fff1;line-height:1.4}
+.msg-list{flex:1;overflow-y:auto;padding:.75rem;display:flex;flex-direction:column;gap:.6rem}
+.msg-item{background:#ffffff0d;border-radius:2px;padding:.55rem .7rem;border-left:2px solid var(--gold)}
+.msg-item.own{border-left-color:var(--moss)}
+.msg-user{font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;margin-right:.4rem}
+.msg-item.own .msg-user{color:#7db87d}
+.msg-ts{font-family:'JetBrains Mono',monospace;font-size:.55rem;color:#fff4}
+.msg-text{margin-top:.2rem;font-size:.88rem;line-height:1.4;color:#fffd}
+.input-row{display:flex;gap:.5rem;padding:.65rem .75rem;border-top:1px solid #fff2}
+.input-row textarea{flex:1;background:#ffffff11;border:1px solid #ffffff22;color:var(--parchment);font-family:'Crimson Text',serif;font-size:.95rem;padding:.45rem .65rem;resize:none;height:42px;border-radius:2px;outline:none}
+.input-row textarea:focus{border-color:var(--gold)}
+.send-btn{background:var(--ember);border:none;color:#fff;padding:.45rem .8rem;cursor:pointer;font-family:'Cinzel',serif;font-size:.72rem;border-radius:2px;white-space:nowrap}
+.send-btn:hover{background:#a04515}
+.chat-panel{position:fixed;bottom:0;left:0;width:min(360px,100vw);height:400px;background:var(--ink);border:2px solid var(--gold);border-bottom:none;border-left:none;display:flex;flex-direction:column;z-index:200;transform:translateY(105%);transition:transform .3s ease}
+.chat-panel.open{transform:translateY(0)}
+.chat-header{display:flex;align-items:center;padding:.6rem .85rem;border-bottom:1px solid #fff2;gap:.6rem}
+.chat-header h3{font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);flex:1}
+.modal-overlay{position:fixed;inset:0;background:#000000aa;z-index:300;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal-overlay.open{display:flex}
+.modal-box{background:var(--ink);border:2px solid var(--gold);padding:2rem;width:min(360px,100%);text-align:center}
+.modal-box h2{font-family:'Cinzel',serif;color:var(--gold);font-size:1.1rem;margin-bottom:.75rem}
+.modal-box p{color:#ffffff88;font-size:.88rem;margin-bottom:1.1rem}
+.modal-box input{width:100%;padding:.6rem 1rem;background:#ffffff11;border:1px solid var(--gold);color:var(--parchment);font-family:'Crimson Text',serif;font-size:1rem;margin-bottom:.9rem;outline:none;border-radius:2px}
+.modal-box button{width:100%;background:var(--ember);border:none;color:#fff;padding:.7rem;font-family:'Cinzel',serif;font-size:.88rem;cursor:pointer;border-radius:2px;letter-spacing:.08em}
+.empty-state{color:#ffffff44;font-style:italic;font-size:.85rem;text-align:center;padding:1rem 0}
+@media(max-width:600px){.phase-subtitle{margin-left:0}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-title">⚔ Das 30. Winterfest</div>
+  <div class="topbar-user">Du: <span id="userLabel" onclick="APP.changeName()">…</span></div>
+  <button class="topbar-btn" onclick="APP.toggleChat()">💬 Chat</button>
+</div>
+
+<div class="sync-bar" id="syncBar">⟳ Verbinde mit Firebase…</div>
+
+<header>
+  <p class="header-eyebrow">Kollaborative Planung · Mittelalterliches Waldlager</p>
+  <h1>Das <span>30.</span> Winterfest</h1>
+  <p class="header-date">29. Mai 2027 · ~11,5 Monate · ca. 20–25 Personen</p>
+</header>
+
+<div class="container">
+  <div class="progress-section">
+    <p class="progress-title">Gesamtfortschritt</p>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
+    <div class="progress-stats">
+      <span id="pDone">0 erledigt</span>
+      <span id="pTotal">0 Aufgaben</span>
+      <span id="pPct">0 %</span>
+    </div>
+  </div>
+
+  <nav class="phase-nav">
+    <div class="pni" onclick="APP.scrollTo('phase1')"><span class="pm">Jul</span>Fundament</div>
+    <div class="pni" onclick="APP.scrollTo('phase2')"><span class="pm">Aug</span>Infra</div>
+    <div class="pni" onclick="APP.scrollTo('phase3')"><span class="pm">Sep</span>Konzept</div>
+    <div class="pni" onclick="APP.scrollTo('phase4')"><span class="pm">Okt</span>Einkauf</div>
+    <div class="pni" onclick="APP.scrollTo('phase5')"><span class="pm">Nov–Jan</span>Proben</div>
+    <div class="pni" onclick="APP.scrollTo('phase6')"><span class="pm">Feb–Apr</span>Feinschliff</div>
+    <div class="pni" onclick="APP.scrollTo('phase7')"><span class="pm">Mai</span>Endspurt</div>
+    <div class="pni" onclick="APP.scrollTo('phase8')"><span class="pm">29.5.</span>Eventtag</div>
+  </nav>
+
+  <div id="mainContainer"></div>
+</div>
+
+<footer>Das 30. Winterfest · 29. Mai 2027 · Mittelalterliches Waldlager</footer>
+
+<div class="side-panel" id="commentPanel">
+  <div class="panel-header">
+    <h3>Kommentare</h3>
+    <button class="close-btn" onclick="APP.closeComments()">✕</button>
+  </div>
+  <div class="panel-task-title" id="commentTaskTitle"></div>
+  <div class="msg-list" id="commentList"></div>
+  <div class="input-row">
+    <textarea id="commentInput" placeholder="Kommentar…" rows="1"></textarea>
+    <button class="send-btn" onclick="APP.sendComment()">Senden</button>
+  </div>
+</div>
+
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-header">
+    <h3>💬 Gruppen-Chat</h3>
+    <button class="close-btn" onclick="APP.toggleChat()">✕</button>
+  </div>
+  <div class="msg-list" id="chatList"></div>
+  <div class="input-row">
+    <textarea id="chatInput" placeholder="Nachricht…" rows="1"></textarea>
+    <button class="send-btn" onclick="APP.sendChat()">Senden</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="nameModal">
+  <div class="modal-box">
+    <h2>Wer bist du?</h2>
+    <p>Dein Name erscheint bei Aufgaben und Kommentaren.</p>
+    <input type="text" id="nameInput" placeholder="Dein Name…" maxlength="30"
+      onkeydown="if(event.key==='Enter')APP.confirmName()">
+    <button onclick="APP.confirmName()">Los geht's ⚔</button>
+  </div>
+</div>
+
+</body>
+</html>
