@@ -448,6 +448,14 @@ window.APP = {
   toggleHelperDone(key, checked) { update(ref(db,dbPath(`helpers/${key}`)), {done:!!checked}); },
   deleteHelper(key) { if(confirm("Helferrolle löschen?")) remove(ref(db,dbPath(`helpers/${key}`))); },
 
+  switchView(view, persist = true) {
+    const valid = ["overview","tasks","documents","budget","shopping","helpers","decisions","pins"];
+    if (!valid.includes(view)) view = "overview";
+    document.querySelectorAll(".orga-view").forEach(el => el.classList.toggle("is-active", el.dataset.view === view));
+    document.querySelectorAll(".view-tab").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
+    if (persist) localStorage.setItem("wf_view", view);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  },
   printHub() { window.print(); },
   toggleChat() { document.getElementById("chatPanel").classList.toggle("open"); },
   scrollTo(id) { document.getElementById(id)?.scrollIntoView({behavior:"smooth",block:"start"}); },
@@ -501,13 +509,16 @@ function buildUI() {
           <span class="task-priority ${task.prio}">${prioLabel[task.prio]||""}</span>
           <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text)}</span>
           <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Kommentare">💬</button>
-          <div class="task-controls">
-            <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
-            <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
-            <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
-              <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
-            </select></label>
-          </div>
+          <details class="task-details">
+            <summary>Details bearbeiten</summary>
+            <div class="task-controls">
+              <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
+              <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
+              <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
+                <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
+              </select></label>
+            </div>
+          </details>
           <div class="task-meta"></div>`;
         ul.appendChild(li);
       });
@@ -531,6 +542,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   if (currentUser) document.getElementById("userLabel").textContent=currentUser;
   else window.APP.showName();
   buildUI();
+  window.APP.switchView(localStorage.getItem("wf_view") || "overview", false);
   setSyncBar("⟳ Verbinde mit Firebase…");
   bindFirebase();
 });
@@ -703,6 +715,22 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 @media(max-width:800px){.dashboard-stats{grid-template-columns:repeat(2,1fr)}.dashboard-pins{grid-template-columns:1fr}.hub-form.two-col,.hub-form.three-col,.task-controls{grid-template-columns:1fr}.mini-card{grid-template-columns:1fr}.stack-actions{align-items:flex-start}.hub-stats-inline{justify-content:flex-start}}
 @media print{.topbar,.sync-bar,.phase-nav,.doc-form,.hub-form,.input-row,.side-panel,.chat-panel,.modal-overlay,.comment-btn,.doc-delete,.send-btn,.task-controls,button{display:none!important}body{background:#fff;color:#000;font-size:12px}.container{max-width:none;padding:0}.hub-section,.documents-section,.progress-section{break-inside:avoid;border:1px solid #999;background:#fff;margin-bottom:1rem}.task,.doc-card,.mini-card,.dashboard-pin{break-inside:avoid;background:#fff;border-color:#999}.task-text{text-decoration:none!important;color:#000!important;opacity:1!important}a{color:#000;text-decoration:underline}.task-meta{font-size:10px;color:#333}.dashboard-stats{grid-template-columns:repeat(5,1fr)}}
 
+
+/* Cleaner Orga-Hub layout */
+.workspace-tabs{position:sticky;top:43px;z-index:90;background:var(--parchment);border:1px solid var(--rule);display:grid;grid-template-columns:repeat(8,1fr);gap:0;margin:0 0 1.25rem;box-shadow:0 2px 0 rgba(26,20,16,.04)}
+.view-tab{background:var(--parch2);border:0;border-right:1px solid var(--rule);padding:.7rem .35rem;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ash)}
+.view-tab:last-child{border-right:none}.view-tab:hover{background:#dfd4bc;color:var(--ember)}.view-tab.active{background:var(--ink);color:var(--gold)}
+.orga-view{display:none}.orga-view.is-active{display:block}.task-phase-nav{margin-bottom:1.25rem}.hub-nav{display:none!important}
+.view-note{font-size:.82rem;color:var(--ash);margin:-.4rem 0 1rem;font-style:italic}.section-divider-title{font-family:'Cinzel',serif;color:var(--ember);font-size:.9rem;margin:1rem 0 .7rem;text-transform:uppercase;letter-spacing:.08em}
+@media(max-width:800px){.workspace-tabs{top:42px;grid-template-columns:repeat(4,1fr)}.view-tab{font-size:.54rem;padding:.55rem .25rem}}
+@media(max-width:480px){.workspace-tabs{grid-template-columns:repeat(2,1fr);position:static}.topbar{flex-wrap:wrap}.topbar-title{flex-basis:100%}}
+@media print{.workspace-tabs{display:none!important}.orga-view{display:block!important}.task-phase-nav{display:none!important}}
+
+
+.task-details{grid-column:2/5;grid-row:2;margin-top:.15rem;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--ash)}
+.task-details summary{cursor:pointer;display:inline-block;color:var(--ember);padding:.12rem 0}.task-details[open] summary{margin-bottom:.35rem}
+.task-details .task-controls{margin-top:.25rem}.task-meta{grid-row:3!important}.task.done .task-details summary{color:var(--ash)}
+
 </style>
 </head>
 <body>
@@ -710,7 +738,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 <div class="topbar">
   <div class="topbar-title">⚔ Das 30. Winterfest</div>
   <div class="topbar-user">Du: <span id="userLabel" onclick="APP.changeName()">…</span></div>
-  <button class="topbar-btn" onclick="APP.scrollTo('documents')">📎 Dokumente</button>
+  <button class="topbar-btn" onclick="APP.switchView('documents')">📎 Dokumente</button>
   <button class="topbar-btn" onclick="APP.toggleChat()">💬 Chat</button>
 </div>
 
@@ -733,7 +761,18 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     </div>
   </div>
 
-  <section class="hub-section dashboard-section" id="dashboard">
+  <nav class="workspace-tabs" aria-label="Arbeitsbereiche">
+    <button class="view-tab active" data-view="overview" onclick="APP.switchView('overview')">Übersicht</button>
+    <button class="view-tab" data-view="tasks" onclick="APP.switchView('tasks')">Aufgaben</button>
+    <button class="view-tab" data-view="documents" onclick="APP.switchView('documents')">Dokumente</button>
+    <button class="view-tab" data-view="budget" onclick="APP.switchView('budget')">Budget</button>
+    <button class="view-tab" data-view="shopping" onclick="APP.switchView('shopping')">Einkauf</button>
+    <button class="view-tab" data-view="helpers" onclick="APP.switchView('helpers')">Helfer</button>
+    <button class="view-tab" data-view="decisions" onclick="APP.switchView('decisions')">Beschlüsse</button>
+    <button class="view-tab" data-view="pins" onclick="APP.switchView('pins')">Pins</button>
+  </nav>
+
+  <section class="hub-section dashboard-section orga-view is-active" data-view="overview" id="dashboard">
     <div class="hub-head">
       <div>
         <p class="progress-title">Orga-Übersicht</p>
@@ -745,17 +784,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="dashboard-pins" id="dashboardPins"></div>
   </section>
 
-  <nav class="phase-nav hub-nav">
-    <div class="pni" onclick="APP.scrollTo('dashboard')"><span class="pm">Hub</span>Übersicht</div>
-    <div class="pni" onclick="APP.scrollTo('pins')"><span class="pm">Pin</span>Infos</div>
-    <div class="pni" onclick="APP.scrollTo('documents')"><span class="pm">Docs</span>Unterlagen</div>
-    <div class="pni" onclick="APP.scrollTo('budget')"><span class="pm">€</span>Budget</div>
-    <div class="pni" onclick="APP.scrollTo('shopping')"><span class="pm">List</span>Einkauf</div>
-    <div class="pni" onclick="APP.scrollTo('helpers')"><span class="pm">Team</span>Helfer</div>
-    <div class="pni" onclick="APP.scrollTo('decisions')"><span class="pm">Fix</span>Beschlüsse</div>
-  </nav>
-
-  <nav class="phase-nav">
+  <nav class="phase-nav task-phase-nav orga-view" data-view="tasks">
     <div class="pni" onclick="APP.scrollTo('phase1')"><span class="pm">Jul</span>Fundament</div>
     <div class="pni" onclick="APP.scrollTo('phase2')"><span class="pm">Aug</span>Infra</div>
     <div class="pni" onclick="APP.scrollTo('phase3')"><span class="pm">Sep</span>Konzept</div>
@@ -766,7 +795,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="pni" onclick="APP.scrollTo('phase8')"><span class="pm">29.5.</span>Eventtag</div>
   </nav>
 
-  <section class="hub-section" id="pins">
+  <section class="hub-section orga-view" data-view="pins" id="pins">
     <div class="hub-head"><div><p class="progress-title">Angepinnte Infos</p><p class="documents-subtitle">Für Deadlines, aktuelle Hauptfokusse, Warnungen und feste Hinweise.</p></div></div>
     <div class="hub-form two-col">
       <input id="pinTitle" type="text" maxlength="80" placeholder="Titel, z.B. Aktueller Fokus">
@@ -777,7 +806,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-list" id="pinsList"></div>
   </section>
 
-  <section class="documents-section" id="documents">
+  <section class="documents-section orga-view" data-view="documents" id="documents">
     <div class="documents-head">
       <div>
         <p class="progress-title">Dokumente & Unterlagen</p>
@@ -807,7 +836,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="documents-list" id="documentsList"></div>
   </section>
 
-  <section class="hub-section" id="budget">
+  <section class="hub-section orga-view" data-view="budget" id="budget">
     <div class="hub-head"><div><p class="progress-title">Budget</p><p class="documents-subtitle">Geplante und tatsächliche Kosten, wer gezahlt hat und was noch offen ist.</p></div><div class="hub-stats-inline" id="budgetStats"></div></div>
     <div class="hub-form three-col">
       <input id="budgetTitle" type="text" maxlength="80" placeholder="Posten, z.B. QUIXX24 Toiletten">
@@ -822,7 +851,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-list" id="budgetList"></div>
   </section>
 
-  <section class="hub-section" id="shopping">
+  <section class="hub-section orga-view" data-view="shopping" id="shopping">
     <div class="hub-head"><div><p class="progress-title">Einkaufsliste</p><p class="documents-subtitle">Alles, was beschafft werden muss. Nicht im Chat vergraben.</p></div><div class="hub-stats-inline" id="shoppingStats"></div></div>
     <div class="hub-form three-col">
       <input id="shoppingItem" type="text" maxlength="80" placeholder="Artikel, z.B. LED-Laternen">
@@ -835,7 +864,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-list" id="shoppingList"></div>
   </section>
 
-  <section class="hub-section" id="helpers">
+  <section class="hub-section orga-view" data-view="helpers" id="helpers">
     <div class="hub-head"><div><p class="progress-title">Helferplan</p><p class="documents-subtitle">Rollen, Personen, Zeiten und Zuständigkeiten für Aufbau, Eventbetrieb und Abbau.</p></div><div class="hub-stats-inline" id="helpersStats"></div></div>
     <div class="hub-form three-col">
       <input id="helperRole" type="text" maxlength="80" placeholder="Rolle, z.B. Axtaufsicht">
@@ -848,7 +877,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-list" id="helpersList"></div>
   </section>
 
-  <section class="hub-section" id="decisions">
+  <section class="hub-section orga-view" data-view="decisions" id="decisions">
     <div class="hub-head"><div><p class="progress-title">Beschlusslog</p><p class="documents-subtitle">Feste Entscheidungen, damit sie nicht im Chat verschwinden.</p></div></div>
     <div class="hub-form two-col">
       <input id="decisionTitle" type="text" maxlength="100" placeholder="Titel, z.B. Toilettenlösung final">
@@ -860,7 +889,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-list" id="decisionsList"></div>
   </section>
 
-  <div id="mainContainer"></div>
+  <div id="mainContainer" class="orga-view" data-view="tasks"></div>
 </div>
 
 <footer>Das 30. Winterfest · 29. Mai 2027 · Mittelalterliches Waldlager</footer>
