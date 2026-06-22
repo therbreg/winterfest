@@ -25,6 +25,21 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
+const EVENT_ID = decodeURIComponent(location.hash.replace("#", "").trim());
+
+if (!EVENT_ID || !/^[A-Za-z0-9_-]{20,100}$/.test(EVENT_ID)) {
+  document.body.innerHTML = `
+    <div style="font-family: Georgia, serif; padding: 2rem; max-width: 700px; margin: 0 auto;">
+      <h1>Zugriff fehlt</h1>
+      <p>Diese Planungsseite benötigt einen gültigen Einladungslink.</p>
+      <p>Bitte nutze den vollständigen Link, den du vom Gastgeber bekommen hast.</p>
+    </div>
+  `;
+  throw new Error("Kein gültiger Event-Key im Link vorhanden.");
+}
+
+const dbPath = subpath => `events/${EVENT_ID}/${subpath}`;
+
 let currentUser = localStorage.getItem("wf_user") || "";
 let openCommentKey = null;
 let pendingCb = null;
@@ -51,7 +66,7 @@ const setSyncBar = (msg,cls) => {
 
 // ── Firebase listeners ────────────────────────
 function bindFirebase() {
-  onValue(ref(db,"tasks"), snap => {
+  onValue(ref(db,dbPath("tasks")), snap => {
     const data = snap.val() || {};
     document.querySelectorAll(".task[data-key]").forEach(el => {
       const s = data[el.dataset.key] || {};
@@ -70,14 +85,14 @@ function bindFirebase() {
     setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
   });
 
-  onValue(ref(db,"comments"), snap => {
+  onValue(ref(db,dbPath("comments")), snap => {
     window._allComments = snap.val() || {};
     renderOpenComment();
   }, err => {
     setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
   });
 
-  onValue(ref(db,"chat"), snap => {
+  onValue(ref(db,dbPath("chat")), snap => {
     renderChat(snap.val() || {});
   }, err => {
     setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
@@ -134,7 +149,7 @@ window.APP = {
     if (!currentUser) { pendingCb=()=>window.APP.toggleTask(key); window.APP.showName(); return; }
     const el = document.querySelector(`.task[data-key="${key}"]`);
     const isDone = el && el.classList.contains("done");
-    update(ref(db,`tasks/${key}`), isDone
+    update(ref(db,dbPath(`tasks/${key}`)), isDone
       ? {done:false,by:null,at:null}
       : {done:true,by:currentUser,at:Date.now()});
   },
@@ -159,7 +174,7 @@ window.APP = {
     const inp = document.getElementById("commentInput");
     const text = inp.value.trim();
     if (!text) return;
-    push(ref(db,`comments/${openCommentKey}`),{user:currentUser,text,ts:Date.now()});
+    push(ref(db,dbPath(`comments/${openCommentKey}`)),{user:currentUser,text,ts:Date.now()});
     inp.value = "";
   },
 
@@ -168,7 +183,7 @@ window.APP = {
     const inp = document.getElementById("chatInput");
     const text = inp.value.trim();
     if (!text) return;
-    push(ref(db,"chat"),{user:currentUser,text,ts:Date.now()});
+    push(ref(db,dbPath("chat")),{user:currentUser,text,ts:Date.now()});
     inp.value = "";
   },
 
