@@ -78,6 +78,10 @@ const normalizeDocLink = raw => {
   return "";
 };
 
+const COMMON_CATEGORIES = ["Toilette", "Essen", "Getränke", "Deko", "Technik", "Sicherheit", "Wettkampf", "Gelände", "Helfer", "Einkauf", "Budget", "Gästeliste", "Infrastruktur", "Musik", "Sonstiges"];
+const DOC_CATEGORIES = ["Gelände", "Toiletten", "Essen", "Getränke", "Budget", "Helfer", "Einkauf", "Gästeliste", "Angebot", "Lageplan", "Sonstiges"];
+const optionList = (items, selected) => items.map(v => `<option value="${esc(v)}" ${String(selected || "") === v ? "selected" : ""}>${esc(v)}</option>`).join("");
+
 const setSyncBar = (msg,cls) => {
   const el = document.getElementById("syncBar");
   if (!el) return;
@@ -139,9 +143,11 @@ function applyTaskState() {
 
     const responsible = el.querySelector(".task-assignee");
     const due = el.querySelector(".task-due");
+    const tag = el.querySelector(".task-tag");
     const statusSel = el.querySelector(".task-status");
     if (responsible && document.activeElement !== responsible) responsible.value = s.responsible || "";
     if (due && document.activeElement !== due) due.value = s.due || "";
+    if (tag && document.activeElement !== tag) tag.value = s.tag || "";
     if (statusSel && document.activeElement !== statusSel) statusSel.value = status;
 
     const meta = el.querySelector(".task-meta");
@@ -149,6 +155,7 @@ function applyTaskState() {
       const parts = [];
       if (s.responsible) parts.push("Zuständig: "+s.responsible);
       if (s.due) parts.push("Fällig: "+dateStr(s.due));
+      if (s.tag) parts.push("Tag: "+s.tag);
       parts.push("Status: "+statusLabel(status));
       if (isDone && s.by) parts.push("✓ "+s.by+" · "+ts2str(s.at));
       meta.textContent = parts.join(" · ");
@@ -225,7 +232,17 @@ function renderDocuments(data) {
             </div>
             <h3>${esc(d.title || "Ohne Titel")}</h3>
             ${d.note ? `<p class="doc-note">${esc(d.note)}</p>` : ""}
-            <p class="doc-meta">${esc(d.by || "?")} · ${ts2str(d.ts)}</p>
+            <p class="doc-meta">${esc(d.by || "?")} · ${ts2str(d.ts)}${d.updatedAt ? ` · bearbeitet ${ts2str(d.updatedAt)}` : ""}</p>
+            <details class="edit-details">
+              <summary>Eintrag bearbeiten</summary>
+              <div class="inline-edit-grid">
+                <label>Titel <input type="text" maxlength="80" value="${esc(d.title || "")}" onchange='APP.updateDocumentField(${JSON.stringify(d.key)}, "title", this.value)'></label>
+                <label>Kategorie <select onchange='APP.updateDocumentField(${JSON.stringify(d.key)}, "category", this.value)'>${optionList(DOC_CATEGORIES, d.category || "Sonstiges")}</select></label>
+                <label class="span-all">Link <input type="url" maxlength="1000" value="${esc(d.link || "")}" onchange='APP.updateDocumentField(${JSON.stringify(d.key)}, "link", this.value)'></label>
+                <label class="span-all">Notiz <textarea maxlength="300" onchange='APP.updateDocumentField(${JSON.stringify(d.key)}, "note", this.value)'>${esc(d.note || "")}</textarea></label>
+                <label class="tiny-check"><input type="checkbox" ${d.pinned ? "checked" : ""} onchange='APP.updateDocumentField(${JSON.stringify(d.key)}, "pinned", this.checked)'> wichtig / oben anheften</label>
+              </div>
+            </details>
           </div>
           <div class="doc-actions">
             ${href ? `<a class="doc-open" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Öffnen</a>` : `<span class="doc-badlink">Link ungültig</span>`}
@@ -263,12 +280,54 @@ function renderBudget(data) {
   const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const planned = items.reduce((s,i)=>s+Number(i.planned||0),0);
   const actual = items.reduce((s,i)=>s+Number(i.actual||0),0);
-  const open = items.reduce((s,i)=>s+(!i.reimbursed?Number(i.actual||0):0),0);
-  if (stats) stats.innerHTML = `<span>Geplant: <strong>${fmtMoney(planned)}</strong></span><span>Tatsächlich: <strong>${fmtMoney(actual)}</strong></span><span>Offen/ungeklärt: <strong>${fmtMoney(open)}</strong></span>`;
-  list.innerHTML = items.length ? items.map(i=>`<article class="mini-card">
-      <div><span class="doc-cat">${esc(i.category||"Sonstiges")}</span><h3>${esc(i.title||"Ohne Titel")}</h3><p>${fmtMoney(i.actual || i.planned || 0)} ${i.planned ? `(Plan: ${fmtMoney(i.planned)})` : ""}</p><p class="doc-note">${esc(i.note||"")}</p><p class="doc-meta">Bezahlt von: ${esc(i.paidBy||"?")} · ${i.reimbursed?"erstattet/erledigt":"offen"} · ${ts2str(i.ts)}</p></div>
-      <div class="stack-actions"><label class="tiny-check"><input type="checkbox" ${i.reimbursed?"checked":""} onchange='APP.toggleBudgetReimbursed(${JSON.stringify(i.key)}, this.checked)'> erledigt</label><button class="doc-delete" onclick='APP.deleteBudget(${JSON.stringify(i.key)})'>Löschen</button></div>
-    </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Budgetposten eingetragen.</p>`;
+  const withoutActual = items.filter(i=>Number(i.actual||0) === 0).length;
+  const openActual = items.reduce((s,i)=>s+(!i.reimbursed?Number(i.actual||0):0),0);
+  const categoryRows = Object.entries(items.reduce((acc,i)=>{
+    const c = i.category || "Sonstiges";
+    if (!acc[c]) acc[c] = {planned:0, actual:0};
+    acc[c].planned += Number(i.planned || 0);
+    acc[c].actual += Number(i.actual || 0);
+    return acc;
+  }, {})).sort((a,b)=>b[1].planned-a[1].planned).slice(0,6);
+  if (stats) stats.innerHTML = `
+    <span>Geplant: <strong>${fmtMoney(planned)}</strong></span>
+    <span>Ist: <strong>${fmtMoney(actual)}</strong></span>
+    <span>Offen/ungeklärt: <strong>${fmtMoney(openActual)}</strong></span>
+    <span>ohne Ist-Kosten: <strong>${withoutActual}</strong></span>
+    ${categoryRows.length ? `<span class="budget-cat-summary">${categoryRows.map(([c,v])=>`${esc(c)}: ${fmtMoney(v.planned)}`).join(" · ")}</span>` : ""}`;
+  list.innerHTML = items.length ? items.map(i=>{
+    const plannedValue = Number(i.planned || 0);
+    const actualValue = Number(i.actual || 0);
+    return `<article class="mini-card budget-card ${i.reimbursed?"done-card":""}">
+      <div>
+        <span class="doc-cat">${esc(i.category||"Sonstiges")}</span>
+        <h3>${esc(i.title||"Ohne Titel")}</h3>
+        <div class="money-line">
+          <span>Plan: <strong>${plannedValue ? fmtMoney(plannedValue) : "offen"}</strong></span>
+          <span>Ist: <strong>${actualValue ? fmtMoney(actualValue) : "noch nicht eingetragen"}</strong></span>
+        </div>
+        <p class="doc-note">${esc(i.note||"")}</p>
+        <p class="doc-meta">Bezahlt von: ${esc(i.paidBy||"noch offen")} · ${i.reimbursed?"bezahlt/abgeschlossen":"in Planung/offen"} · ${ts2str(i.ts)}${i.updatedAt ? ` · bearbeitet ${ts2str(i.updatedAt)}` : ""}</p>
+        <details class="edit-details">
+          <summary>Eintrag bearbeiten / Kosten nachtragen</summary>
+          <div class="inline-edit-grid budget-edit-grid">
+            <label>Posten <input type="text" maxlength="80" value="${esc(i.title || "")}" onchange='APP.updateBudgetField(${JSON.stringify(i.key)}, "title", this.value)'></label>
+            <label>Kategorie <select onchange='APP.updateBudgetField(${JSON.stringify(i.key)}, "category", this.value)'>${optionList(COMMON_CATEGORIES, i.category || "Sonstiges")}</select></label>
+            <label>Geplant € <input type="number" min="0" step="0.01" value="${plannedValue || ""}" onchange='APP.updateBudgetField(${JSON.stringify(i.key)}, "planned", this.value)'></label>
+            <label>Tatsächlich € <input type="number" min="0" step="0.01" value="${actualValue || ""}" onchange='APP.updateBudgetField(${JSON.stringify(i.key)}, "actual", this.value)'></label>
+            <label>Bezahlt von <input type="text" maxlength="40" value="${esc(i.paidBy || "")}" onchange='APP.updateBudgetField(${JSON.stringify(i.key)}, "paidBy", this.value)'></label>
+            <label class="tiny-check"><input type="checkbox" ${i.reimbursed?"checked":""} onchange='APP.updateBudgetField(${JSON.stringify(i.key)}, "reimbursed", this.checked)'> bezahlt / abgeschlossen</label>
+            <label class="span-all">Notiz <textarea maxlength="300" onchange='APP.updateBudgetField(${JSON.stringify(i.key)}, "note", this.value)'>${esc(i.note||"")}</textarea></label>
+          </div>
+        </details>
+      </div>
+      <div class="stack-actions">
+        <label class="tiny-check"><input type="checkbox" ${i.reimbursed?"checked":""} onchange='APP.toggleBudgetReimbursed(${JSON.stringify(i.key)}, this.checked)'> abgeschlossen</label>
+        <button class="doc-open" onclick='APP.copyBudgetToShopping(${JSON.stringify(i.key)})'>In Einkauf übernehmen</button>
+        <button class="doc-delete" onclick='APP.deleteBudget(${JSON.stringify(i.key)})'>Löschen</button>
+      </div>
+    </article>`;
+  }).join("") : `<p class="empty-state doc-empty">Noch keine Budgetposten eingetragen.</p>`;
 }
 
 function renderShopping(data) {
@@ -339,8 +398,8 @@ window.APP = {
 
   updateTaskMeta(key, field, value) {
     if (!currentUser) { pendingCb=()=>window.APP.updateTaskMeta(key, field, value); window.APP.showName(); return; }
-    if (!["responsible","due"].includes(field)) return;
-    update(ref(db,dbPath(`tasks/${key}`)), {[field]: String(value || "").trim().slice(0,80)});
+    if (!["responsible","due","tag"].includes(field)) return;
+    update(ref(db,dbPath(`tasks/${key}`)), {[field]: String(value || "").trim().slice(0,80), updatedBy: currentUser, updatedAt: Date.now()});
   },
 
   updateTaskStatus(key, value) {
@@ -395,6 +454,23 @@ window.APP = {
     push(ref(db,dbPath("documents")), {title:title.slice(0,80), category:categoryEl.value.trim() || "Sonstiges", link, note:noteEl.value.trim().slice(0,300), pinned:pinnedEl.checked, by:currentUser, ts:Date.now()});
     titleEl.value = ""; linkEl.value = ""; noteEl.value = ""; pinnedEl.checked = false;
   },
+  updateDocumentField(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateDocumentField(key, field, value); window.APP.showName(); return; }
+    if (!["title","category","link","note","pinned"].includes(field)) return;
+    const patch = {updatedBy: currentUser, updatedAt: Date.now()};
+    if (field === "pinned") patch[field] = !!value;
+    else if (field === "link") {
+      const link = normalizeDocLink(value);
+      if (!link) { alert("Ungültiger Link. Erlaubt sind https://, http://, /... oder docs/..."); renderDocuments(window._documents); return; }
+      patch[field] = link;
+    } else {
+      const limits = {title:80, category:40, note:300};
+      patch[field] = String(value || "").trim().slice(0, limits[field] || 300);
+      if (field === "title" && !patch[field]) { alert("Titel darf nicht leer sein."); renderDocuments(window._documents); return; }
+      if (field === "category" && !patch[field]) patch[field] = "Sonstiges";
+    }
+    update(ref(db,dbPath(`documents/${key}`)), patch);
+  },
   deleteDocument(key) { if (!currentUser) { pendingCb=()=>window.APP.deleteDocument(key); window.APP.showName(); return; } if(confirm("Dokument wirklich aus der Liste löschen? Die verlinkte Datei selbst wird dadurch nicht gelöscht.")) remove(ref(db,dbPath(`documents/${key}`))); },
 
   addPin() {
@@ -422,10 +498,54 @@ window.APP = {
     if (!currentUser) { pendingCb=window.APP.addBudget; window.APP.showName(); return; }
     const title = document.getElementById("budgetTitle").value.trim();
     if (!title) { alert("Budgetposten eintragen."); return; }
-    push(ref(db,dbPath("budget")), {title:title.slice(0,80), category:document.getElementById("budgetCategory").value.trim() || "Sonstiges", planned:parseMoney(document.getElementById("budgetPlanned").value), actual:parseMoney(document.getElementById("budgetActual").value), paidBy:document.getElementById("budgetPaidBy").value.trim().slice(0,40), reimbursed:document.getElementById("budgetReimbursed").checked, note:document.getElementById("budgetNote").value.trim().slice(0,300), by:currentUser, ts:Date.now()});
-    ["budgetTitle","budgetPlanned","budgetActual","budgetPaidBy","budgetNote"].forEach(id=>document.getElementById(id).value=""); document.getElementById("budgetReimbursed").checked=false;
+    const actualEl = document.getElementById("budgetActual");
+    const paidByEl = document.getElementById("budgetPaidBy");
+    const reimbursedEl = document.getElementById("budgetReimbursed");
+    push(ref(db,dbPath("budget")), {
+      title:title.slice(0,80),
+      category:document.getElementById("budgetCategory").value.trim() || "Sonstiges",
+      planned:parseMoney(document.getElementById("budgetPlanned").value),
+      actual:actualEl ? parseMoney(actualEl.value) : 0,
+      paidBy:paidByEl ? paidByEl.value.trim().slice(0,40) : "",
+      reimbursed:reimbursedEl ? reimbursedEl.checked : false,
+      note:document.getElementById("budgetNote").value.trim().slice(0,300),
+      by:currentUser,
+      ts:Date.now()
+    });
+    ["budgetTitle","budgetPlanned","budgetActual","budgetPaidBy","budgetNote"].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=""; });
+    if (reimbursedEl) reimbursedEl.checked=false;
   },
-  toggleBudgetReimbursed(key, checked) { update(ref(db,dbPath(`budget/${key}`)), {reimbursed:!!checked}); },
+  updateBudgetField(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateBudgetField(key, field, value); window.APP.showName(); return; }
+    if (!["title","category","planned","actual","paidBy","reimbursed","note"].includes(field)) return;
+    const patch = {updatedBy: currentUser, updatedAt: Date.now()};
+    if (["planned","actual"].includes(field)) patch[field] = parseMoney(value);
+    else if (field === "reimbursed") patch[field] = !!value;
+    else {
+      const limits = {title:80, category:40, paidBy:40, note:300};
+      patch[field] = String(value || "").trim().slice(0, limits[field] || 80);
+      if (field === "title" && !patch[field]) { alert("Budgetposten darf keinen leeren Titel haben."); renderBudget(window._budget); return; }
+      if (field === "category" && !patch[field]) patch[field] = "Sonstiges";
+    }
+    update(ref(db,dbPath(`budget/${key}`)), patch);
+  },
+  toggleBudgetReimbursed(key, checked) { update(ref(db,dbPath(`budget/${key}`)), {reimbursed:!!checked, updatedBy:currentUser || "?", updatedAt:Date.now()}); },
+  copyBudgetToShopping(key) {
+    if (!currentUser) { pendingCb=()=>window.APP.copyBudgetToShopping(key); window.APP.showName(); return; }
+    const item = (window._budget || {})[key];
+    if (!item) return;
+    push(ref(db,dbPath("shopping")), {
+      item:String(item.title || "Budgetposten").slice(0,80),
+      qty:"",
+      category:item.category || "Sonstiges",
+      responsible:"",
+      note:`Aus Budget übernommen. Plan: ${fmtMoney(item.planned || 0)}${item.note ? " · " + item.note : ""}`.slice(0,300),
+      bought:false,
+      by:currentUser,
+      ts:Date.now()
+    });
+    alert("Als Einkaufsposten übernommen.");
+  },
   deleteBudget(key) { if(confirm("Budgetposten löschen?")) remove(ref(db,dbPath(`budget/${key}`))); },
 
   addShopping() {
@@ -509,16 +629,13 @@ function buildUI() {
           <span class="task-priority ${task.prio}">${prioLabel[task.prio]||""}</span>
           <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text)}</span>
           <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Kommentare">💬</button>
-          <details class="task-details">
-            <summary>Details bearbeiten</summary>
-            <div class="task-controls">
-              <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
-              <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
-              <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
-                <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
-              </select></label>
-            </div>
-          </details>
+          <div class="task-controls">
+            <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
+            <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
+            <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
+              <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
+            </select></label>
+          </div>
           <div class="task-meta"></div>`;
         ul.appendChild(li);
       });
@@ -727,9 +844,23 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 @media print{.workspace-tabs{display:none!important}.orga-view{display:block!important}.task-phase-nav{display:none!important}}
 
 
-.task-details{grid-column:2/5;grid-row:2;margin-top:.15rem;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--ash)}
-.task-details summary{cursor:pointer;display:inline-block;color:var(--ember);padding:.12rem 0}.task-details[open] summary{margin-bottom:.35rem}
-.task-details .task-controls{margin-top:.25rem}.task-meta{grid-row:3!important}.task.done .task-details summary{color:var(--ash)}
+/* Inline editing improvements */
+.edit-details{margin-top:.55rem;border-top:1px solid var(--rule);padding-top:.45rem}
+.edit-details summary,.form-advanced summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--ember);text-transform:uppercase;letter-spacing:.06em}
+.inline-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-top:.55rem;align-items:start}
+.inline-edit-grid label{font-family:'JetBrains Mono',monospace;font-size:.55rem;color:var(--ash);text-transform:uppercase;letter-spacing:.05em;display:flex;flex-direction:column;gap:.22rem}
+.inline-edit-grid input,.inline-edit-grid select,.inline-edit-grid textarea{width:100%;background:var(--parchment);border:1px solid var(--rule);color:var(--ink);font-family:'Crimson Text',Georgia,serif;font-size:.9rem;padding:.45rem .55rem;border-radius:2px;outline:none;text-transform:none;letter-spacing:0}
+.inline-edit-grid textarea{min-height:58px;resize:vertical}
+.inline-edit-grid .span-all{grid-column:1/-1}
+.budget-quick-form{grid-template-columns:1.2fr .7fr .55fr}
+.budget-quick-form textarea{grid-column:1/-1}
+.form-advanced{grid-column:1/-1;background:rgba(255,255,255,.28);border:1px dashed var(--rule);padding:.55rem;border-radius:2px}
+.money-line{display:flex;gap:.75rem;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--ash);margin:.25rem 0}
+.money-line strong{color:var(--ember)}
+.budget-cat-summary{flex-basis:100%;opacity:.85}
+.doc-open{background:transparent;border:1px solid var(--gold);color:var(--ember);font-family:'JetBrains Mono',monospace;font-size:.56rem;text-transform:uppercase;letter-spacing:.05em;padding:.35rem .5rem;border-radius:2px;cursor:pointer;text-decoration:none;text-align:center}
+.doc-open:hover{background:var(--gold);color:var(--ink)}
+@media(max-width:800px){.inline-edit-grid,.budget-quick-form{grid-template-columns:1fr}.inline-edit-grid .span-all{grid-column:auto}.money-line{flex-direction:column;gap:.1rem}}
 
 </style>
 </head>
@@ -761,17 +892,6 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     </div>
   </div>
 
-  <nav class="workspace-tabs" aria-label="Arbeitsbereiche">
-    <button class="view-tab active" data-view="overview" onclick="APP.switchView('overview')">Übersicht</button>
-    <button class="view-tab" data-view="tasks" onclick="APP.switchView('tasks')">Aufgaben</button>
-    <button class="view-tab" data-view="documents" onclick="APP.switchView('documents')">Dokumente</button>
-    <button class="view-tab" data-view="budget" onclick="APP.switchView('budget')">Budget</button>
-    <button class="view-tab" data-view="shopping" onclick="APP.switchView('shopping')">Einkauf</button>
-    <button class="view-tab" data-view="helpers" onclick="APP.switchView('helpers')">Helfer</button>
-    <button class="view-tab" data-view="decisions" onclick="APP.switchView('decisions')">Beschlüsse</button>
-    <button class="view-tab" data-view="pins" onclick="APP.switchView('pins')">Pins</button>
-  </nav>
-
   <section class="hub-section dashboard-section orga-view is-active" data-view="overview" id="dashboard">
     <div class="hub-head">
       <div>
@@ -783,6 +903,17 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="dashboard-stats" id="dashboardStats"></div>
     <div class="dashboard-pins" id="dashboardPins"></div>
   </section>
+
+  <nav class="workspace-tabs" aria-label="Arbeitsbereiche">
+    <button class="view-tab active" data-view="overview" onclick="APP.switchView('overview')">Übersicht</button>
+    <button class="view-tab" data-view="tasks" onclick="APP.switchView('tasks')">Aufgaben</button>
+    <button class="view-tab" data-view="documents" onclick="APP.switchView('documents')">Dokumente</button>
+    <button class="view-tab" data-view="budget" onclick="APP.switchView('budget')">Budget</button>
+    <button class="view-tab" data-view="shopping" onclick="APP.switchView('shopping')">Einkauf</button>
+    <button class="view-tab" data-view="helpers" onclick="APP.switchView('helpers')">Helfer</button>
+    <button class="view-tab" data-view="decisions" onclick="APP.switchView('decisions')">Beschlüsse</button>
+    <button class="view-tab" data-view="pins" onclick="APP.switchView('pins')">Pins</button>
+  </nav>
 
   <nav class="phase-nav task-phase-nav orga-view" data-view="tasks">
     <div class="pni" onclick="APP.scrollTo('phase1')"><span class="pm">Jul</span>Fundament</div>
@@ -837,15 +968,20 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
   </section>
 
   <section class="hub-section orga-view" data-view="budget" id="budget">
-    <div class="hub-head"><div><p class="progress-title">Budget</p><p class="documents-subtitle">Geplante und tatsächliche Kosten, wer gezahlt hat und was noch offen ist.</p></div><div class="hub-stats-inline" id="budgetStats"></div></div>
-    <div class="hub-form three-col">
+    <div class="hub-head"><div><p class="progress-title">Budget</p><p class="documents-subtitle">Budget ist für Kosten. Einkauf ist für Mengen und Beschaffung. Überschneidungen wie Essen sind normal: Essen kann Budget-Kategorie und Einkaufskategorie sein.</p></div><div class="hub-stats-inline" id="budgetStats"></div></div>
+    <div class="hub-form budget-quick-form">
       <input id="budgetTitle" type="text" maxlength="80" placeholder="Posten, z.B. QUIXX24 Toiletten">
-      <select id="budgetCategory"><option>Toilette</option><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Wettkampf</option><option>Sonstiges</option></select>
-      <input id="budgetPaidBy" type="text" maxlength="40" placeholder="Bezahlt von">
+      <select id="budgetCategory"><option>Toilette</option><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Musik</option><option>Sonstiges</option></select>
       <input id="budgetPlanned" type="number" step="0.01" min="0" placeholder="Geplant €">
-      <input id="budgetActual" type="number" step="0.01" min="0" placeholder="Tatsächlich €">
-      <label class="doc-pin-row"><input id="budgetReimbursed" type="checkbox"> Erstattet / erledigt</label>
-      <textarea id="budgetNote" maxlength="300" placeholder="Notiz"></textarea>
+      <textarea id="budgetNote" maxlength="300" placeholder="Planungsnotiz, Linkhinweis, Annahme, Angebotstand"></textarea>
+      <details class="form-advanced">
+        <summary>Ist-Kosten / Zahlung jetzt schon ergänzen</summary>
+        <div class="inline-edit-grid">
+          <label>Tatsächlich € <input id="budgetActual" type="number" step="0.01" min="0" placeholder="später nachtragen"></label>
+          <label>Bezahlt von <input id="budgetPaidBy" type="text" maxlength="40" placeholder="Name"></label>
+          <label class="tiny-check"><input id="budgetReimbursed" type="checkbox"> bezahlt / abgeschlossen</label>
+        </div>
+      </details>
       <button class="send-btn doc-add-btn" onclick="APP.addBudget()">Budgetposten eintragen</button>
     </div>
     <div class="hub-list" id="budgetList"></div>
@@ -856,7 +992,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-form three-col">
       <input id="shoppingItem" type="text" maxlength="80" placeholder="Artikel, z.B. LED-Laternen">
       <input id="shoppingQty" type="text" maxlength="60" placeholder="Menge, z.B. 6 Stück">
-      <select id="shoppingCategory"><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Toilette</option><option>Wettkampf</option><option>Sonstiges</option></select>
+      <select id="shoppingCategory"><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Toilette</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Musik</option><option>Sonstiges</option></select>
       <input id="shoppingResponsible" type="text" maxlength="40" placeholder="Zuständig">
       <textarea id="shoppingNote" maxlength="300" placeholder="Notiz / Bezugsquelle / Linkhinweis"></textarea>
       <button class="send-btn doc-add-btn" onclick="APP.addShopping()">Einkauf eintragen</button>
