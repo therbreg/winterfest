@@ -95,6 +95,7 @@ function bindFirebase() {
 
   onValue(ref(db,dbPath("comments")), snap => {
     window._allComments = snap.val() || {};
+    updateCommentIndicators();
     renderOpenComment();
   }, err => {
     setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
@@ -125,6 +126,24 @@ function updateProgress(taskData) {
   if(d) d.textContent=done+" erledigt";
   if(t) t.textContent=all+" Aufgaben";
   if(p) p.textContent=pct+" %";
+}
+
+function updateCommentIndicators() {
+  const comments = window._allComments || {};
+  document.querySelectorAll(".task[data-key]").forEach(taskEl => {
+    const key = taskEl.dataset.key;
+    const btn = taskEl.querySelector(".comment-btn");
+    if (!btn) return;
+
+    const count = Object.keys(comments[key] || {}).length;
+    btn.classList.toggle("has-comments", count > 0);
+    btn.title = count > 0
+      ? `${count} Kommentar${count === 1 ? "" : "e"}`
+      : "Kommentare";
+    btn.innerHTML = count > 0
+      ? `💬 <span class="comment-count">${count}</span>`
+      : "💬";
+  });
 }
 
 function renderOpenComment() {
@@ -364,6 +383,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   else window.APP.showName();
 
   buildUI();
+  updateCommentIndicators();
   setSyncBar("⟳ Verbinde mit Firebase…");
   bindFirebase();
 });
@@ -423,8 +443,10 @@ header h1 span{color:var(--gold)}
 .prio-2{background:#c49a2a20;color:#7a5c10;border:1px solid #c49a2a44}
 .prio-3{background:#4a5c3a20;color:var(--moss);border:1px solid #4a5c3a44}
 .task-text{font-size:.9rem;line-height:1.45;cursor:pointer;grid-row:1}
-.comment-btn{background:none;border:none;cursor:pointer;font-size:.82rem;opacity:.4;padding:0 .2rem;line-height:1;align-self:start;grid-row:1;transition:opacity .15s}
+.comment-btn{background:none;border:none;cursor:pointer;font-size:.82rem;opacity:.4;padding:0 .2rem;line-height:1;align-self:start;grid-row:1;transition:opacity .15s,background .15s,color .15s;border-radius:2px;white-space:nowrap}
 .comment-btn:hover{opacity:1}
+.comment-btn.has-comments{opacity:1;color:var(--ember);background:#8b3a0f14;border:1px solid #8b3a0f33;padding:2px 5px}
+.comment-count{font-family:'JetBrains Mono',monospace;font-size:.55rem;font-weight:700;margin-left:2px}
 .task-meta{grid-column:2/5;grid-row:2;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--moss);letter-spacing:.05em}
 .timeline-strip{position:relative;padding-left:2rem;margin:1.5rem 0}
 .timeline-strip::before{content:'';position:absolute;left:6px;top:6px;bottom:0;width:1px;background:var(--gold);opacity:.4}
