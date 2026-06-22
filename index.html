@@ -7,10 +7,8 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, update, push, remove }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, onValue, update, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCKzCIluCSXOoJR1RtbavOQkPYKXdGKvVY",
   authDomain: "winterfest30.firebaseapp.com",
@@ -44,17 +42,18 @@ let currentUser = localStorage.getItem("wf_user") || "";
 let openCommentKey = null;
 let pendingCb = null;
 
-const esc = s => String(s)
+window._taskData = {};
+window._allComments = {};
+window._documents = {};
+window._pins = {};
+window._decisions = {};
+window._budget = {};
+window._shopping = {};
+window._helpers = {};
+
+const esc = s => String(s ?? "")
   .replace(/&/g,"&amp;").replace(/</g,"&lt;")
   .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-
-const normalizeDocLink = raw => {
-  const v = String(raw || "").trim();
-  if (/^https?:\/\//i.test(v)) return v;
-  if (/^(docs\/|\.\/docs\/|\/)/i.test(v)) return v;
-  return "";
-};
-
 
 const ts2str = ts => {
   if (!ts) return "";
@@ -63,7 +62,21 @@ const ts2str = ts => {
     +" "+d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
 };
 
+const dateStr = v => v ? new Date(v + "T12:00:00").toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}) : "";
 const taskKey = (phaseId,ci,ti) => `${phaseId}_c${ci}_t${ti}`;
+const validStatus = s => ["open","progress","blocked","done"].includes(s) ? s : "open";
+const statusLabel = s => ({open:"Offen", progress:"In Arbeit", blocked:"Blockiert", done:"Erledigt"})[validStatus(s)];
+const parseMoney = v => {
+  const n = Number(String(v || "").replace(",",".").replace(/[^0-9.-]/g,""));
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+};
+const fmtMoney = n => (Number(n || 0)).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
+const normalizeDocLink = raw => {
+  const v = String(raw || "").trim();
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^(docs\/|\.\/docs\/|\/)/i.test(v)) return v;
+  return "";
+};
 
 const setSyncBar = (msg,cls) => {
   const el = document.getElementById("syncBar");
@@ -72,60 +85,76 @@ const setSyncBar = (msg,cls) => {
   el.className = "sync-bar"+(cls?" "+cls:"");
 };
 
-// ── Firebase listeners ────────────────────────
-function bindFirebase() {
-  onValue(ref(db,dbPath("tasks")), snap => {
-    const data = snap.val() || {};
-    document.querySelectorAll(".task[data-key]").forEach(el => {
-      const s = data[el.dataset.key] || {};
-      const meta = el.querySelector(".task-meta");
-      if (s.done) {
-        el.classList.add("done");
-        if (meta) meta.textContent = "✓ "+(s.by||"?")+" · "+ts2str(s.at);
-      } else {
-        el.classList.remove("done");
-        if (meta) meta.textContent = "";
-      }
-    });
-    updateProgress(data);
-    setSyncBar("● Verbunden","ok");
-  }, err => {
-    setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
-  });
+function bindValue(path, cb) {
+  onValue(ref(db,dbPath(path)), snap => cb(snap.val() || {}), err => setSyncBar("✕ Firebase-Fehler: "+err.message,"err"));
+}
 
-  onValue(ref(db,dbPath("comments")), snap => {
-    window._allComments = snap.val() || {};
+function bindFirebase() {
+  bindValue("tasks", data => {
+    window._taskData = data;
+    applyTaskState();
+    updateProgress(data);
+    renderDashboard();
+    setSyncBar("● Verbunden","ok");
+  });
+  bindValue("comments", data => {
+    window._allComments = data;
     updateCommentIndicators();
     renderOpenComment();
-  }, err => {
-    setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
+    renderDashboard();
   });
-
-  onValue(ref(db,dbPath("chat")), snap => {
-    renderChat(snap.val() || {});
-  }, err => {
-    setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
-  });
-
-  onValue(ref(db,dbPath("documents")), snap => {
-    renderDocuments(snap.val() || {});
-  }, err => {
-    setSyncBar("✕ Firebase-Fehler: "+err.message,"err");
-  });
+  bindValue("chat", data => renderChat(data));
+  bindValue("documents", data => { window._documents = data; renderDocuments(data); renderDashboard(); });
+  bindValue("pins", data => { window._pins = data; renderPins(data); renderDashboard(); });
+  bindValue("decisions", data => { window._decisions = data; renderDecisions(data); renderDashboard(); });
+  bindValue("budget", data => { window._budget = data; renderBudget(data); renderDashboard(); });
+  bindValue("shopping", data => { window._shopping = data; renderShopping(data); renderDashboard(); });
+  bindValue("helpers", data => { window._helpers = data; renderHelpers(data); renderDashboard(); });
 }
 
 function updateProgress(taskData) {
   const all  = document.querySelectorAll(".task[data-key]").length;
-  const done = Object.values(taskData||{}).filter(s=>s.done).length;
+  const done = document.querySelectorAll(".task.done").length;
   const pct  = all ? Math.round(done/all*100) : 0;
   const fill = document.getElementById("progressFill");
   if (fill) fill.style.width = pct+"%";
-  const d=document.getElementById("pDone"),
-        t=document.getElementById("pTotal"),
-        p=document.getElementById("pPct");
+  const d=document.getElementById("pDone"), t=document.getElementById("pTotal"), p=document.getElementById("pPct");
   if(d) d.textContent=done+" erledigt";
   if(t) t.textContent=all+" Aufgaben";
   if(p) p.textContent=pct+" %";
+}
+
+function applyTaskState() {
+  const data = window._taskData || {};
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  document.querySelectorAll(".task[data-key]").forEach(el => {
+    const s = data[el.dataset.key] || {};
+    const status = validStatus(s.status || (s.done ? "done" : "open"));
+    const isDone = !!s.done || status === "done";
+    el.classList.toggle("done", isDone);
+    el.classList.toggle("status-progress", status === "progress");
+    el.classList.toggle("status-blocked", status === "blocked");
+    el.classList.toggle("status-overdue", !!s.due && !isDone && new Date(s.due + "T12:00:00") < today);
+
+    const responsible = el.querySelector(".task-assignee");
+    const due = el.querySelector(".task-due");
+    const statusSel = el.querySelector(".task-status");
+    if (responsible && document.activeElement !== responsible) responsible.value = s.responsible || "";
+    if (due && document.activeElement !== due) due.value = s.due || "";
+    if (statusSel && document.activeElement !== statusSel) statusSel.value = status;
+
+    const meta = el.querySelector(".task-meta");
+    if (meta) {
+      const parts = [];
+      if (s.responsible) parts.push("Zuständig: "+s.responsible);
+      if (s.due) parts.push("Fällig: "+dateStr(s.due));
+      parts.push("Status: "+statusLabel(status));
+      if (isDone && s.by) parts.push("✓ "+s.by+" · "+ts2str(s.at));
+      meta.textContent = parts.join(" · ");
+    }
+  });
+  updateCommentIndicators();
 }
 
 function updateCommentIndicators() {
@@ -134,15 +163,10 @@ function updateCommentIndicators() {
     const key = taskEl.dataset.key;
     const btn = taskEl.querySelector(".comment-btn");
     if (!btn) return;
-
     const count = Object.keys(comments[key] || {}).length;
     btn.classList.toggle("has-comments", count > 0);
-    btn.title = count > 0
-      ? `${count} Kommentar${count === 1 ? "" : "e"}`
-      : "Kommentare";
-    btn.innerHTML = count > 0
-      ? `💬 <span class="comment-count">${count}</span>`
-      : "💬";
+    btn.title = count > 0 ? `${count} Kommentar${count === 1 ? "" : "e"}` : "Kommentare";
+    btn.innerHTML = count > 0 ? `💬 <span class="comment-count">${count}</span>` : "💬";
   });
 }
 
@@ -150,13 +174,19 @@ function renderOpenComment() {
   if (!openCommentKey) return;
   const list = document.getElementById("commentList");
   if (!list) return;
-  const msgs = Object.values(window._allComments[openCommentKey]||{})
-    .sort((a,b)=>a.ts-b.ts);
+  const msgs = Object.entries((window._allComments || {})[openCommentKey] || {})
+    .map(([key, value]) => ({ key, ...value }))
+    .sort((a,b)=>(a.ts || 0)-(b.ts || 0));
   list.innerHTML = msgs.length===0
     ? "<p class=\"empty-state\">Noch keine Kommentare.</p>"
     : msgs.map(m=>`<div class="msg-item ${m.user===currentUser?"own":""}">
-        <span class="msg-user">${esc(m.user)}</span>
-        <span class="msg-ts">${ts2str(m.ts)}</span>
+        <div class="msg-headline">
+          <div class="msg-headline-meta">
+            <span class="msg-user">${esc(m.user)}</span>
+            <span class="msg-ts">${ts2str(m.ts)}</span>
+          </div>
+          <button class="msg-delete" onclick='APP.deleteComment(${JSON.stringify(m.key)})' title="Kommentar löschen">Löschen</button>
+        </div>
         <p class="msg-text">${esc(m.text)}</p>
       </div>`).join("");
   list.scrollTop = list.scrollHeight;
@@ -165,7 +195,7 @@ function renderOpenComment() {
 function renderChat(data) {
   const list = document.getElementById("chatList");
   if (!list) return;
-  const msgs = Object.values(data).sort((a,b)=>a.ts-b.ts);
+  const msgs = Object.values(data || {}).sort((a,b)=>(a.ts || 0)-(b.ts || 0));
   list.innerHTML = msgs.length===0
     ? "<p class=\"empty-state\">Noch keine Nachrichten.</p>"
     : msgs.map(m=>`<div class="msg-item ${m.user===currentUser?"own":""}">
@@ -205,39 +235,145 @@ function renderDocuments(data) {
       }).join("");
 }
 
-// ── APP actions ───────────────────────────────
+function renderPins(data) {
+  const list = document.getElementById("pinsList");
+  if (!list) return;
+  const pins = Object.entries(data || {}).map(([key, value]) => ({key, ...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  list.innerHTML = pins.length ? pins.map(p=>`<article class="mini-card pin-card">
+      <div><span class="doc-cat">${esc(p.category || "Info")}</span><h3>${esc(p.title || "Ohne Titel")}</h3><p>${esc(p.text || "")}</p><p class="doc-meta">${esc(p.by||"?")} · ${ts2str(p.ts)}</p></div>
+      <button class="doc-delete" onclick='APP.deletePin(${JSON.stringify(p.key)})'>Löschen</button>
+    </article>`).join("") : `<p class="empty-state doc-empty">Noch nichts angepinnt.</p>`;
+}
+
+function renderDecisions(data) {
+  const list = document.getElementById("decisionsList");
+  if (!list) return;
+  const items = Object.entries(data || {}).map(([key,value])=>({key,...value}))
+    .sort((a,b)=>(b.pinned===true)-(a.pinned===true)||(b.ts||0)-(a.ts||0));
+  list.innerHTML = items.length ? items.map(d=>`<article class="mini-card ${d.pinned ? "pinned" : ""}">
+      <div><div class="doc-topline"><span class="doc-cat">${esc(d.category||"Beschluss")}</span>${d.pinned?`<span class="doc-pin">Wichtig</span>`:""}</div><h3>${esc(d.title||"Ohne Titel")}</h3><p>${esc(d.text||"")}</p><p class="doc-meta">${esc(d.by||"?")} · ${ts2str(d.ts)}</p></div>
+      <button class="doc-delete" onclick='APP.deleteDecision(${JSON.stringify(d.key)})'>Löschen</button>
+    </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Beschlüsse dokumentiert.</p>`;
+}
+
+function renderBudget(data) {
+  const list = document.getElementById("budgetList");
+  const stats = document.getElementById("budgetStats");
+  if (!list) return;
+  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const planned = items.reduce((s,i)=>s+Number(i.planned||0),0);
+  const actual = items.reduce((s,i)=>s+Number(i.actual||0),0);
+  const open = items.reduce((s,i)=>s+(!i.reimbursed?Number(i.actual||0):0),0);
+  if (stats) stats.innerHTML = `<span>Geplant: <strong>${fmtMoney(planned)}</strong></span><span>Tatsächlich: <strong>${fmtMoney(actual)}</strong></span><span>Offen/ungeklärt: <strong>${fmtMoney(open)}</strong></span>`;
+  list.innerHTML = items.length ? items.map(i=>`<article class="mini-card">
+      <div><span class="doc-cat">${esc(i.category||"Sonstiges")}</span><h3>${esc(i.title||"Ohne Titel")}</h3><p>${fmtMoney(i.actual || i.planned || 0)} ${i.planned ? `(Plan: ${fmtMoney(i.planned)})` : ""}</p><p class="doc-note">${esc(i.note||"")}</p><p class="doc-meta">Bezahlt von: ${esc(i.paidBy||"?")} · ${i.reimbursed?"erstattet/erledigt":"offen"} · ${ts2str(i.ts)}</p></div>
+      <div class="stack-actions"><label class="tiny-check"><input type="checkbox" ${i.reimbursed?"checked":""} onchange='APP.toggleBudgetReimbursed(${JSON.stringify(i.key)}, this.checked)'> erledigt</label><button class="doc-delete" onclick='APP.deleteBudget(${JSON.stringify(i.key)})'>Löschen</button></div>
+    </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Budgetposten eingetragen.</p>`;
+}
+
+function renderShopping(data) {
+  const list = document.getElementById("shoppingList");
+  const stats = document.getElementById("shoppingStats");
+  if (!list) return;
+  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(a.bought===true)-(b.bought===true)||(b.ts||0)-(a.ts||0));
+  const bought = items.filter(i=>i.bought).length;
+  if (stats) stats.innerHTML = `<span>${bought} / ${items.length} gekauft</span>`;
+  list.innerHTML = items.length ? items.map(i=>`<article class="mini-card ${i.bought?"done-card":""}">
+      <div><span class="doc-cat">${esc(i.category||"Sonstiges")}</span><h3>${esc(i.item||"Ohne Titel")}</h3><p>Menge: ${esc(i.qty||"?")} · Zuständig: ${esc(i.responsible||"?")}</p><p class="doc-note">${esc(i.note||"")}</p><p class="doc-meta">${esc(i.by||"?")} · ${ts2str(i.ts)}</p></div>
+      <div class="stack-actions"><label class="tiny-check"><input type="checkbox" ${i.bought?"checked":""} onchange='APP.toggleShoppingBought(${JSON.stringify(i.key)}, this.checked)'> gekauft</label><button class="doc-delete" onclick='APP.deleteShopping(${JSON.stringify(i.key)})'>Löschen</button></div>
+    </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Einkaufsposten eingetragen.</p>`;
+}
+
+function renderHelpers(data) {
+  const list = document.getElementById("helpersList");
+  const stats = document.getElementById("helpersStats");
+  if (!list) return;
+  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(a.done===true)-(b.done===true)||(a.time||"").localeCompare(b.time||""));
+  const done = items.filter(i=>i.done).length;
+  if (stats) stats.innerHTML = `<span>${done} / ${items.length} Rollen geklärt</span>`;
+  list.innerHTML = items.length ? items.map(i=>`<article class="mini-card ${i.done?"done-card":""}">
+      <div><span class="doc-cat">${esc(i.category||"Helfer")}</span><h3>${esc(i.role||"Ohne Rolle")}</h3><p>${esc(i.person||"Noch offen")} ${i.time ? `· ${esc(i.time)}` : ""}</p><p class="doc-note">${esc(i.note||"")}</p><p class="doc-meta">${esc(i.by||"?")} · ${ts2str(i.ts)}</p></div>
+      <div class="stack-actions"><label class="tiny-check"><input type="checkbox" ${i.done?"checked":""} onchange='APP.toggleHelperDone(${JSON.stringify(i.key)}, this.checked)'> geklärt</label><button class="doc-delete" onclick='APP.deleteHelper(${JSON.stringify(i.key)})'>Löschen</button></div>
+    </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Helferrollen eingetragen.</p>`;
+}
+
+function renderDashboard() {
+  const stats = document.getElementById("dashboardStats");
+  const pins = document.getElementById("dashboardPins");
+  if (!stats || !pins) return;
+  const taskEls = [...document.querySelectorAll(".task[data-key]")];
+  const total = taskEls.length;
+  const done = taskEls.filter(el=>el.classList.contains("done")).length;
+  const blocked = Object.values(window._taskData || {}).filter(t=>validStatus(t.status)==="blocked").length;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const overdue = Object.values(window._taskData || {}).filter(t=>t.due && validStatus(t.status)!=="done" && new Date(t.due+"T12:00:00") < today).length;
+  const budgetActual = Object.values(window._budget || {}).reduce((s,i)=>s+Number(i.actual||0),0);
+  const shoppingOpen = Object.values(window._shopping || {}).filter(i=>!i.bought).length;
+  stats.innerHTML = `
+    <div class="dash-stat"><strong>${done}/${total}</strong><span>Aufgaben erledigt</span></div>
+    <div class="dash-stat"><strong>${blocked}</strong><span>blockiert</span></div>
+    <div class="dash-stat"><strong>${overdue}</strong><span>überfällig</span></div>
+    <div class="dash-stat"><strong>${fmtMoney(budgetActual)}</strong><span>tatsächliche Kosten</span></div>
+    <div class="dash-stat"><strong>${shoppingOpen}</strong><span>Einkäufe offen</span></div>`;
+
+  const pinItems = Object.entries(window._pins || {}).map(([key,value])=>({type:"Pin",key,...value}));
+  const docItems = Object.entries(window._documents || {}).filter(([,v])=>v.pinned).map(([key,value])=>({type:"Dokument",key,...value}));
+  const decisionItems = Object.entries(window._decisions || {}).filter(([,v])=>v.pinned).map(([key,value])=>({type:"Beschluss",key,...value}));
+  const allPins = [...pinItems, ...decisionItems, ...docItems].sort((a,b)=>(b.ts||0)-(a.ts||0));
+  pins.innerHTML = allPins.length ? allPins.slice(0,8).map(p=>`<article class="dashboard-pin">
+      <span class="doc-pin">${esc(p.type)}</span>
+      <h3>${esc(p.title || "Ohne Titel")}</h3>
+      <p>${esc(p.text || p.note || p.category || "")}</p>
+    </article>`).join("") : `<p class="empty-state doc-empty">Keine angepinnten Informationen. Trage oben Pins, wichtige Dokumente oder wichtige Beschlüsse ein.</p>`;
+}
+
 window.APP = {
   toggleTask(key) {
     if (!currentUser) { pendingCb=()=>window.APP.toggleTask(key); window.APP.showName(); return; }
-    const el = document.querySelector(`.task[data-key="${key}"]`);
-    const isDone = el && el.classList.contains("done");
+    const s = (window._taskData || {})[key] || {};
+    const isDone = !!s.done || validStatus(s.status) === "done";
     update(ref(db,dbPath(`tasks/${key}`)), isDone
-      ? {done:false,by:null,at:null}
-      : {done:true,by:currentUser,at:Date.now()});
+      ? {done:false,by:null,at:null,status:"open"}
+      : {done:true,by:currentUser,at:Date.now(),status:"done"});
+  },
+
+  updateTaskMeta(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateTaskMeta(key, field, value); window.APP.showName(); return; }
+    if (!["responsible","due"].includes(field)) return;
+    update(ref(db,dbPath(`tasks/${key}`)), {[field]: String(value || "").trim().slice(0,80)});
+  },
+
+  updateTaskStatus(key, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateTaskStatus(key, value); window.APP.showName(); return; }
+    const status = validStatus(value);
+    const patch = {status};
+    if (status === "done") Object.assign(patch,{done:true,by:currentUser,at:Date.now()});
+    else Object.assign(patch,{done:false});
+    update(ref(db,dbPath(`tasks/${key}`)), patch);
   },
 
   openComments(key,text) {
     openCommentKey = key;
-    document.getElementById("commentTaskTitle").textContent =
-      text.substring(0,90)+(text.length>90?"…":"");
+    document.getElementById("commentTaskTitle").textContent = text.substring(0,90)+(text.length>90?"…":"");
     document.getElementById("commentPanel").classList.add("open");
     renderOpenComment();
     setTimeout(()=>document.getElementById("commentInput").focus(),300);
   },
-
-  closeComments() {
-    document.getElementById("commentPanel").classList.remove("open");
-    openCommentKey = null;
-  },
-
+  closeComments() { document.getElementById("commentPanel").classList.remove("open"); openCommentKey = null; },
   sendComment() {
     if (!openCommentKey) return;
     if (!currentUser) { pendingCb=window.APP.sendComment; window.APP.showName(); return; }
     const inp = document.getElementById("commentInput");
     const text = inp.value.trim();
     if (!text) return;
-    push(ref(db,dbPath(`comments/${openCommentKey}`)),{user:currentUser,text,ts:Date.now()});
+    push(ref(db,dbPath(`comments/${openCommentKey}`)),{user:currentUser,text:text.slice(0,500),ts:Date.now()});
     inp.value = "";
+  },
+  deleteComment(commentKey) {
+    if (!openCommentKey || !commentKey) return;
+    if (!currentUser) { pendingCb=()=>window.APP.deleteComment(commentKey); window.APP.showName(); return; }
+    if (!confirm("Kommentar wirklich löschen?")) return;
+    remove(ref(db,dbPath(`comments/${openCommentKey}/${commentKey}`)));
   },
 
   sendChat() {
@@ -245,82 +381,94 @@ window.APP = {
     const inp = document.getElementById("chatInput");
     const text = inp.value.trim();
     if (!text) return;
-    push(ref(db,dbPath("chat")),{user:currentUser,text,ts:Date.now()});
+    push(ref(db,dbPath("chat")),{user:currentUser,text:text.slice(0,500),ts:Date.now()});
     inp.value = "";
   },
 
   addDocument() {
     if (!currentUser) { pendingCb=window.APP.addDocument; window.APP.showName(); return; }
-    const titleEl = document.getElementById("docTitle");
-    const categoryEl = document.getElementById("docCategory");
-    const linkEl = document.getElementById("docLink");
-    const noteEl = document.getElementById("docNote");
-    const pinnedEl = document.getElementById("docPinned");
-
+    const titleEl = document.getElementById("docTitle"), categoryEl = document.getElementById("docCategory"), linkEl = document.getElementById("docLink"), noteEl = document.getElementById("docNote"), pinnedEl = document.getElementById("docPinned");
     const title = titleEl.value.trim();
-    const category = categoryEl.value.trim();
     const link = normalizeDocLink(linkEl.value);
-    const note = noteEl.value.trim();
-    const pinned = pinnedEl.checked;
-
     if (!title) { alert("Bitte einen Titel eintragen."); titleEl.focus(); return; }
     if (!link) { alert("Bitte einen gültigen Link eintragen. Erlaubt sind https://, http://, /... oder docs/..."); linkEl.focus(); return; }
-
-    push(ref(db,dbPath("documents")), {
-      title,
-      category: category || "Sonstiges",
-      link,
-      note,
-      pinned,
-      by: currentUser,
-      ts: Date.now()
-    });
-
-    titleEl.value = "";
-    linkEl.value = "";
-    noteEl.value = "";
-    pinnedEl.checked = false;
+    push(ref(db,dbPath("documents")), {title:title.slice(0,80), category:categoryEl.value.trim() || "Sonstiges", link, note:noteEl.value.trim().slice(0,300), pinned:pinnedEl.checked, by:currentUser, ts:Date.now()});
+    titleEl.value = ""; linkEl.value = ""; noteEl.value = ""; pinnedEl.checked = false;
   },
+  deleteDocument(key) { if (!currentUser) { pendingCb=()=>window.APP.deleteDocument(key); window.APP.showName(); return; } if(confirm("Dokument wirklich aus der Liste löschen? Die verlinkte Datei selbst wird dadurch nicht gelöscht.")) remove(ref(db,dbPath(`documents/${key}`))); },
 
-  deleteDocument(key) {
-    if (!currentUser) { pendingCb=()=>window.APP.deleteDocument(key); window.APP.showName(); return; }
-    if (!confirm("Dokument wirklich aus der Liste löschen? Die verlinkte Datei selbst wird dadurch nicht gelöscht.")) return;
-    remove(ref(db,dbPath(`documents/${key}`)));
+  addPin() {
+    if (!currentUser) { pendingCb=window.APP.addPin; window.APP.showName(); return; }
+    const title = document.getElementById("pinTitle").value.trim();
+    const text = document.getElementById("pinText").value.trim();
+    const category = document.getElementById("pinCategory").value.trim() || "Info";
+    if (!title || !text) { alert("Titel und Inhalt für den Pin eintragen."); return; }
+    push(ref(db,dbPath("pins")), {title:title.slice(0,80), text:text.slice(0,500), category:category.slice(0,40), by:currentUser, ts:Date.now()});
+    document.getElementById("pinTitle").value = ""; document.getElementById("pinText").value = "";
   },
+  deletePin(key) { if(confirm("Pin löschen?")) remove(ref(db,dbPath(`pins/${key}`))); },
 
-  toggleChat() {
-    document.getElementById("chatPanel").classList.toggle("open");
+  addDecision() {
+    if (!currentUser) { pendingCb=window.APP.addDecision; window.APP.showName(); return; }
+    const title = document.getElementById("decisionTitle").value.trim();
+    const text = document.getElementById("decisionText").value.trim();
+    if (!title || !text) { alert("Beschluss mit Titel und Inhalt eintragen."); return; }
+    push(ref(db,dbPath("decisions")), {title:title.slice(0,100), text:text.slice(0,800), category:document.getElementById("decisionCategory").value.trim() || "Beschluss", pinned:document.getElementById("decisionPinned").checked, by:currentUser, ts:Date.now()});
+    document.getElementById("decisionTitle").value = ""; document.getElementById("decisionText").value = ""; document.getElementById("decisionPinned").checked = false;
   },
+  deleteDecision(key) { if(confirm("Beschluss löschen?")) remove(ref(db,dbPath(`decisions/${key}`))); },
 
-  scrollTo(id) {
-    document.getElementById(id)?.scrollIntoView({behavior:"smooth",block:"start"});
+  addBudget() {
+    if (!currentUser) { pendingCb=window.APP.addBudget; window.APP.showName(); return; }
+    const title = document.getElementById("budgetTitle").value.trim();
+    if (!title) { alert("Budgetposten eintragen."); return; }
+    push(ref(db,dbPath("budget")), {title:title.slice(0,80), category:document.getElementById("budgetCategory").value.trim() || "Sonstiges", planned:parseMoney(document.getElementById("budgetPlanned").value), actual:parseMoney(document.getElementById("budgetActual").value), paidBy:document.getElementById("budgetPaidBy").value.trim().slice(0,40), reimbursed:document.getElementById("budgetReimbursed").checked, note:document.getElementById("budgetNote").value.trim().slice(0,300), by:currentUser, ts:Date.now()});
+    ["budgetTitle","budgetPlanned","budgetActual","budgetPaidBy","budgetNote"].forEach(id=>document.getElementById(id).value=""); document.getElementById("budgetReimbursed").checked=false;
   },
+  toggleBudgetReimbursed(key, checked) { update(ref(db,dbPath(`budget/${key}`)), {reimbursed:!!checked}); },
+  deleteBudget(key) { if(confirm("Budgetposten löschen?")) remove(ref(db,dbPath(`budget/${key}`))); },
 
-  showName() {
-    document.getElementById("nameModal").classList.add("open");
-    document.getElementById("nameInput").value = currentUser||"";
-    setTimeout(()=>document.getElementById("nameInput").focus(),100);
+  addShopping() {
+    if (!currentUser) { pendingCb=window.APP.addShopping; window.APP.showName(); return; }
+    const item = document.getElementById("shoppingItem").value.trim();
+    if (!item) { alert("Artikel eintragen."); return; }
+    push(ref(db,dbPath("shopping")), {item:item.slice(0,80), qty:document.getElementById("shoppingQty").value.trim().slice(0,60), category:document.getElementById("shoppingCategory").value.trim() || "Sonstiges", responsible:document.getElementById("shoppingResponsible").value.trim().slice(0,40), note:document.getElementById("shoppingNote").value.trim().slice(0,300), bought:false, by:currentUser, ts:Date.now()});
+    ["shoppingItem","shoppingQty","shoppingResponsible","shoppingNote"].forEach(id=>document.getElementById(id).value="");
   },
+  toggleShoppingBought(key, checked) { update(ref(db,dbPath(`shopping/${key}`)), {bought:!!checked, boughtBy: checked ? currentUser : null, boughtAt: checked ? Date.now() : null}); },
+  deleteShopping(key) { if(confirm("Einkaufsposten löschen?")) remove(ref(db,dbPath(`shopping/${key}`))); },
 
+  addHelper() {
+    if (!currentUser) { pendingCb=window.APP.addHelper; window.APP.showName(); return; }
+    const role = document.getElementById("helperRole").value.trim();
+    if (!role) { alert("Rolle/Aufgabe eintragen."); return; }
+    push(ref(db,dbPath("helpers")), {role:role.slice(0,80), person:document.getElementById("helperPerson").value.trim().slice(0,40), category:document.getElementById("helperCategory").value.trim() || "Helfer", time:document.getElementById("helperTime").value.trim().slice(0,80), note:document.getElementById("helperNote").value.trim().slice(0,300), done:false, by:currentUser, ts:Date.now()});
+    ["helperRole","helperPerson","helperTime","helperNote"].forEach(id=>document.getElementById(id).value="");
+  },
+  toggleHelperDone(key, checked) { update(ref(db,dbPath(`helpers/${key}`)), {done:!!checked}); },
+  deleteHelper(key) { if(confirm("Helferrolle löschen?")) remove(ref(db,dbPath(`helpers/${key}`))); },
+
+  printHub() { window.print(); },
+  toggleChat() { document.getElementById("chatPanel").classList.toggle("open"); },
+  scrollTo(id) { document.getElementById(id)?.scrollIntoView({behavior:"smooth",block:"start"}); },
+  showName() { document.getElementById("nameModal").classList.add("open"); document.getElementById("nameInput").value = currentUser||""; setTimeout(()=>document.getElementById("nameInput").focus(),100); },
   confirmName() {
     const name = document.getElementById("nameInput").value.trim();
     if (!name) return;
-    currentUser = name;
-    localStorage.setItem("wf_user",name);
-    document.getElementById("userLabel").textContent = name;
+    currentUser = name.slice(0,30);
+    localStorage.setItem("wf_user",currentUser);
+    document.getElementById("userLabel").textContent = currentUser;
     document.getElementById("nameModal").classList.remove("open");
     if (pendingCb) { const cb=pendingCb; pendingCb=null; cb(); }
   },
-
   changeName() { window.APP.showName(); }
 };
 
-// ── Build UI ──────────────────────────────────
 function buildUI() {
   const container = document.getElementById("mainContainer");
   const prioLabel = {"prio-1":"Kritisch","prio-2":"Wichtig","prio-3":"Optional"};
-  window._allComments = {};
-
+  if (!container) return;
+  container.innerHTML = "";
   PHASES_DATA.forEach((phase,pi) => {
     const ph = document.createElement("div");
     ph.className="phase"; ph.id=phase.id;
@@ -334,10 +482,7 @@ function buildUI() {
       const tl=document.createElement("div");
       tl.className="timeline-strip";
       tl.innerHTML=phase.timeline.map(t=>`
-        <div class="tl-item">
-          <div class="tl-date">${esc(t.time)}</div>
-          <div class="tl-text">${esc(t.text)}</div>
-        </div>`).join("");
+        <div class="tl-item"><div class="tl-date">${esc(t.time)}</div><div class="tl-text">${esc(t.text)}</div></div>`).join("");
       ph.appendChild(tl);
     }
 
@@ -356,6 +501,13 @@ function buildUI() {
           <span class="task-priority ${task.prio}">${prioLabel[task.prio]||""}</span>
           <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text)}</span>
           <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Kommentare">💬</button>
+          <div class="task-controls">
+            <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
+            <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
+            <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
+              <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
+            </select></label>
+          </div>
           <div class="task-meta"></div>`;
         ul.appendChild(li);
       });
@@ -370,20 +522,15 @@ function buildUI() {
       container.appendChild(div);
     }
   });
+  applyTaskState();
 }
 
-// ── Init ──────────────────────────────────────
 document.addEventListener("DOMContentLoaded",()=>{
-  document.getElementById("commentInput")
-    .addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendComment();} });
-  document.getElementById("chatInput")
-    .addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendChat();} });
-
+  document.getElementById("commentInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendComment();} });
+  document.getElementById("chatInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendChat();} });
   if (currentUser) document.getElementById("userLabel").textContent=currentUser;
   else window.APP.showName();
-
   buildUI();
-  updateCommentIndicators();
   setSyncBar("⟳ Verbinde mit Firebase…");
   bindFirebase();
 });
@@ -515,6 +662,47 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 .modal-box button{width:100%;background:var(--ember);border:none;color:#fff;padding:.7rem;font-family:'Cinzel',serif;font-size:.88rem;cursor:pointer;border-radius:2px;letter-spacing:.08em}
 .empty-state{color:#ffffff44;font-style:italic;font-size:.85rem;text-align:center;padding:1rem 0}
 @media(max-width:600px){.phase-subtitle{margin-left:0}}
+
+
+/* Orga Hub Erweiterungen */
+.hub-section{background:var(--parch2);border:1px solid var(--rule);padding:1.25rem;margin:0 0 2.5rem}
+.hub-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.85rem;flex-wrap:wrap}
+.hub-nav{margin-bottom:1rem}
+.dashboard-section{margin-top:2rem}
+.dashboard-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;margin:.8rem 0}
+.dash-stat{background:var(--parchment);border:1px solid var(--rule);padding:.7rem;text-align:center}
+.dash-stat strong{display:block;font-family:'Cinzel',serif;color:var(--ember);font-size:1.05rem}
+.dash-stat span{font-family:'JetBrains Mono',monospace;color:var(--ash);font-size:.55rem;text-transform:uppercase;letter-spacing:.07em}
+.dashboard-pins{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem}
+.dashboard-pin{background:#fff8e8;border-left:2px solid var(--ember);padding:.7rem;border-radius:2px}
+.dashboard-pin h3{font-family:'Cinzel',serif;font-size:.82rem;color:var(--ember);margin:.2rem 0}
+.dashboard-pin p{font-size:.82rem;line-height:1.35}
+.hub-form{display:grid;gap:.55rem;margin-bottom:1rem}
+.hub-form.two-col{grid-template-columns:1fr .7fr}
+.hub-form.three-col{grid-template-columns:1fr .75fr .75fr}
+.hub-form input,.hub-form select,.hub-form textarea{width:100%;background:var(--parchment);border:1px solid var(--rule);color:var(--ink);font-family:'Crimson Text',Georgia,serif;font-size:.92rem;padding:.55rem .65rem;border-radius:2px;outline:none}
+.hub-form input:focus,.hub-form select:focus,.hub-form textarea:focus{border-color:var(--gold)}
+.hub-form textarea{grid-column:1/-1;min-height:58px;resize:vertical}
+.hub-list{display:grid;gap:.5rem}
+.mini-card{display:grid;grid-template-columns:1fr auto;gap:.8rem;align-items:start;background:var(--parchment);border-left:2px solid var(--rule);padding:.75rem;border-radius:2px}
+.mini-card.pinned{border-left-color:var(--ember);background:#fff8e8}
+.mini-card.done-card{opacity:.72;background:rgba(74,92,58,.08);border-left-color:var(--moss)}
+.mini-card h3{font-family:'Cinzel',serif;font-size:.95rem;color:var(--ember);line-height:1.3;margin:.2rem 0}
+.stack-actions{display:flex;flex-direction:column;gap:.4rem;align-items:flex-end;white-space:nowrap}
+.tiny-check{font-family:'JetBrains Mono',monospace;font-size:.56rem;color:var(--ash);display:flex;align-items:center;gap:.3rem;text-transform:uppercase;letter-spacing:.05em}
+.hub-stats-inline{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ash);display:flex;gap:.7rem;flex-wrap:wrap;justify-content:flex-end}
+.print-btn{white-space:nowrap}
+.task{grid-template-columns:20px auto 1fr auto;grid-template-rows:auto auto auto}
+.task-controls{grid-column:2/5;grid-row:2;display:grid;grid-template-columns:1fr 150px 150px;gap:.4rem;margin-top:.25rem}
+.task-controls label{font-family:'JetBrains Mono',monospace;font-size:.55rem;color:var(--ash);display:flex;align-items:center;gap:.35rem;text-transform:uppercase;letter-spacing:.05em}
+.task-controls input,.task-controls select{min-width:0;width:100%;background:var(--parchment);border:1px solid var(--rule);font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--ink);padding:.25rem .35rem;border-radius:2px}
+.task-meta{grid-column:2/5;grid-row:3}
+.task.status-progress{border-left-color:var(--gold)}
+.task.status-blocked{border-left-color:var(--ember);background:#8b3a0f10}
+.task.status-overdue .task-meta{color:var(--ember)}
+@media(max-width:800px){.dashboard-stats{grid-template-columns:repeat(2,1fr)}.dashboard-pins{grid-template-columns:1fr}.hub-form.two-col,.hub-form.three-col,.task-controls{grid-template-columns:1fr}.mini-card{grid-template-columns:1fr}.stack-actions{align-items:flex-start}.hub-stats-inline{justify-content:flex-start}}
+@media print{.topbar,.sync-bar,.phase-nav,.doc-form,.hub-form,.input-row,.side-panel,.chat-panel,.modal-overlay,.comment-btn,.doc-delete,.send-btn,.task-controls,button{display:none!important}body{background:#fff;color:#000;font-size:12px}.container{max-width:none;padding:0}.hub-section,.documents-section,.progress-section{break-inside:avoid;border:1px solid #999;background:#fff;margin-bottom:1rem}.task,.doc-card,.mini-card,.dashboard-pin{break-inside:avoid;background:#fff;border-color:#999}.task-text{text-decoration:none!important;color:#000!important;opacity:1!important}a{color:#000;text-decoration:underline}.task-meta{font-size:10px;color:#333}.dashboard-stats{grid-template-columns:repeat(5,1fr)}}
+
 </style>
 </head>
 <body>
@@ -545,6 +733,28 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     </div>
   </div>
 
+  <section class="hub-section dashboard-section" id="dashboard">
+    <div class="hub-head">
+      <div>
+        <p class="progress-title">Orga-Übersicht</p>
+        <p class="documents-subtitle">Aktueller Stand, angepinnte Informationen und kritische Organisationswerte.</p>
+      </div>
+      <button class="send-btn print-btn" onclick="APP.printHub()">Druckansicht</button>
+    </div>
+    <div class="dashboard-stats" id="dashboardStats"></div>
+    <div class="dashboard-pins" id="dashboardPins"></div>
+  </section>
+
+  <nav class="phase-nav hub-nav">
+    <div class="pni" onclick="APP.scrollTo('dashboard')"><span class="pm">Hub</span>Übersicht</div>
+    <div class="pni" onclick="APP.scrollTo('pins')"><span class="pm">Pin</span>Infos</div>
+    <div class="pni" onclick="APP.scrollTo('documents')"><span class="pm">Docs</span>Unterlagen</div>
+    <div class="pni" onclick="APP.scrollTo('budget')"><span class="pm">€</span>Budget</div>
+    <div class="pni" onclick="APP.scrollTo('shopping')"><span class="pm">List</span>Einkauf</div>
+    <div class="pni" onclick="APP.scrollTo('helpers')"><span class="pm">Team</span>Helfer</div>
+    <div class="pni" onclick="APP.scrollTo('decisions')"><span class="pm">Fix</span>Beschlüsse</div>
+  </nav>
+
   <nav class="phase-nav">
     <div class="pni" onclick="APP.scrollTo('phase1')"><span class="pm">Jul</span>Fundament</div>
     <div class="pni" onclick="APP.scrollTo('phase2')"><span class="pm">Aug</span>Infra</div>
@@ -555,6 +765,17 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="pni" onclick="APP.scrollTo('phase7')"><span class="pm">Mai</span>Endspurt</div>
     <div class="pni" onclick="APP.scrollTo('phase8')"><span class="pm">29.5.</span>Eventtag</div>
   </nav>
+
+  <section class="hub-section" id="pins">
+    <div class="hub-head"><div><p class="progress-title">Angepinnte Infos</p><p class="documents-subtitle">Für Deadlines, aktuelle Hauptfokusse, Warnungen und feste Hinweise.</p></div></div>
+    <div class="hub-form two-col">
+      <input id="pinTitle" type="text" maxlength="80" placeholder="Titel, z.B. Aktueller Fokus">
+      <select id="pinCategory"><option>Info</option><option>Deadline</option><option>Warnung</option><option>Fokus</option><option>Offen</option></select>
+      <textarea id="pinText" maxlength="500" placeholder="Inhalt der angepinnten Info"></textarea>
+      <button class="send-btn doc-add-btn" onclick="APP.addPin()">Pin eintragen</button>
+    </div>
+    <div class="hub-list" id="pinsList"></div>
+  </section>
 
   <section class="documents-section" id="documents">
     <div class="documents-head">
@@ -584,6 +805,59 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     </div>
 
     <div class="documents-list" id="documentsList"></div>
+  </section>
+
+  <section class="hub-section" id="budget">
+    <div class="hub-head"><div><p class="progress-title">Budget</p><p class="documents-subtitle">Geplante und tatsächliche Kosten, wer gezahlt hat und was noch offen ist.</p></div><div class="hub-stats-inline" id="budgetStats"></div></div>
+    <div class="hub-form three-col">
+      <input id="budgetTitle" type="text" maxlength="80" placeholder="Posten, z.B. QUIXX24 Toiletten">
+      <select id="budgetCategory"><option>Toilette</option><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Wettkampf</option><option>Sonstiges</option></select>
+      <input id="budgetPaidBy" type="text" maxlength="40" placeholder="Bezahlt von">
+      <input id="budgetPlanned" type="number" step="0.01" min="0" placeholder="Geplant €">
+      <input id="budgetActual" type="number" step="0.01" min="0" placeholder="Tatsächlich €">
+      <label class="doc-pin-row"><input id="budgetReimbursed" type="checkbox"> Erstattet / erledigt</label>
+      <textarea id="budgetNote" maxlength="300" placeholder="Notiz"></textarea>
+      <button class="send-btn doc-add-btn" onclick="APP.addBudget()">Budgetposten eintragen</button>
+    </div>
+    <div class="hub-list" id="budgetList"></div>
+  </section>
+
+  <section class="hub-section" id="shopping">
+    <div class="hub-head"><div><p class="progress-title">Einkaufsliste</p><p class="documents-subtitle">Alles, was beschafft werden muss. Nicht im Chat vergraben.</p></div><div class="hub-stats-inline" id="shoppingStats"></div></div>
+    <div class="hub-form three-col">
+      <input id="shoppingItem" type="text" maxlength="80" placeholder="Artikel, z.B. LED-Laternen">
+      <input id="shoppingQty" type="text" maxlength="60" placeholder="Menge, z.B. 6 Stück">
+      <select id="shoppingCategory"><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Toilette</option><option>Wettkampf</option><option>Sonstiges</option></select>
+      <input id="shoppingResponsible" type="text" maxlength="40" placeholder="Zuständig">
+      <textarea id="shoppingNote" maxlength="300" placeholder="Notiz / Bezugsquelle / Linkhinweis"></textarea>
+      <button class="send-btn doc-add-btn" onclick="APP.addShopping()">Einkauf eintragen</button>
+    </div>
+    <div class="hub-list" id="shoppingList"></div>
+  </section>
+
+  <section class="hub-section" id="helpers">
+    <div class="hub-head"><div><p class="progress-title">Helferplan</p><p class="documents-subtitle">Rollen, Personen, Zeiten und Zuständigkeiten für Aufbau, Eventbetrieb und Abbau.</p></div><div class="hub-stats-inline" id="helpersStats"></div></div>
+    <div class="hub-form three-col">
+      <input id="helperRole" type="text" maxlength="80" placeholder="Rolle, z.B. Axtaufsicht">
+      <input id="helperPerson" type="text" maxlength="40" placeholder="Person">
+      <select id="helperCategory"><option>Aufbau</option><option>Küche</option><option>Wettkampf</option><option>Getränke</option><option>Sicherheit</option><option>Abbau</option><option>Fahrer</option><option>Sonstiges</option></select>
+      <input id="helperTime" type="text" maxlength="80" placeholder="Zeit, z.B. Fr 10:00–14:00">
+      <textarea id="helperNote" maxlength="300" placeholder="Notiz"></textarea>
+      <button class="send-btn doc-add-btn" onclick="APP.addHelper()">Helferrolle eintragen</button>
+    </div>
+    <div class="hub-list" id="helpersList"></div>
+  </section>
+
+  <section class="hub-section" id="decisions">
+    <div class="hub-head"><div><p class="progress-title">Beschlusslog</p><p class="documents-subtitle">Feste Entscheidungen, damit sie nicht im Chat verschwinden.</p></div></div>
+    <div class="hub-form two-col">
+      <input id="decisionTitle" type="text" maxlength="100" placeholder="Titel, z.B. Toilettenlösung final">
+      <select id="decisionCategory"><option>Datum</option><option>Gelände</option><option>Toilette</option><option>Essen</option><option>Budget</option><option>Programm</option><option>Helfer</option><option>Sonstiges</option></select>
+      <textarea id="decisionText" maxlength="800" placeholder="Was wurde entschieden und warum?"></textarea>
+      <label class="doc-pin-row"><input id="decisionPinned" type="checkbox"> Wichtig / oben anheften</label>
+      <button class="send-btn doc-add-btn" onclick="APP.addDecision()">Beschluss eintragen</button>
+    </div>
+    <div class="hub-list" id="decisionsList"></div>
   </section>
 
   <div id="mainContainer"></div>
