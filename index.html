@@ -50,6 +50,7 @@ window._decisions = {};
 window._budget = {};
 window._shopping = {};
 window._helpers = {};
+window._customTasks = {};
 
 const esc = s => String(s ?? "")
   .replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -114,6 +115,7 @@ function bindFirebase() {
   bindValue("budget", data => { window._budget = data; renderBudget(data); renderDashboard(); });
   bindValue("shopping", data => { window._shopping = data; renderShopping(data); renderDashboard(); });
   bindValue("helpers", data => { window._helpers = data; renderHelpers(data); renderDashboard(); });
+  bindValue("customTasks", data => { window._customTasks = data; buildUI(); updateProgress(window._taskData); renderDashboard(); });
 }
 
 function updateProgress(taskData) {
@@ -175,10 +177,14 @@ function updateCommentIndicators() {
     if ((window._taskData || {})[key]?.deleted === true) return;
     const btn = taskEl.querySelector(".comment-btn");
     if (!btn) return;
-    const count = Object.keys(comments[key] || {}).length;
+    const taskComments = comments[key] || {};
+    const values = Object.values(taskComments);
+    const count = values.length;
+    const pinnedCount = values.filter(c => c && c.pinned === true).length;
     btn.classList.toggle("has-comments", count > 0);
-    btn.title = count > 0 ? `${count} Kommentar${count === 1 ? "" : "e"}` : "Kommentare";
-    btn.innerHTML = count > 0 ? `💬 <span class="comment-count">${count}</span>` : "💬";
+    btn.classList.toggle("has-pinned", pinnedCount > 0);
+    btn.title = pinnedCount > 0 ? `${pinnedCount} wichtiger Kommentar, ${count} insgesamt` : (count > 0 ? `${count} Kommentar${count === 1 ? "" : "e"}` : "Kommentare");
+    btn.innerHTML = count > 0 ? `${pinnedCount > 0 ? "📌 " : ""}💬 <span class="comment-count">${count}</span>` : "💬";
   });
 }
 
@@ -188,16 +194,21 @@ function renderOpenComment() {
   if (!list) return;
   const msgs = Object.entries((window._allComments || {})[openCommentKey] || {})
     .map(([key, value]) => ({ key, ...value }))
-    .sort((a,b)=>(a.ts || 0)-(b.ts || 0));
+    .sort((a,b)=>(b.pinned === true) - (a.pinned === true) || (a.ts || 0)-(b.ts || 0));
   list.innerHTML = msgs.length===0
     ? "<p class=\"empty-state\">Noch keine Kommentare.</p>"
-    : msgs.map(m=>`<div class="msg-item ${m.user===currentUser?"own":""}">
+    : msgs.map(m=>`<div class="msg-item ${m.user===currentUser?"own":""} ${m.pinned ? "pinned" : ""}">
         <div class="msg-headline">
           <div class="msg-headline-meta">
             <span class="msg-user">${esc(m.user)}</span>
             <span class="msg-ts">${ts2str(m.ts)}</span>
+            ${m.pinned ? `<span class="msg-pin">Wichtig</span>` : ""}
           </div>
-          <button class="msg-delete" onclick='APP.deleteComment(${JSON.stringify(m.key)})' title="Kommentar löschen">Löschen</button>
+          <div class="msg-actions">
+            <button class="msg-pin-btn" onclick='APP.toggleCommentPinned(${JSON.stringify(m.key)}, ${m.pinned ? "false" : "true"})' title="Kommentar hervorheben">${m.pinned ? "Markierung lösen" : "Wichtig"}</button>
+            <button class="msg-pin-btn" onclick='APP.createTaskFromComment(${JSON.stringify(m.key)})' title="Kommentar als Aufgabe übernehmen">Als Aufgabe</button>
+            <button class="msg-delete" onclick='APP.deleteComment(${JSON.stringify(m.key)})' title="Kommentar löschen">Löschen</button>
+          </div>
         </div>
         <p class="msg-text">${esc(m.text)}</p>
       </div>`).join("");
@@ -392,6 +403,66 @@ function renderDashboard() {
     </article>`).join("") : `<p class="empty-state doc-empty">Keine angepinnten Informationen. Trage oben Pins, wichtige Dokumente oder wichtige Beschlüsse ein.</p>`;
 }
 
+function getTaskContext(key) {
+  if (!key) return { phaseId: "phase1", categoryIndex: 0, tag: "" };
+  if (key.startsWith("custom_")) {
+    const id = key.replace(/^custom_/, "");
+    const c = (window._customTasks || {})[id] || {};
+    return { phaseId: c.phaseId || "phase1", categoryIndex: Number(c.categoryIndex || 0), tag: c.tag || "" };
+  }
+  const m = String(key).match(/^(phase\d+)_c(\d+)_t\d+$/);
+  if (m) {
+    const s = (window._taskData || {})[key] || {};
+    return { phaseId: m[1], categoryIndex: Number(m[2] || 0), tag: s.tag || "" };
+  }
+  return { phaseId: "phase1", categoryIndex: 0, tag: "" };
+}
+
+function taskTitleByKey(key) {
+  const el = document.querySelector(`.task[data-key="${CSS.escape(key)}"] .task-text`);
+  return el ? el.textContent.trim() : "Aufgabe";
+}
+
+function renderTaskItem(ul, key, task, prioLabel, isCustom = false) {
+  const li=document.createElement("li");
+  li.className="task" + (isCustom ? " custom-task" : "");
+  li.dataset.key=key;
+  li.innerHTML=`
+    <div class="task-check" onclick="APP.toggleTask('${key}')"></div>
+    <span class="task-priority ${task.prio || "prio-2"}">${prioLabel[task.prio || "prio-2"]||""}${isCustom ? " · Neu" : ""}</span>
+    <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text || "Ohne Titel")}</span>
+    <div class="task-actions">
+      <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text || "Ohne Titel")})' title="Kommentare">💬</button>
+      <button class="task-delete" onclick='APP.deleteTask(${JSON.stringify(key)}, ${JSON.stringify(task.text || "Ohne Titel")})' title="Aufgabe löschen">Löschen</button>
+    </div>
+    <div class="task-controls">
+      <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
+      <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
+      <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
+        <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
+      </select></label>
+      <label>Tag <input class="task-tag" type="text" maxlength="40" placeholder="z.B. Strom" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "tag", this.value)'></label>
+    </div>
+    <div class="task-meta"></div>`;
+  ul.appendChild(li);
+}
+
+function refreshCustomTaskCategoryOptions() {
+  const phaseSel = document.getElementById("newTaskPhase");
+  const catSel = document.getElementById("newTaskCategory");
+  if (!phaseSel || !catSel) return;
+  const phase = PHASES_DATA.find(p => p.id === phaseSel.value) || PHASES_DATA[0];
+  catSel.innerHTML = (phase.categories || []).map((cat, index) => `<option value="${index}">${esc(cat.title)}</option>`).join("");
+}
+
+function populateCustomTaskForm() {
+  const phaseSel = document.getElementById("newTaskPhase");
+  if (!phaseSel) return;
+  phaseSel.innerHTML = PHASES_DATA.map(p => `<option value="${esc(p.id)}">${esc(p.label)} · ${esc(p.title)}</option>`).join("");
+  refreshCustomTaskCategoryOptions();
+}
+window.refreshCustomTaskCategoryOptions = refreshCustomTaskCategoryOptions;
+
 window.APP = {
   toggleTask(key) {
     if (!currentUser) { pendingCb=()=>window.APP.toggleTask(key); window.APP.showName(); return; }
@@ -421,6 +492,13 @@ window.APP = {
     if (!currentUser) { pendingCb=()=>window.APP.deleteTask(key, text); window.APP.showName(); return; }
     const label = String(text || "diese Aufgabe").slice(0,120);
     if (!confirm(`Aufgabe wirklich aus der Planung löschen?\n\n${label}\n\nKommentare zu dieser Aufgabe werden ebenfalls entfernt.`)) return;
+    if (String(key).startsWith("custom_")) {
+      const customId = String(key).replace(/^custom_/, "");
+      remove(ref(db,dbPath(`customTasks/${customId}`)));
+      remove(ref(db,dbPath(`tasks/${key}`)));
+      remove(ref(db,dbPath(`comments/${key}`)));
+      return;
+    }
     update(ref(db,dbPath(`tasks/${key}`)), {
       deleted: true,
       deletedBy: currentUser,
@@ -429,6 +507,27 @@ window.APP = {
       status: "open"
     });
     remove(ref(db,dbPath(`comments/${key}`)));
+  },
+
+  addCustomTask() {
+    if (!currentUser) { pendingCb=window.APP.addCustomTask; window.APP.showName(); return; }
+    const textEl = document.getElementById("newTaskText");
+    const text = textEl.value.trim();
+    if (!text) { alert("Bitte eine Aufgabenbeschreibung eintragen."); textEl.focus(); return; }
+    const phaseId = document.getElementById("newTaskPhase").value || "phase1";
+    const categoryIndex = Number(document.getElementById("newTaskCategory").value || 0);
+    const prio = document.getElementById("newTaskPrio").value || "prio-2";
+    const tag = document.getElementById("newTaskTag").value.trim().slice(0,40);
+    const responsible = document.getElementById("newTaskResponsible").value.trim().slice(0,40);
+    const due = document.getElementById("newTaskDue").value || "";
+    const newRef = push(ref(db,dbPath("customTasks")), {
+      text:text.slice(0,220), phaseId, categoryIndex, prio, tag, by:currentUser, ts:Date.now()
+    });
+    const taskDbKey = `custom_${newRef.key}`;
+    update(ref(db,dbPath(`tasks/${taskDbKey}`)), {
+      done:false, status:"open", responsible, due, tag, by:currentUser, at:Date.now()
+    });
+    ["newTaskText","newTaskTag","newTaskResponsible","newTaskDue"].forEach(id => { const el=document.getElementById(id); if (el) el.value=""; });
   },
 
   openComments(key,text) {
@@ -453,6 +552,46 @@ window.APP = {
     if (!currentUser) { pendingCb=()=>window.APP.deleteComment(commentKey); window.APP.showName(); return; }
     if (!confirm("Kommentar wirklich löschen?")) return;
     remove(ref(db,dbPath(`comments/${openCommentKey}/${commentKey}`)));
+  },
+  toggleCommentPinned(commentKey, pinned) {
+    if (!openCommentKey || !commentKey) return;
+    if (!currentUser) { pendingCb=()=>window.APP.toggleCommentPinned(commentKey, pinned); window.APP.showName(); return; }
+    update(ref(db,dbPath(`comments/${openCommentKey}/${commentKey}`)), {
+      pinned: !!pinned,
+      pinnedBy: pinned ? currentUser : null,
+      pinnedAt: pinned ? Date.now() : null
+    });
+  },
+  createTaskFromComment(commentKey) {
+    if (!openCommentKey || !commentKey) return;
+    if (!currentUser) { pendingCb=()=>window.APP.createTaskFromComment(commentKey); window.APP.showName(); return; }
+    const comment = (((window._allComments || {})[openCommentKey] || {})[commentKey]) || {};
+    const text = String(comment.text || "").trim();
+    if (!text) return;
+    const ctx = getTaskContext(openCommentKey);
+    const parentTitle = taskTitleByKey(openCommentKey);
+    const newRef = push(ref(db,dbPath("customTasks")), {
+      text:(text.length > 180 ? text.slice(0,177) + "..." : text),
+      phaseId:ctx.phaseId,
+      categoryIndex:ctx.categoryIndex,
+      prio:"prio-2",
+      tag:ctx.tag || "Klärung",
+      sourceTask:openCommentKey,
+      sourceComment:commentKey,
+      by:currentUser,
+      ts:Date.now()
+    });
+    const taskDbKey = `custom_${newRef.key}`;
+    update(ref(db,dbPath(`tasks/${taskDbKey}`)), {
+      done:false, status:"open", responsible:"", due:"", tag:ctx.tag || "Klärung", by:currentUser, at:Date.now()
+    });
+    update(ref(db,dbPath(`comments/${openCommentKey}/${commentKey}`)), {
+      pinned:true,
+      convertedToTask:taskDbKey,
+      pinnedBy:currentUser,
+      pinnedAt:Date.now()
+    });
+    alert(`Kommentar als Aufgabe übernommen.\nQuelle: ${parentTitle}`);
   },
 
   sendChat() {
@@ -642,26 +781,13 @@ function buildUI() {
       ul.className="tasks";
       cat.tasks.forEach((task,ti) => {
         const key=taskKey(phase.id,ci,ti);
-        const li=document.createElement("li");
-        li.className="task"; li.dataset.key=key;
-        li.innerHTML=`
-          <div class="task-check" onclick="APP.toggleTask('${key}')"></div>
-          <span class="task-priority ${task.prio}">${prioLabel[task.prio]||""}</span>
-          <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text)}</span>
-          <div class="task-actions">
-            <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Kommentare">💬</button>
-            <button class="task-delete" onclick='APP.deleteTask(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Aufgabe löschen">Löschen</button>
-          </div>
-          <div class="task-controls">
-            <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
-            <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
-            <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
-              <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
-            </select></label>
-          </div>
-          <div class="task-meta"></div>`;
-        ul.appendChild(li);
+        renderTaskItem(ul, key, task, prioLabel, false);
       });
+      Object.entries(window._customTasks || {})
+        .map(([customId, value]) => ({customId, ...value}))
+        .filter(task => task.phaseId === phase.id && Number(task.categoryIndex || 0) === ci)
+        .sort((a,b)=>(a.ts || 0)-(b.ts || 0))
+        .forEach(task => renderTaskItem(ul, `custom_${task.customId}`, task, prioLabel, true));
       catEl.appendChild(ul);
       ph.appendChild(catEl);
     });
@@ -889,6 +1015,22 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 .doc-open:hover{background:var(--gold);color:var(--ink)}
 @media(max-width:800px){.inline-edit-grid,.budget-quick-form{grid-template-columns:1fr}.inline-edit-grid .span-all{grid-column:auto}.money-line{flex-direction:column;gap:.1rem}}
 
+/* Zusatzaufgaben und wichtige Kommentare */
+.task-add-section{margin-bottom:1rem}
+.task-add-form{grid-template-columns:1.4fr .9fr .9fr .55fr}
+.task-add-form textarea{grid-column:1/-1;min-height:54px}
+.task-add-form .task-add-small{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;grid-column:1/-1}
+.custom-task{border-left-color:var(--gold)}
+.custom-task .task-priority{box-shadow:inset 0 0 0 1px #c49a2a55}
+.msg-actions{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.msg-pin,.msg-pin-btn{font-family:'JetBrains Mono',monospace;font-size:.54rem;letter-spacing:.06em;text-transform:uppercase}
+.msg-pin{color:var(--gold);border:1px solid var(--gold);padding:.1rem .25rem;border-radius:2px}
+.msg-pin-btn{background:transparent;border:1px solid #ffffff33;color:#fff9;padding:.2rem .35rem;border-radius:2px;cursor:pointer}
+.msg-pin-btn:hover{border-color:var(--gold);color:var(--gold)}
+.msg-item.pinned{background:#c49a2a18;border-left-color:var(--gold);box-shadow:inset 0 0 0 1px #c49a2a33}
+.comment-btn.has-pinned{opacity:1;color:var(--gold);background:#c49a2a18;border:1px solid #c49a2a55}
+@media(max-width:800px){.task-add-form{grid-template-columns:1fr}.task-add-form .task-add-small{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -941,6 +1083,22 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <button class="view-tab" data-view="decisions" onclick="APP.switchView('decisions')">Beschlüsse</button>
     <button class="view-tab" data-view="pins" onclick="APP.switchView('pins')">Pins</button>
   </nav>
+
+  <section class="hub-section task-add-section orga-view" data-view="tasks" id="taskAddSection">
+    <div class="hub-head"><div><p class="progress-title">Neue Aufgabe hinzufügen</p><p class="documents-subtitle">Für alles, was später auftaucht und nicht in der ursprünglichen Checkliste steht. Wichtige Kommentare kannst du zusätzlich direkt im Kommentarfenster als Aufgabe übernehmen.</p></div></div>
+    <div class="hub-form task-add-form">
+      <select id="newTaskPhase" onchange="refreshCustomTaskCategoryOptions()"></select>
+      <select id="newTaskCategory"></select>
+      <select id="newTaskPrio"><option value="prio-1">Kritisch</option><option value="prio-2" selected>Wichtig</option><option value="prio-3">Optional</option></select>
+      <input id="newTaskTag" type="text" maxlength="40" placeholder="Tag, z.B. Strom">
+      <textarea id="newTaskText" maxlength="220" placeholder="Neue Aufgabe, z.B. Prüfen, ob genug Kabeltrommeln vorhanden sind"></textarea>
+      <div class="task-add-small">
+        <input id="newTaskResponsible" type="text" maxlength="40" placeholder="Zuständig, optional">
+        <input id="newTaskDue" type="date">
+        <button class="send-btn doc-add-btn" onclick="APP.addCustomTask()">Aufgabe hinzufügen</button>
+      </div>
+    </div>
+  </section>
 
   <nav class="phase-nav task-phase-nav orga-view" data-view="tasks">
     <div class="pni" onclick="APP.scrollTo('phase1')"><span class="pm">Jul</span>Fundament</div>
