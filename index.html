@@ -117,8 +117,9 @@ function bindFirebase() {
 }
 
 function updateProgress(taskData) {
-  const all  = document.querySelectorAll(".task[data-key]").length;
-  const done = document.querySelectorAll(".task.done").length;
+  const visibleTasks = document.querySelectorAll(".task[data-key]:not(.task-deleted)");
+  const all  = visibleTasks.length;
+  const done = document.querySelectorAll(".task.done:not(.task-deleted)").length;
   const pct  = all ? Math.round(done/all*100) : 0;
   const fill = document.getElementById("progressFill");
   if (fill) fill.style.width = pct+"%";
@@ -134,6 +135,9 @@ function applyTaskState() {
   today.setHours(0,0,0,0);
   document.querySelectorAll(".task[data-key]").forEach(el => {
     const s = data[el.dataset.key] || {};
+    const isDeleted = s.deleted === true;
+    el.classList.toggle("task-deleted", isDeleted);
+    if (isDeleted) return;
     const status = validStatus(s.status || (s.done ? "done" : "open"));
     const isDone = !!s.done || status === "done";
     el.classList.toggle("done", isDone);
@@ -168,6 +172,7 @@ function updateCommentIndicators() {
   const comments = window._allComments || {};
   document.querySelectorAll(".task[data-key]").forEach(taskEl => {
     const key = taskEl.dataset.key;
+    if ((window._taskData || {})[key]?.deleted === true) return;
     const btn = taskEl.querySelector(".comment-btn");
     if (!btn) return;
     const count = Object.keys(comments[key] || {}).length;
@@ -360,12 +365,13 @@ function renderDashboard() {
   const stats = document.getElementById("dashboardStats");
   const pins = document.getElementById("dashboardPins");
   if (!stats || !pins) return;
-  const taskEls = [...document.querySelectorAll(".task[data-key]")];
+  const taskEls = [...document.querySelectorAll(".task[data-key]:not(.task-deleted)")];
   const total = taskEls.length;
   const done = taskEls.filter(el=>el.classList.contains("done")).length;
-  const blocked = Object.values(window._taskData || {}).filter(t=>validStatus(t.status)==="blocked").length;
+  const activeTaskValues = Object.values(window._taskData || {}).filter(t=>t && t.deleted !== true);
+  const blocked = activeTaskValues.filter(t=>validStatus(t.status)==="blocked").length;
   const today = new Date(); today.setHours(0,0,0,0);
-  const overdue = Object.values(window._taskData || {}).filter(t=>t.due && validStatus(t.status)!=="done" && new Date(t.due+"T12:00:00") < today).length;
+  const overdue = activeTaskValues.filter(t=>t.due && validStatus(t.status)!=="done" && new Date(t.due+"T12:00:00") < today).length;
   const budgetActual = Object.values(window._budget || {}).reduce((s,i)=>s+Number(i.actual||0),0);
   const shoppingOpen = Object.values(window._shopping || {}).filter(i=>!i.bought).length;
   stats.innerHTML = `
@@ -409,6 +415,20 @@ window.APP = {
     if (status === "done") Object.assign(patch,{done:true,by:currentUser,at:Date.now()});
     else Object.assign(patch,{done:false});
     update(ref(db,dbPath(`tasks/${key}`)), patch);
+  },
+
+  deleteTask(key, text) {
+    if (!currentUser) { pendingCb=()=>window.APP.deleteTask(key, text); window.APP.showName(); return; }
+    const label = String(text || "diese Aufgabe").slice(0,120);
+    if (!confirm(`Aufgabe wirklich aus der Planung löschen?\n\n${label}\n\nKommentare zu dieser Aufgabe werden ebenfalls entfernt.`)) return;
+    update(ref(db,dbPath(`tasks/${key}`)), {
+      deleted: true,
+      deletedBy: currentUser,
+      deletedAt: Date.now(),
+      done: false,
+      status: "open"
+    });
+    remove(ref(db,dbPath(`comments/${key}`)));
   },
 
   openComments(key,text) {
@@ -628,7 +648,10 @@ function buildUI() {
           <div class="task-check" onclick="APP.toggleTask('${key}')"></div>
           <span class="task-priority ${task.prio}">${prioLabel[task.prio]||""}</span>
           <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text)}</span>
-          <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Kommentare">💬</button>
+          <div class="task-actions">
+            <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Kommentare">💬</button>
+            <button class="task-delete" onclick='APP.deleteTask(${JSON.stringify(key)}, ${JSON.stringify(task.text)})' title="Aufgabe löschen">Löschen</button>
+          </div>
           <div class="task-controls">
             <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
             <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
@@ -719,10 +742,14 @@ header h1 span{color:var(--gold)}
 .prio-2{background:#c49a2a20;color:#7a5c10;border:1px solid #c49a2a44}
 .prio-3{background:#4a5c3a20;color:var(--moss);border:1px solid #4a5c3a44}
 .task-text{font-size:.9rem;line-height:1.45;cursor:pointer;grid-row:1}
-.comment-btn{background:none;border:none;cursor:pointer;font-size:.82rem;opacity:.4;padding:0 .2rem;line-height:1;align-self:start;grid-row:1;transition:opacity .15s,background .15s,color .15s;border-radius:2px;white-space:nowrap}
+.task-actions{grid-row:1;display:flex;align-items:center;gap:.25rem;white-space:nowrap}
+.comment-btn{background:none;border:none;cursor:pointer;font-size:.82rem;opacity:.4;padding:0 .2rem;line-height:1;align-self:start;transition:opacity .15s,background .15s,color .15s;border-radius:2px;white-space:nowrap}
 .comment-btn:hover{opacity:1}
 .comment-btn.has-comments{opacity:1;color:var(--ember);background:#8b3a0f14;border:1px solid #8b3a0f33;padding:2px 5px}
 .comment-count{font-family:'JetBrains Mono',monospace;font-size:.55rem;font-weight:700;margin-left:2px}
+.task-delete{font-family:'JetBrains Mono',monospace;font-size:.52rem;border:1px solid #8b3a0f55;background:transparent;color:var(--ember);padding:2px 5px;border-radius:2px;cursor:pointer;opacity:.55;text-transform:uppercase;letter-spacing:.04em}
+.task-delete:hover{opacity:1;background:#8b3a0f14}
+.task.task-deleted{display:none!important}
 .task-meta{grid-column:2/5;grid-row:2;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--moss);letter-spacing:.05em}
 .timeline-strip{position:relative;padding-left:2rem;margin:1.5rem 0}
 .timeline-strip::before{content:'';position:absolute;left:6px;top:6px;bottom:0;width:1px;background:var(--gold);opacity:.4}
@@ -830,7 +857,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 .task.status-blocked{border-left-color:var(--ember);background:#8b3a0f10}
 .task.status-overdue .task-meta{color:var(--ember)}
 @media(max-width:800px){.dashboard-stats{grid-template-columns:repeat(2,1fr)}.dashboard-pins{grid-template-columns:1fr}.hub-form.two-col,.hub-form.three-col,.task-controls{grid-template-columns:1fr}.mini-card{grid-template-columns:1fr}.stack-actions{align-items:flex-start}.hub-stats-inline{justify-content:flex-start}}
-@media print{.topbar,.sync-bar,.phase-nav,.doc-form,.hub-form,.input-row,.side-panel,.chat-panel,.modal-overlay,.comment-btn,.doc-delete,.send-btn,.task-controls,button{display:none!important}body{background:#fff;color:#000;font-size:12px}.container{max-width:none;padding:0}.hub-section,.documents-section,.progress-section{break-inside:avoid;border:1px solid #999;background:#fff;margin-bottom:1rem}.task,.doc-card,.mini-card,.dashboard-pin{break-inside:avoid;background:#fff;border-color:#999}.task-text{text-decoration:none!important;color:#000!important;opacity:1!important}a{color:#000;text-decoration:underline}.task-meta{font-size:10px;color:#333}.dashboard-stats{grid-template-columns:repeat(5,1fr)}}
+@media print{.topbar,.sync-bar,.phase-nav,.doc-form,.hub-form,.input-row,.side-panel,.chat-panel,.modal-overlay,.comment-btn,.task-delete,.doc-delete,.send-btn,.task-controls,button{display:none!important}body{background:#fff;color:#000;font-size:12px}.container{max-width:none;padding:0}.hub-section,.documents-section,.progress-section{break-inside:avoid;border:1px solid #999;background:#fff;margin-bottom:1rem}.task,.doc-card,.mini-card,.dashboard-pin{break-inside:avoid;background:#fff;border-color:#999}.task-text{text-decoration:none!important;color:#000!important;opacity:1!important}a{color:#000;text-decoration:underline}.task-meta{font-size:10px;color:#333}.dashboard-stats{grid-template-columns:repeat(5,1fr)}}
 
 
 /* Cleaner Orga-Hub layout */
