@@ -81,6 +81,8 @@ const normalizeDocLink = raw => {
 
 const COMMON_CATEGORIES = ["Toilette", "Essen", "Getränke", "Deko", "Technik", "Sicherheit", "Wettkampf", "Gelände", "Helfer", "Einkauf", "Budget", "Gästeliste", "Infrastruktur", "Musik", "Sonstiges"];
 const DOC_CATEGORIES = ["Gelände", "Toiletten", "Essen", "Getränke", "Budget", "Helfer", "Einkauf", "Gästeliste", "Angebot", "Lageplan", "Sonstiges"];
+const PIN_CATEGORIES = ["Info", "Deadline", "Warnung", "Fokus", "Offen", "Budget", "Einkauf", "Helfer", "Gelände", "Sonstiges"];
+const DECISION_CATEGORIES = ["Datum", "Gelände", "Toilette", "Essen", "Budget", "Programm", "Helfer", "Einkauf", "Technik", "Sonstiges"];
 const optionList = (items, selected) => items.map(v => `<option value="${esc(v)}" ${String(selected || "") === v ? "selected" : ""}>${esc(v)}</option>`).join("");
 
 const setSyncBar = (msg,cls) => {
@@ -274,10 +276,24 @@ function renderPins(data) {
   if (!list) return;
   const pins = Object.entries(data || {}).map(([key, value]) => ({key, ...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
   list.innerHTML = pins.length ? pins.map(p=>`<article class="mini-card pin-card">
-      <div><span class="doc-cat">${esc(p.category || "Info")}</span><h3>${esc(p.title || "Ohne Titel")}</h3><p>${esc(p.text || "")}</p><p class="doc-meta">${esc(p.by||"?")} · ${ts2str(p.ts)}</p></div>
+      <div>
+        <span class="doc-cat">${esc(p.category || "Info")}</span>
+        <h3>${esc(p.title || "Ohne Titel")}</h3>
+        <p>${esc(p.text || "")}</p>
+        <p class="doc-meta">${esc(p.by||"?")} · ${ts2str(p.ts)}${p.updatedAt ? ` · bearbeitet ${ts2str(p.updatedAt)}` : ""}</p>
+        <details class="edit-details">
+          <summary>Pin bearbeiten</summary>
+          <div class="inline-edit-grid">
+            <label>Titel <input type="text" maxlength="80" value="${esc(p.title || "")}" onchange='APP.updatePinField(${JSON.stringify(p.key)}, "title", this.value)'></label>
+            <label>Kategorie <select onchange='APP.updatePinField(${JSON.stringify(p.key)}, "category", this.value)'>${optionList(PIN_CATEGORIES, p.category || "Info")}</select></label>
+            <label class="span-all">Inhalt <textarea maxlength="500" onchange='APP.updatePinField(${JSON.stringify(p.key)}, "text", this.value)'>${esc(p.text || "")}</textarea></label>
+          </div>
+        </details>
+      </div>
       <button class="doc-delete" onclick='APP.deletePin(${JSON.stringify(p.key)})'>Löschen</button>
     </article>`).join("") : `<p class="empty-state doc-empty">Noch nichts angepinnt.</p>`;
 }
+
 
 function renderDecisions(data) {
   const list = document.getElementById("decisionsList");
@@ -285,10 +301,25 @@ function renderDecisions(data) {
   const items = Object.entries(data || {}).map(([key,value])=>({key,...value}))
     .sort((a,b)=>(b.pinned===true)-(a.pinned===true)||(b.ts||0)-(a.ts||0));
   list.innerHTML = items.length ? items.map(d=>`<article class="mini-card ${d.pinned ? "pinned" : ""}">
-      <div><div class="doc-topline"><span class="doc-cat">${esc(d.category||"Beschluss")}</span>${d.pinned?`<span class="doc-pin">Wichtig</span>`:""}</div><h3>${esc(d.title||"Ohne Titel")}</h3><p>${esc(d.text||"")}</p><p class="doc-meta">${esc(d.by||"?")} · ${ts2str(d.ts)}</p></div>
+      <div>
+        <div class="doc-topline"><span class="doc-cat">${esc(d.category||"Beschluss")}</span>${d.pinned?`<span class="doc-pin">Wichtig</span>`:""}</div>
+        <h3>${esc(d.title||"Ohne Titel")}</h3>
+        <p>${esc(d.text||"")}</p>
+        <p class="doc-meta">${esc(d.by||"?")} · ${ts2str(d.ts)}${d.updatedAt ? ` · bearbeitet ${ts2str(d.updatedAt)}` : ""}</p>
+        <details class="edit-details">
+          <summary>Beschluss bearbeiten</summary>
+          <div class="inline-edit-grid">
+            <label>Titel <input type="text" maxlength="100" value="${esc(d.title || "")}" onchange='APP.updateDecisionField(${JSON.stringify(d.key)}, "title", this.value)'></label>
+            <label>Kategorie <select onchange='APP.updateDecisionField(${JSON.stringify(d.key)}, "category", this.value)'>${optionList(DECISION_CATEGORIES, d.category || "Sonstiges")}</select></label>
+            <label class="tiny-check"><input type="checkbox" ${d.pinned ? "checked" : ""} onchange='APP.updateDecisionField(${JSON.stringify(d.key)}, "pinned", this.checked)'> wichtig / oben anheften</label>
+            <label class="span-all">Beschluss <textarea maxlength="800" onchange='APP.updateDecisionField(${JSON.stringify(d.key)}, "text", this.value)'>${esc(d.text || "")}</textarea></label>
+          </div>
+        </details>
+      </div>
       <button class="doc-delete" onclick='APP.deleteDecision(${JSON.stringify(d.key)})'>Löschen</button>
     </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Beschlüsse dokumentiert.</p>`;
 }
+
 
 function renderBudget(data) {
   const list = document.getElementById("budgetList");
@@ -355,10 +386,28 @@ function renderShopping(data) {
   const bought = items.filter(i=>i.bought).length;
   if (stats) stats.innerHTML = `<span>${bought} / ${items.length} gekauft</span>`;
   list.innerHTML = items.length ? items.map(i=>`<article class="mini-card ${i.bought?"done-card":""}">
-      <div><span class="doc-cat">${esc(i.category||"Sonstiges")}</span><h3>${esc(i.item||"Ohne Titel")}</h3><p>Menge: ${esc(i.qty||"?")} · Zuständig: ${esc(i.responsible||"?")}</p><p class="doc-note">${esc(i.note||"")}</p><p class="doc-meta">${esc(i.by||"?")} · ${ts2str(i.ts)}</p></div>
+      <div>
+        <span class="doc-cat">${esc(i.category||"Sonstiges")}</span>
+        <h3>${esc(i.item||"Ohne Titel")}</h3>
+        <p>Menge: ${esc(i.qty||"?")} · Zuständig: ${esc(i.responsible||"?")}</p>
+        <p class="doc-note">${esc(i.note||"")}</p>
+        <p class="doc-meta">${esc(i.by||"?")} · ${ts2str(i.ts)}${i.updatedAt ? ` · bearbeitet ${ts2str(i.updatedAt)}` : ""}</p>
+        <details class="edit-details">
+          <summary>Einkaufsposten bearbeiten</summary>
+          <div class="inline-edit-grid">
+            <label>Artikel <input type="text" maxlength="80" value="${esc(i.item || "")}" onchange='APP.updateShoppingField(${JSON.stringify(i.key)}, "item", this.value)'></label>
+            <label>Menge <input type="text" maxlength="60" value="${esc(i.qty || "")}" onchange='APP.updateShoppingField(${JSON.stringify(i.key)}, "qty", this.value)'></label>
+            <label>Kategorie <select onchange='APP.updateShoppingField(${JSON.stringify(i.key)}, "category", this.value)'>${optionList(COMMON_CATEGORIES, i.category || "Sonstiges")}</select></label>
+            <label>Zuständig <input type="text" maxlength="40" value="${esc(i.responsible || "")}" onchange='APP.updateShoppingField(${JSON.stringify(i.key)}, "responsible", this.value)'></label>
+            <label class="tiny-check"><input type="checkbox" ${i.bought?"checked":""} onchange='APP.updateShoppingField(${JSON.stringify(i.key)}, "bought", this.checked)'> gekauft</label>
+            <label class="span-all">Notiz <textarea maxlength="300" onchange='APP.updateShoppingField(${JSON.stringify(i.key)}, "note", this.value)'>${esc(i.note||"")}</textarea></label>
+          </div>
+        </details>
+      </div>
       <div class="stack-actions"><label class="tiny-check"><input type="checkbox" ${i.bought?"checked":""} onchange='APP.toggleShoppingBought(${JSON.stringify(i.key)}, this.checked)'> gekauft</label><button class="doc-delete" onclick='APP.deleteShopping(${JSON.stringify(i.key)})'>Löschen</button></div>
     </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Einkaufsposten eingetragen.</p>`;
 }
+
 
 function renderHelpers(data) {
   const list = document.getElementById("helpersList");
@@ -737,6 +786,17 @@ window.APP = {
     push(ref(db,dbPath("pins")), {title:title.slice(0,80), text:text.slice(0,500), category:category.slice(0,40), by:currentUser, ts:Date.now()});
     document.getElementById("pinTitle").value = ""; document.getElementById("pinText").value = "";
   },
+  updatePinField(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updatePinField(key, field, value); window.APP.showName(); return; }
+    if (!["title","text","category"].includes(field)) return;
+    const patch = {updatedBy: currentUser, updatedAt: Date.now()};
+    const limits = {title:80, text:500, category:40};
+    patch[field] = String(value || "").trim().slice(0, limits[field] || 80);
+    if (field === "title" && !patch[field]) { alert("Pin-Titel darf nicht leer sein."); renderPins(window._pins); return; }
+    if (field === "text" && !patch[field]) { alert("Pin-Inhalt darf nicht leer sein."); renderPins(window._pins); return; }
+    if (field === "category" && !patch[field]) patch[field] = "Info";
+    update(ref(db,dbPath(`pins/${key}`)), patch).catch(err=>alert("Pin konnte nicht gespeichert werden: "+err.message));
+  },
   deletePin(key) { if(confirm("Pin löschen?")) remove(ref(db,dbPath(`pins/${key}`))); },
 
   addDecision() {
@@ -746,6 +806,20 @@ window.APP = {
     if (!title || !text) { alert("Beschluss mit Titel und Inhalt eintragen."); return; }
     push(ref(db,dbPath("decisions")), {title:title.slice(0,100), text:text.slice(0,800), category:document.getElementById("decisionCategory").value.trim() || "Beschluss", pinned:document.getElementById("decisionPinned").checked, by:currentUser, ts:Date.now()});
     document.getElementById("decisionTitle").value = ""; document.getElementById("decisionText").value = ""; document.getElementById("decisionPinned").checked = false;
+  },
+  updateDecisionField(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateDecisionField(key, field, value); window.APP.showName(); return; }
+    if (!["title","text","category","pinned"].includes(field)) return;
+    const patch = {updatedBy: currentUser, updatedAt: Date.now()};
+    if (field === "pinned") patch[field] = !!value;
+    else {
+      const limits = {title:100, text:800, category:40};
+      patch[field] = String(value || "").trim().slice(0, limits[field] || 100);
+      if (field === "title" && !patch[field]) { alert("Beschluss-Titel darf nicht leer sein."); renderDecisions(window._decisions); return; }
+      if (field === "text" && !patch[field]) { alert("Beschluss-Text darf nicht leer sein."); renderDecisions(window._decisions); return; }
+      if (field === "category" && !patch[field]) patch[field] = "Sonstiges";
+    }
+    update(ref(db,dbPath(`decisions/${key}`)), patch).catch(err=>alert("Beschluss konnte nicht gespeichert werden: "+err.message));
   },
   deleteDecision(key) { if(confirm("Beschluss löschen?")) remove(ref(db,dbPath(`decisions/${key}`))); },
 
@@ -810,7 +884,23 @@ window.APP = {
     push(ref(db,dbPath("shopping")), {item:item.slice(0,80), qty:document.getElementById("shoppingQty").value.trim().slice(0,60), category:document.getElementById("shoppingCategory").value.trim() || "Sonstiges", responsible:document.getElementById("shoppingResponsible").value.trim().slice(0,40), note:document.getElementById("shoppingNote").value.trim().slice(0,300), bought:false, by:currentUser, ts:Date.now()});
     ["shoppingItem","shoppingQty","shoppingResponsible","shoppingNote"].forEach(id=>document.getElementById(id).value="");
   },
-  toggleShoppingBought(key, checked) { update(ref(db,dbPath(`shopping/${key}`)), {bought:!!checked, boughtBy: checked ? currentUser : null, boughtAt: checked ? Date.now() : null}); },
+  updateShoppingField(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateShoppingField(key, field, value); window.APP.showName(); return; }
+    if (!["item","qty","category","responsible","note","bought"].includes(field)) return;
+    const patch = {updatedBy: currentUser, updatedAt: Date.now()};
+    if (field === "bought") {
+      patch.bought = !!value;
+      patch.boughtBy = value ? currentUser : null;
+      patch.boughtAt = value ? Date.now() : null;
+    } else {
+      const limits = {item:80, qty:60, category:40, responsible:40, note:300};
+      patch[field] = String(value || "").trim().slice(0, limits[field] || 80);
+      if (field === "item" && !patch[field]) { alert("Artikel darf nicht leer sein."); renderShopping(window._shopping); return; }
+      if (field === "category" && !patch[field]) patch[field] = "Sonstiges";
+    }
+    update(ref(db,dbPath(`shopping/${key}`)), patch).catch(err=>alert("Einkaufsposten konnte nicht gespeichert werden: "+err.message));
+  },
+  toggleShoppingBought(key, checked) { update(ref(db,dbPath(`shopping/${key}`)), {bought:!!checked, boughtBy: checked ? currentUser : null, boughtAt: checked ? Date.now() : null, updatedBy: currentUser || "?", updatedAt: Date.now()}); },
   deleteShopping(key) { if(confirm("Einkaufsposten löschen?")) remove(ref(db,dbPath(`shopping/${key}`))); },
 
   addHelper() {
