@@ -262,6 +262,7 @@ function renderDocuments(data) {
           </div>
           <div class="doc-actions">
             ${href ? `<a class="doc-open" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Öffnen</a>` : `<span class="doc-badlink">Link ungültig</span>`}
+            <button class="doc-open" onclick='APP.copyDocumentToShopping(${JSON.stringify(d.key)})'>In Einkauf übernehmen</button>
             <button class="doc-delete" onclick='APP.deleteDocument(${JSON.stringify(d.key)})'>Löschen</button>
           </div>
         </article>`;
@@ -692,6 +693,39 @@ window.APP = {
     }
     update(ref(db,dbPath(`documents/${key}`)), patch);
   },
+  copyDocumentToShopping(key) {
+    if (!currentUser) { pendingCb=()=>window.APP.copyDocumentToShopping(key); window.APP.showName(); return; }
+    const doc = (window._documents || {})[key];
+    if (!doc) return;
+    const categoryMap = {
+      "Toiletten": "Toilette",
+      "Angebot": "Einkauf",
+      "Lageplan": "Gelände",
+      "Budget": "Budget",
+      "Gästeliste": "Gästeliste",
+      "Helfer": "Helfer",
+      "Essen": "Essen",
+      "Getränke": "Getränke",
+      "Gelände": "Gelände",
+      "Einkauf": "Einkauf"
+    };
+    const link = normalizeDocLink(doc.link);
+    const noteParts = ["Aus Dokument übernommen"];
+    if (link) noteParts.push(`Link: ${link}`);
+    if (doc.note) noteParts.push(doc.note);
+    push(ref(db,dbPath("shopping")), {
+      item:String(doc.title || "Dokument").slice(0,80),
+      qty:"",
+      category:categoryMap[doc.category] || doc.category || "Sonstiges",
+      responsible:"",
+      note:noteParts.join(" · ").slice(0,300),
+      bought:false,
+      by:currentUser,
+      ts:Date.now()
+    });
+    alert("Dokument wurde als Einkaufsposten übernommen.");
+  },
+
   deleteDocument(key) { if (!currentUser) { pendingCb=()=>window.APP.deleteDocument(key); window.APP.showName(); return; } if(confirm("Dokument wirklich aus der Liste löschen? Die verlinkte Datei selbst wird dadurch nicht gelöscht.")) remove(ref(db,dbPath(`documents/${key}`))); },
 
   addPin() {
