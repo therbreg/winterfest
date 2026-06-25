@@ -435,15 +435,18 @@ function renderTaskItem(ul, key, task, prioLabel, isCustom = false) {
       <button class="comment-btn" onclick='APP.openComments(${JSON.stringify(key)}, ${JSON.stringify(task.text || "Ohne Titel")})' title="Kommentare">💬</button>
       <button class="task-delete" onclick='APP.deleteTask(${JSON.stringify(key)}, ${JSON.stringify(task.text || "Ohne Titel")})' title="Aufgabe löschen">Löschen</button>
     </div>
-    <div class="task-controls">
-      <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
-      <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
-      <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
-        <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
-      </select></label>
-      <label>Tag <input class="task-tag" type="text" maxlength="40" placeholder="z.B. Strom" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "tag", this.value)'></label>
-    </div>
-    <div class="task-meta"></div>`;
+    <details class="task-details">
+      <summary>Details bearbeiten</summary>
+      <div class="task-controls">
+        <label>Wer <input class="task-assignee" type="text" maxlength="40" placeholder="Name" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "responsible", this.value)'></label>
+        <label>Bis <input class="task-due" type="date" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "due", this.value)'></label>
+        <label>Status <select class="task-status" onchange='APP.updateTaskStatus(${JSON.stringify(key)}, this.value)'>
+          <option value="open">Offen</option><option value="progress">In Arbeit</option><option value="blocked">Blockiert</option><option value="done">Erledigt</option>
+        </select></label>
+        <label>Tag <input class="task-tag" type="text" maxlength="40" placeholder="z.B. Strom" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "tag", this.value)'></label>
+      </div>
+      <div class="task-meta"></div>
+    </details>`;
   ul.appendChild(li);
 }
 
@@ -511,23 +514,61 @@ window.APP = {
 
   addCustomTask() {
     if (!currentUser) { pendingCb=window.APP.addCustomTask; window.APP.showName(); return; }
+
     const textEl = document.getElementById("newTaskText");
-    const text = textEl.value.trim();
-    if (!text) { alert("Bitte eine Aufgabenbeschreibung eintragen."); textEl.focus(); return; }
-    const phaseId = document.getElementById("newTaskPhase").value || "phase1";
-    const categoryIndex = Number(document.getElementById("newTaskCategory").value || 0);
-    const prio = document.getElementById("newTaskPrio").value || "prio-2";
-    const tag = document.getElementById("newTaskTag").value.trim().slice(0,40);
-    const responsible = document.getElementById("newTaskResponsible").value.trim().slice(0,40);
-    const due = document.getElementById("newTaskDue").value || "";
-    const newRef = push(ref(db,dbPath("customTasks")), {
-      text:text.slice(0,220), phaseId, categoryIndex, prio, tag, by:currentUser, ts:Date.now()
-    });
-    const taskDbKey = `custom_${newRef.key}`;
-    update(ref(db,dbPath(`tasks/${taskDbKey}`)), {
-      done:false, status:"open", responsible, due, tag, by:currentUser, at:Date.now()
-    });
-    ["newTaskText","newTaskTag","newTaskResponsible","newTaskDue"].forEach(id => { const el=document.getElementById(id); if (el) el.value=""; });
+    const phaseEl = document.getElementById("newTaskPhase");
+    const catEl = document.getElementById("newTaskCategory");
+
+    if (!phaseEl?.options?.length) populateCustomTaskForm();
+    if (phaseEl && catEl && !catEl.options.length) refreshCustomTaskCategoryOptions();
+
+    const text = (textEl?.value || "").trim();
+    if (!text) { alert("Bitte eine Aufgabenbeschreibung eintragen."); textEl?.focus(); return; }
+
+    const phaseId = phaseEl?.value || PHASES_DATA?.[0]?.id || "phase1";
+    const phase = PHASES_DATA.find(p => p.id === phaseId) || PHASES_DATA[0];
+    let categoryIndex = Number(catEl?.value || 0);
+    if (!Number.isFinite(categoryIndex) || categoryIndex < 0 || categoryIndex >= (phase.categories || []).length) categoryIndex = 0;
+
+    const prio = document.getElementById("newTaskPrio")?.value || "prio-2";
+    const tag = (document.getElementById("newTaskTag")?.value || "").trim().slice(0,40);
+    const responsible = (document.getElementById("newTaskResponsible")?.value || "").trim().slice(0,40);
+    const due = document.getElementById("newTaskDue")?.value || "";
+    const now = Date.now();
+    const newRef = push(ref(db,dbPath("customTasks")));
+    const customId = newRef.key;
+    const taskDbKey = `custom_${customId}`;
+
+    const patch = {};
+    patch[`customTasks/${customId}`] = {
+      text:text.slice(0,220),
+      phaseId,
+      categoryIndex,
+      prio,
+      tag,
+      by:currentUser,
+      ts:now
+    };
+    patch[`tasks/${taskDbKey}`] = {
+      done:false,
+      status:"open",
+      responsible,
+      due,
+      tag,
+      by:currentUser,
+      at:now
+    };
+
+    update(ref(db,dbPath("")), patch)
+      .then(() => {
+        ["newTaskText","newTaskTag","newTaskResponsible","newTaskDue"].forEach(id => { const el=document.getElementById(id); if (el) el.value=""; });
+        setSyncBar("● Aufgabe hinzugefügt","ok");
+      })
+      .catch(err => {
+        console.error(err);
+        setSyncBar("✕ Aufgabe konnte nicht gespeichert werden: "+err.message,"err");
+        alert("Aufgabe konnte nicht gespeichert werden. Wahrscheinlich blockieren die Firebase Rules oder die Verbindung ist weg.");
+      });
   },
 
   openComments(key,text) {
@@ -807,6 +848,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("chatInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendChat();} });
   if (currentUser) document.getElementById("userLabel").textContent=currentUser;
   else window.APP.showName();
+  populateCustomTaskForm();
   buildUI();
   window.APP.switchView(localStorage.getItem("wf_view") || "overview", false);
   setSyncBar("⟳ Verbinde mit Firebase…");
@@ -1030,6 +1072,19 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 .msg-item.pinned{background:#c49a2a18;border-left-color:var(--gold);box-shadow:inset 0 0 0 1px #c49a2a33}
 .comment-btn.has-pinned{opacity:1;color:var(--gold);background:#c49a2a18;border:1px solid #c49a2a55}
 @media(max-width:800px){.task-add-form{grid-template-columns:1fr}.task-add-form .task-add-small{grid-template-columns:1fr}}
+
+
+/* Task detail visibility toggle */
+.task{grid-template-rows:auto auto}
+.task-details{grid-column:2/5;grid-row:2;margin-top:.25rem;border-top:1px solid rgba(196,154,42,.25);padding-top:.35rem}
+.task-details summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.56rem;color:var(--ember);text-transform:uppercase;letter-spacing:.06em;user-select:none;width:max-content}
+.task-details summary:hover{color:var(--gold)}
+.task-details:not([open]){border-top:0;padding-top:0}
+.task-details:not([open]) .task-controls,.task-details:not([open]) .task-meta{display:none}
+.task-details .task-controls{grid-column:auto;grid-row:auto;display:grid;grid-template-columns:1fr 150px 150px 1fr;gap:.4rem;margin-top:.45rem}
+.task-details .task-meta{grid-column:auto;grid-row:auto;margin-top:.35rem}
+@media(max-width:800px){.task-details .task-controls{grid-template-columns:1fr}}
+@media print{.task-details{display:none!important}}
 
 </style>
 </head>
