@@ -363,12 +363,33 @@ function renderHelpers(data) {
   const list = document.getElementById("helpersList");
   const stats = document.getElementById("helpersStats");
   if (!list) return;
+  const helperCategories = ["Aufbau", "Küche", "Wettkampf", "Getränke", "Sicherheit", "Abbau", "Fahrer", "Sonstiges"];
   const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(a.done===true)-(b.done===true)||(a.time||"").localeCompare(b.time||""));
   const done = items.filter(i=>i.done).length;
   if (stats) stats.innerHTML = `<span>${done} / ${items.length} Rollen geklärt</span>`;
   list.innerHTML = items.length ? items.map(i=>`<article class="mini-card ${i.done?"done-card":""}">
-      <div><span class="doc-cat">${esc(i.category||"Helfer")}</span><h3>${esc(i.role||"Ohne Rolle")}</h3><p>${esc(i.person||"Noch offen")} ${i.time ? `· ${esc(i.time)}` : ""}</p><p class="doc-note">${esc(i.note||"")}</p><p class="doc-meta">${esc(i.by||"?")} · ${ts2str(i.ts)}</p></div>
-      <div class="stack-actions"><label class="tiny-check"><input type="checkbox" ${i.done?"checked":""} onchange='APP.toggleHelperDone(${JSON.stringify(i.key)}, this.checked)'> geklärt</label><button class="doc-delete" onclick='APP.deleteHelper(${JSON.stringify(i.key)})'>Löschen</button></div>
+      <div>
+        <span class="doc-cat">${esc(i.category||"Helfer")}</span>
+        <h3>${esc(i.role||"Ohne Rolle")}</h3>
+        <p>${esc(i.person||"Noch offen")} ${i.time ? `· ${esc(i.time)}` : ""}</p>
+        <p class="doc-note">${esc(i.note||"")}</p>
+        <p class="doc-meta">${esc(i.by||"?")} · ${ts2str(i.ts)}${i.updatedAt ? ` · bearbeitet ${ts2str(i.updatedAt)}` : ""}</p>
+        <details class="edit-details">
+          <summary>Helferrolle bearbeiten</summary>
+          <div class="inline-edit-grid">
+            <label>Rolle <input type="text" maxlength="80" value="${esc(i.role || "")}" onchange='APP.updateHelperField(${JSON.stringify(i.key)}, "role", this.value)'></label>
+            <label>Person <input type="text" maxlength="40" value="${esc(i.person || "")}" onchange='APP.updateHelperField(${JSON.stringify(i.key)}, "person", this.value)'></label>
+            <label>Kategorie <select onchange='APP.updateHelperField(${JSON.stringify(i.key)}, "category", this.value)'>${optionList(helperCategories, i.category || "Sonstiges")}</select></label>
+            <label>Zeit <input type="text" maxlength="80" value="${esc(i.time || "")}" onchange='APP.updateHelperField(${JSON.stringify(i.key)}, "time", this.value)'></label>
+            <label class="tiny-check"><input type="checkbox" ${i.done?"checked":""} onchange='APP.updateHelperField(${JSON.stringify(i.key)}, "done", this.checked)'> geklärt</label>
+            <label class="span-all">Notiz <textarea maxlength="300" onchange='APP.updateHelperField(${JSON.stringify(i.key)}, "note", this.value)'>${esc(i.note||"")}</textarea></label>
+          </div>
+        </details>
+      </div>
+      <div class="stack-actions">
+        <label class="tiny-check"><input type="checkbox" ${i.done?"checked":""} onchange='APP.toggleHelperDone(${JSON.stringify(i.key)}, this.checked)'> geklärt</label>
+        <button class="doc-delete" onclick='APP.deleteHelper(${JSON.stringify(i.key)})'>Löschen</button>
+      </div>
     </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Helferrollen eingetragen.</p>`;
 }
 
@@ -765,7 +786,20 @@ window.APP = {
     push(ref(db,dbPath("helpers")), {role:role.slice(0,80), person:document.getElementById("helperPerson").value.trim().slice(0,40), category:document.getElementById("helperCategory").value.trim() || "Helfer", time:document.getElementById("helperTime").value.trim().slice(0,80), note:document.getElementById("helperNote").value.trim().slice(0,300), done:false, by:currentUser, ts:Date.now()});
     ["helperRole","helperPerson","helperTime","helperNote"].forEach(id=>document.getElementById(id).value="");
   },
-  toggleHelperDone(key, checked) { update(ref(db,dbPath(`helpers/${key}`)), {done:!!checked}); },
+  updateHelperField(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateHelperField(key, field, value); window.APP.showName(); return; }
+    if (!["role","person","category","time","note","done"].includes(field)) return;
+    const patch = {updatedBy: currentUser, updatedAt: Date.now()};
+    if (field === "done") patch[field] = !!value;
+    else {
+      const limits = {role:80, person:40, category:40, time:80, note:300};
+      patch[field] = String(value || "").trim().slice(0, limits[field] || 80);
+      if (field === "role" && !patch[field]) { alert("Rolle darf nicht leer sein."); renderHelpers(window._helpers); return; }
+      if (field === "category" && !patch[field]) patch[field] = "Sonstiges";
+    }
+    update(ref(db,dbPath(`helpers/${key}`)), patch).catch(err=>alert("Helferrolle konnte nicht gespeichert werden: "+err.message));
+  },
+  toggleHelperDone(key, checked) { update(ref(db,dbPath(`helpers/${key}`)), {done:!!checked, updatedBy:currentUser || "?", updatedAt:Date.now()}); },
   deleteHelper(key) { if(confirm("Helferrolle löschen?")) remove(ref(db,dbPath(`helpers/${key}`))); },
 
   switchView(view, persist = true) {
