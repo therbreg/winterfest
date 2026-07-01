@@ -1509,6 +1509,38 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 .task-controls{grid-column:auto!important}
 .task-meta{grid-column:auto!important}
 @media(max-width:600px){.task{grid-template-columns:18px 20px 1fr auto!important}.task-priority{grid-column:3/4}.task-text{grid-column:3/5}.task-actions{grid-column:4/5}.task-details{grid-column:1/5!important}}
+
+
+/* Fix: Aufgabenlayout nach Drag-and-Drop. Priorität darf den Aufgabentext nicht überlagern. */
+.task{
+  grid-template-columns:18px 20px max-content minmax(0,1fr) auto!important;
+  grid-template-rows:auto auto!important;
+  align-items:start;
+}
+.task-drag{grid-column:1;grid-row:1}
+.task-check{grid-column:2;grid-row:1}
+.task-priority{grid-column:3;grid-row:1;justify-self:start;max-width:100%}
+.task-text{grid-column:4;grid-row:1;min-width:0;overflow-wrap:anywhere;word-break:normal}
+.task-actions{grid-column:5;grid-row:1;justify-self:end;min-width:max-content}
+.task-details{grid-column:1/6!important;grid-row:2!important}
+.done-task-category{grid-column:1/6!important;grid-row:2;font-family:'JetBrains Mono',monospace;font-size:.56rem;color:var(--ash);letter-spacing:.08em;text-transform:uppercase;margin-top:.2rem}
+.done-task-rendered .task-details{grid-row:3!important}
+
+@media(max-width:600px){
+  .task{
+    grid-template-columns:18px 20px minmax(0,1fr) auto!important;
+    grid-template-rows:auto auto auto!important;
+  }
+  .task-drag{grid-column:1;grid-row:1}
+  .task-check{grid-column:2;grid-row:1}
+  .task-priority{grid-column:3;grid-row:1;justify-self:start}
+  .task-actions{grid-column:4;grid-row:1;justify-self:end}
+  .task-text{grid-column:1/5!important;grid-row:2!important;padding-top:.25rem}
+  .task-details{grid-column:1/5!important;grid-row:3!important}
+  .done-task-category{grid-column:1/5!important;grid-row:3!important}
+  .done-task-rendered .task-details{grid-row:4!important}
+}
+
 </style>
 </head>
 <body>
