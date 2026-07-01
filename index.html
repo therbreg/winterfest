@@ -51,6 +51,7 @@ window._budget = {};
 window._shopping = {};
 window._helpers = {};
 window._customTasks = {};
+window._tentLeads = {};
 
 const esc = s => String(s ?? "")
   .replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -83,6 +84,9 @@ const COMMON_CATEGORIES = ["Toilette", "Essen", "Getränke", "Deko", "Technik", 
 const DOC_CATEGORIES = ["Gelände", "Toiletten", "Essen", "Getränke", "Budget", "Helfer", "Einkauf", "Gästeliste", "Angebot", "Lageplan", "Sonstiges"];
 const PIN_CATEGORIES = ["Info", "Deadline", "Warnung", "Fokus", "Offen", "Budget", "Einkauf", "Helfer", "Gelände", "Sonstiges"];
 const DECISION_CATEGORIES = ["Datum", "Gelände", "Toilette", "Essen", "Budget", "Programm", "Helfer", "Einkauf", "Technik", "Sonstiges"];
+const TENT_TYPES = ["Verein", "Zeltverleih", "LARP-Gruppe", "Mittelaltergruppe", "Privatkontakt", "Shop", "Sonstiges"];
+const TENT_STATUS = ["Idee", "Angefragt", "Nachfassen", "Zusage", "Absage", "Gebucht", "Unklar"];
+const TENT_STATUS_ORDER = {"Gebucht":0,"Zusage":1,"Nachfassen":2,"Angefragt":3,"Idee":4,"Unklar":5,"Absage":6};
 const optionList = (items, selected) => items.map(v => `<option value="${esc(v)}" ${String(selected || "") === v ? "selected" : ""}>${esc(v)}</option>`).join("");
 
 const setSyncBar = (msg,cls) => {
@@ -99,7 +103,7 @@ function bindValue(path, cb) {
 function bindFirebase() {
   bindValue("tasks", data => {
     window._taskData = data;
-    applyTaskState();
+    buildUI();
     updateProgress(data);
     renderDashboard();
     setSyncBar("● Verbunden","ok");
@@ -117,6 +121,7 @@ function bindFirebase() {
   bindValue("budget", data => { window._budget = data; renderBudget(data); renderDashboard(); });
   bindValue("shopping", data => { window._shopping = data; renderShopping(data); renderDashboard(); });
   bindValue("helpers", data => { window._helpers = data; renderHelpers(data); renderDashboard(); });
+  bindValue("tentLeads", data => { window._tentLeads = data; renderTentLeads(data); renderDashboard(); });
   bindValue("customTasks", data => { window._customTasks = data; buildUI(); updateProgress(window._taskData); renderDashboard(); });
 }
 
@@ -443,6 +448,53 @@ function renderHelpers(data) {
     </article>`).join("") : `<p class="empty-state doc-empty">Noch keine Helferrollen eingetragen.</p>`;
 }
 
+function renderTentLeads(data) {
+  const list = document.getElementById("tentLeadsList");
+  const stats = document.getElementById("tentLeadsStats");
+  if (!list) return;
+  const items = Object.entries(data || {}).map(([key,value])=>({key,...value}))
+    .sort((a,b)=>(b.pinned===true)-(a.pinned===true) || (TENT_STATUS_ORDER[a.status] ?? 99) - (TENT_STATUS_ORDER[b.status] ?? 99) || String(a.followUp || "9999-12-31").localeCompare(String(b.followUp || "9999-12-31")) || (b.ts || 0)-(a.ts || 0));
+  const statusCounts = items.reduce((acc,i)=>{ const s=i.status||"Unklar"; acc[s]=(acc[s]||0)+1; return acc; },{});
+  if (stats) stats.innerHTML = `
+    <span>${items.length} Optionen</span>
+    <span>${statusCounts["Angefragt"] || 0} angefragt</span>
+    <span>${statusCounts["Nachfassen"] || 0} nachfassen</span>
+    <span>${(statusCounts["Zusage"] || 0) + (statusCounts["Gebucht"] || 0)} positiv</span>
+    <span>${statusCounts["Absage"] || 0} Absagen</span>`;
+  list.innerHTML = items.length ? items.map(i=>{
+    const href = normalizeDocLink(i.link);
+    const price = Number(i.price || 0);
+    return `<article class="mini-card tent-card ${i.pinned ? "pinned" : ""} status-${esc(String(i.status || "unklar").toLowerCase())}">
+      <div>
+        <div class="doc-topline"><span class="doc-cat">${esc(i.status || "Idee")}</span><span class="doc-cat muted-cat">${esc(i.type || "Sonstiges")}</span>${i.pinned ? `<span class="doc-pin">Wichtig</span>` : ""}</div>
+        <h3>${esc(i.name || "Ohne Namen")}</h3>
+        <p>${i.contact ? `Kontakt: ${esc(i.contact)} · ` : ""}${price ? `Preis: ${fmtMoney(price)} · ` : ""}${i.followUp ? `Nachfassen: ${dateStr(i.followUp)}` : "kein Nachfassdatum"}</p>
+        ${i.note ? `<p class="doc-note">${esc(i.note)}</p>` : ""}
+        <p class="doc-meta">${esc(i.by||"?")} · ${ts2str(i.ts)}${i.updatedAt ? ` · bearbeitet ${ts2str(i.updatedAt)}` : ""}</p>
+        <details class="edit-details">
+          <summary>Eintrag bearbeiten</summary>
+          <div class="inline-edit-grid">
+            <label>Name / Anbieter <input type="text" maxlength="100" value="${esc(i.name || "")}" onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "name", this.value)'></label>
+            <label>Typ <select onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "type", this.value)'>${optionList(TENT_TYPES, i.type || "Sonstiges")}</select></label>
+            <label>Status <select onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "status", this.value)'>${optionList(TENT_STATUS, i.status || "Idee")}</select></label>
+            <label>Preis grob € <input type="number" min="0" step="0.01" value="${price || ""}" onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "price", this.value)'></label>
+            <label>Nachfassen <input type="date" value="${esc(i.followUp || "")}" onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "followUp", this.value)'></label>
+            <label>Kontakt <input type="text" maxlength="120" value="${esc(i.contact || "")}" onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "contact", this.value)'></label>
+            <label class="span-all">Link <input type="url" maxlength="1000" value="${esc(i.link || "")}" onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "link", this.value)'></label>
+            <label class="span-all">Notiz <textarea maxlength="500" onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "note", this.value)'>${esc(i.note || "")}</textarea></label>
+            <label class="tiny-check"><input type="checkbox" ${i.pinned ? "checked" : ""} onchange='APP.updateTentLeadField(${JSON.stringify(i.key)}, "pinned", this.checked)'> wichtig / oben anheften</label>
+          </div>
+        </details>
+      </div>
+      <div class="stack-actions">
+        ${href ? `<a class="doc-open" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Öffnen</a>` : ""}
+        <button class="doc-open" onclick='APP.copyTentLeadToTask(${JSON.stringify(i.key)})'>Als Aufgabe</button>
+        <button class="doc-delete" onclick='APP.deleteTentLead(${JSON.stringify(i.key)})'>Löschen</button>
+      </div>
+    </article>`;
+  }).join("") : `<p class="empty-state doc-empty">Noch keine Zelt-/Verleihoptionen eingetragen.</p>`;
+}
+
 function renderDashboard() {
   const stats = document.getElementById("dashboardStats");
   const pins = document.getElementById("dashboardPins");
@@ -456,12 +508,14 @@ function renderDashboard() {
   const overdue = activeTaskValues.filter(t=>t.due && validStatus(t.status)!=="done" && new Date(t.due+"T12:00:00") < today).length;
   const budgetActual = Object.values(window._budget || {}).reduce((s,i)=>s+Number(i.actual||0),0);
   const shoppingOpen = Object.values(window._shopping || {}).filter(i=>!i.bought).length;
+  const tentActive = Object.values(window._tentLeads || {}).filter(i=>!["Absage","Gebucht"].includes(i.status)).length;
   stats.innerHTML = `
     <div class="dash-stat"><strong>${done}/${total}</strong><span>Aufgaben erledigt</span></div>
     <div class="dash-stat"><strong>${blocked}</strong><span>blockiert</span></div>
     <div class="dash-stat"><strong>${overdue}</strong><span>überfällig</span></div>
     <div class="dash-stat"><strong>${fmtMoney(budgetActual)}</strong><span>tatsächliche Kosten</span></div>
-    <div class="dash-stat"><strong>${shoppingOpen}</strong><span>Einkäufe offen</span></div>`;
+    <div class="dash-stat"><strong>${shoppingOpen}</strong><span>Einkäufe offen</span></div>
+    <div class="dash-stat"><strong>${tentActive}</strong><span>Zeltoptionen offen</span></div>`;
 
   const pinItems = Object.entries(window._pins || {}).map(([key,value])=>({type:"Pin",key,...value}));
   const docItems = Object.entries(window._documents || {}).filter(([,v])=>v.pinned).map(([key,value])=>({type:"Dokument",key,...value}));
@@ -472,6 +526,66 @@ function renderDashboard() {
       <h3>${esc(p.title || "Ohne Titel")}</h3>
       <p>${esc(p.text || p.note || p.category || "")}</p>
     </article>`).join("") : `<p class="empty-state doc-empty">Keine angepinnten Informationen. Trage oben Pins, wichtige Dokumente oder wichtige Beschlüsse ein.</p>`;
+}
+
+
+function isTaskDeleted(key) {
+  return (window._taskData || {})[key]?.deleted === true;
+}
+
+function isTaskDone(key) {
+  const s = (window._taskData || {})[key] || {};
+  return !!s.done || validStatus(s.status) === "done";
+}
+
+function getTaskOrder(key, fallback = 9999) {
+  const raw = (window._taskData || {})[key]?.order;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function phaseDoneCollapsed(phaseId) {
+  return localStorage.getItem(`wf_done_collapsed_${phaseId}`) !== "false";
+}
+
+function saveOrderForList(ul) {
+  if (!ul || !currentUser) return;
+  const patch = {};
+  const now = Date.now();
+  Array.from(ul.querySelectorAll(".task[data-key]:not(.task-deleted)")).forEach((el, index) => {
+    patch[`tasks/${el.dataset.key}/order`] = index + 1;
+    patch[`tasks/${el.dataset.key}/updatedBy`] = currentUser;
+    patch[`tasks/${el.dataset.key}/updatedAt`] = now;
+  });
+  if (!Object.keys(patch).length) return;
+  update(ref(db,dbPath("")), patch).catch(err=>alert("Reihenfolge konnte nicht gespeichert werden: "+err.message));
+}
+
+function getDragAfterElement(container, y) {
+  const els = [...container.querySelectorAll('.task.draggable-task:not(.dragging):not(.task-deleted)')];
+  return els.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) return {offset, element: child};
+    return closest;
+  }, {offset: Number.NEGATIVE_INFINITY, element: null}).element;
+}
+
+function wireDragList(ul) {
+  if (!ul) return;
+  ul.addEventListener("dragover", e => {
+    e.preventDefault();
+    const dragging = document.querySelector(".task.dragging");
+    if (!dragging) return;
+    if (dragging.closest("ul.tasks") !== ul) return;
+    const after = getDragAfterElement(ul, e.clientY);
+    if (after == null) ul.appendChild(dragging);
+    else ul.insertBefore(dragging, after);
+  });
+  ul.addEventListener("drop", e => {
+    e.preventDefault();
+    saveOrderForList(ul);
+  });
 }
 
 function getTaskContext(key) {
@@ -494,11 +608,20 @@ function taskTitleByKey(key) {
   return el ? el.textContent.trim() : "Aufgabe";
 }
 
-function renderTaskItem(ul, key, task, prioLabel, isCustom = false) {
+function renderTaskItem(ul, key, task, prioLabel, isCustom = false, context = {}) {
   const li=document.createElement("li");
-  li.className="task" + (isCustom ? " custom-task" : "");
+  li.className="task draggable-task" + (isCustom ? " custom-task" : "");
   li.dataset.key=key;
+  li.dataset.phaseId=context.phaseId || "";
+  li.dataset.categoryIndex=String(context.categoryIndex ?? "");
+  li.draggable = true;
+  li.addEventListener("dragstart", () => li.classList.add("dragging"));
+  li.addEventListener("dragend", () => {
+    li.classList.remove("dragging");
+    saveOrderForList(li.closest("ul.tasks"));
+  });
   li.innerHTML=`
+    <div class="task-drag" title="Ziehen, um innerhalb dieser Kategorie zu sortieren">↕</div>
     <div class="task-check" onclick="APP.toggleTask('${key}')"></div>
     <span class="task-priority ${task.prio || "prio-2"}">${prioLabel[task.prio || "prio-2"]||""}${isCustom ? " · Neu" : ""}</span>
     <span class="task-text" onclick="APP.toggleTask('${key}')">${esc(task.text || "Ohne Titel")}</span>
@@ -704,6 +827,13 @@ window.APP = {
       pinnedAt:Date.now()
     });
     alert(`Kommentar als Aufgabe übernommen.\nQuelle: ${parentTitle}`);
+  },
+
+  toggleDoneGroup(phaseId) {
+    const key = `wf_done_collapsed_${phaseId}`;
+    const currentlyCollapsed = localStorage.getItem(key) !== "false";
+    localStorage.setItem(key, currentlyCollapsed ? "false" : "true");
+    buildUI();
   },
 
   sendChat() {
@@ -926,8 +1056,74 @@ window.APP = {
   toggleHelperDone(key, checked) { update(ref(db,dbPath(`helpers/${key}`)), {done:!!checked, updatedBy:currentUser || "?", updatedAt:Date.now()}); },
   deleteHelper(key) { if(confirm("Helferrolle löschen?")) remove(ref(db,dbPath(`helpers/${key}`))); },
 
+  addTentLead() {
+    if (!currentUser) { pendingCb=window.APP.addTentLead; window.APP.showName(); return; }
+    const name = document.getElementById("tentName").value.trim();
+    if (!name) { alert("Name / Anbieter / Gruppe eintragen."); return; }
+    const link = normalizeDocLink(document.getElementById("tentLink").value) || "";
+    push(ref(db,dbPath("tentLeads")), {
+      name:name.slice(0,100),
+      type:document.getElementById("tentType").value.trim() || "Sonstiges",
+      status:document.getElementById("tentStatus").value.trim() || "Idee",
+      contact:document.getElementById("tentContact").value.trim().slice(0,120),
+      link,
+      price:parseMoney(document.getElementById("tentPrice").value),
+      followUp:document.getElementById("tentFollowUp").value || "",
+      note:document.getElementById("tentNote").value.trim().slice(0,500),
+      pinned:document.getElementById("tentPinned").checked,
+      by:currentUser,
+      ts:Date.now()
+    }).then(()=>{
+      ["tentName","tentContact","tentLink","tentPrice","tentFollowUp","tentNote"].forEach(id=>document.getElementById(id).value="");
+      document.getElementById("tentPinned").checked=false;
+    }).catch(err=>alert("Anfrage konnte nicht gespeichert werden: "+err.message));
+  },
+  updateTentLeadField(key, field, value) {
+    if (!currentUser) { pendingCb=()=>window.APP.updateTentLeadField(key, field, value); window.APP.showName(); return; }
+    if (!["name","type","status","contact","link","price","followUp","note","pinned"].includes(field)) return;
+    const patch = {updatedBy: currentUser, updatedAt: Date.now()};
+    if (field === "pinned") patch[field] = !!value;
+    else if (field === "price") patch[field] = parseMoney(value);
+    else if (field === "link") patch[field] = normalizeDocLink(value) || "";
+    else {
+      const limits = {name:100, type:40, status:40, contact:120, followUp:20, note:500};
+      patch[field] = String(value || "").trim().slice(0, limits[field] || 100);
+      if (field === "name" && !patch[field]) { alert("Name darf nicht leer sein."); renderTentLeads(window._tentLeads); return; }
+    }
+    update(ref(db,dbPath(`tentLeads/${key}`)), patch).catch(err=>alert("Eintrag konnte nicht gespeichert werden: "+err.message));
+  },
+  deleteTentLead(key) { if(confirm("Zelt-/Anfrageeintrag löschen?")) remove(ref(db,dbPath(`tentLeads/${key}`))); },
+  copyTentLeadToTask(key) {
+    if (!currentUser) { pendingCb=()=>window.APP.copyTentLeadToTask(key); window.APP.showName(); return; }
+    const lead = (window._tentLeads || {})[key];
+    if (!lead) return;
+    const newRef = push(ref(db,dbPath("customTasks")));
+    const customId = newRef.key;
+    const taskDbKey = `custom_${customId}`;
+    const patch = {};
+    patch[`customTasks/${customId}`] = {
+      text:`Nachfassen / klären: ${String(lead.name || "Zeltoption").slice(0,160)}`,
+      phaseId:"phase2",
+      categoryIndex:1,
+      prio:"prio-2",
+      tag:"Zelte",
+      by:currentUser,
+      ts:Date.now()
+    };
+    patch[`tasks/${taskDbKey}`] = {
+      done:false,
+      status:"open",
+      responsible:"",
+      due:lead.followUp || "",
+      tag:"Zelte",
+      by:currentUser,
+      at:Date.now()
+    };
+    update(ref(db,dbPath("")), patch).then(()=>alert("Als Aufgabe übernommen."));
+  },
+
   switchView(view, persist = true) {
-    const valid = ["overview","tasks","documents","budget","shopping","helpers","decisions","pins"];
+    const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins"];
     if (!valid.includes(view)) view = "overview";
     document.querySelectorAll(".orga-view").forEach(el => el.classList.toggle("is-active", el.dataset.view === view));
     document.querySelectorAll(".view-tab").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
@@ -955,6 +1151,7 @@ function buildUI() {
   const prioLabel = {"prio-1":"Kritisch","prio-2":"Wichtig","prio-3":"Optional"};
   if (!container) return;
   container.innerHTML = "";
+
   PHASES_DATA.forEach((phase,pi) => {
     const ph = document.createElement("div");
     ph.className="phase"; ph.id=phase.id;
@@ -972,24 +1169,67 @@ function buildUI() {
       ph.appendChild(tl);
     }
 
+    const doneTasks = [];
+
     phase.categories.forEach((cat,ci) => {
-      const catEl=document.createElement("div");
-      catEl.className="category";
-      catEl.innerHTML=`<div class="category-title">${esc(cat.title)}</div>`;
-      const ul=document.createElement("ul");
-      ul.className="tasks";
-      cat.tasks.forEach((task,ti) => {
+      const allTasks = [];
+      (cat.tasks || []).forEach((task,ti) => {
         const key=taskKey(phase.id,ci,ti);
-        renderTaskItem(ul, key, task, prioLabel, false);
+        if (isTaskDeleted(key)) return;
+        allTasks.push({key, task:{...task, _baseOrder: ti + 1}, isCustom:false, baseOrder:ti+1, categoryTitle:cat.title, phaseId:phase.id, categoryIndex:ci});
       });
       Object.entries(window._customTasks || {})
         .map(([customId, value]) => ({customId, ...value}))
         .filter(task => task.phaseId === phase.id && Number(task.categoryIndex || 0) === ci)
-        .sort((a,b)=>(a.ts || 0)-(b.ts || 0))
-        .forEach(task => renderTaskItem(ul, `custom_${task.customId}`, task, prioLabel, true));
+        .forEach((task,idx) => {
+          const key=`custom_${task.customId}`;
+          if (isTaskDeleted(key)) return;
+          allTasks.push({key, task:{...task, _baseOrder:1000+(task.ts || idx)}, isCustom:true, baseOrder:1000+(task.ts || idx), categoryTitle:cat.title, phaseId:phase.id, categoryIndex:ci});
+        });
+
+      const openTasks = allTasks.filter(item => !isTaskDone(item.key)).sort((a,b)=>getTaskOrder(a.key,a.baseOrder)-getTaskOrder(b.key,b.baseOrder));
+      doneTasks.push(...allTasks.filter(item => isTaskDone(item.key)).sort((a,b)=>getTaskOrder(a.key,a.baseOrder)-getTaskOrder(b.key,b.baseOrder)));
+
+      if (!openTasks.length) return;
+      const catEl=document.createElement("div");
+      catEl.className="category";
+      catEl.innerHTML=`<div class="category-title">${esc(cat.title)}</div>`;
+      const ul=document.createElement("ul");
+      ul.className="tasks sortable-tasks";
+      openTasks.forEach(item => renderTaskItem(ul, item.key, item.task, prioLabel, item.isCustom, {phaseId:item.phaseId, categoryIndex:item.categoryIndex}));
+      wireDragList(ul);
       catEl.appendChild(ul);
       ph.appendChild(catEl);
     });
+
+    const collapsed = phaseDoneCollapsed(phase.id);
+    const doneWrap = document.createElement("div");
+    doneWrap.className = "done-phase-group" + (collapsed ? " collapsed" : "");
+    doneWrap.innerHTML = `<button class="done-toggle" onclick='APP.toggleDoneGroup(${JSON.stringify(phase.id)})'><span class="done-toggle-symbol">${collapsed ? "+" : "−"}</span> Erledigte Aufgaben in dieser Phase (${doneTasks.length})</button>`;
+    const doneBody = document.createElement("div");
+    doneBody.className = "done-group-body";
+    if (doneTasks.length) {
+      const ul = document.createElement("ul");
+      ul.className = "tasks done-tasks-list";
+      doneTasks.forEach(item => {
+        const wrapperTask = {...item.task, text:`${item.task.text || "Ohne Titel"}`};
+        renderTaskItem(ul, item.key, wrapperTask, prioLabel, item.isCustom, {phaseId:item.phaseId, categoryIndex:item.categoryIndex});
+        const last = ul.lastElementChild;
+        if (last) {
+          last.classList.add("done-task-rendered");
+          last.draggable = false;
+          const cat = document.createElement("div");
+          cat.className = "done-task-category";
+          cat.textContent = item.categoryTitle;
+          last.insertBefore(cat, last.querySelector(".task-details"));
+        }
+      });
+      doneBody.appendChild(ul);
+    } else {
+      doneBody.innerHTML = `<p class="empty-state done-empty">Noch keine erledigten Aufgaben in dieser Phase.</p>`;
+    }
+    doneWrap.appendChild(doneBody);
+    ph.appendChild(doneWrap);
 
     container.appendChild(ph);
     if (pi<PHASES_DATA.length-1) {
@@ -1076,7 +1316,7 @@ header h1 span{color:var(--gold)}
 .task-delete{font-family:'JetBrains Mono',monospace;font-size:.52rem;border:1px solid #8b3a0f55;background:transparent;color:var(--ember);padding:2px 5px;border-radius:2px;cursor:pointer;opacity:.55;text-transform:uppercase;letter-spacing:.04em}
 .task-delete:hover{opacity:1;background:#8b3a0f14}
 .task.task-deleted{display:none!important}
-.task-meta{grid-column:2/5;grid-row:2;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--moss);letter-spacing:.05em}
+.task-meta{grid-column:3/6;grid-row:2;font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--moss);letter-spacing:.05em}
 .timeline-strip{position:relative;padding-left:2rem;margin:1.5rem 0}
 .timeline-strip::before{content:'';position:absolute;left:6px;top:6px;bottom:0;width:1px;background:var(--gold);opacity:.4}
 .tl-item{position:relative;margin-bottom:1rem}
@@ -1178,16 +1418,34 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 .task-controls{grid-column:2/5;grid-row:2;display:grid;grid-template-columns:1fr 150px 150px;gap:.4rem;margin-top:.25rem}
 .task-controls label{font-family:'JetBrains Mono',monospace;font-size:.55rem;color:var(--ash);display:flex;align-items:center;gap:.35rem;text-transform:uppercase;letter-spacing:.05em}
 .task-controls input,.task-controls select{min-width:0;width:100%;background:var(--parchment);border:1px solid var(--rule);font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--ink);padding:.25rem .35rem;border-radius:2px}
-.task-meta{grid-column:2/5;grid-row:3}
+.task-meta{grid-column:3/6;grid-row:3}
 .task.status-progress{border-left-color:var(--gold)}
 .task.status-blocked{border-left-color:var(--ember);background:#8b3a0f10}
 .task.status-overdue .task-meta{color:var(--ember)}
+.task{grid-template-columns:18px 20px auto 1fr auto}
+.task-drag{font-family:'JetBrains Mono',monospace;color:var(--ash);cursor:grab;user-select:none;line-height:18px;margin-top:2px;opacity:.6}
+.task-drag:hover{opacity:1;color:var(--ember)}
+.task.dragging{opacity:.45;outline:2px dashed var(--gold)}
+.sortable-tasks{min-height:12px}
+.done-phase-group{margin:1.5rem 0 0;border:1px dashed var(--rule);background:rgba(232,220,196,.45)}
+.done-toggle{width:100%;background:var(--parch2);border:0;border-bottom:1px solid var(--rule);padding:.65rem .8rem;text-align:left;cursor:pointer;font-family:'Cinzel',serif;font-size:.78rem;color:var(--moss);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.done-toggle-symbol{display:inline-block;width:1.2rem;font-family:'JetBrains Mono',monospace;color:var(--ember)}
+.done-group-body{padding:.6rem}
+.done-phase-group.collapsed .done-group-body{display:none}
+.done-task-rendered{opacity:.75}
+.done-task-rendered .task-drag{visibility:hidden}
+.done-task-category{grid-column:3/6;font-family:'JetBrains Mono',monospace;font-size:.56rem;color:var(--ash);letter-spacing:.08em;text-transform:uppercase;margin-top:.1rem}
+.done-empty{color:var(--ash)!important}
+.tent-card.status-absage{opacity:.65}
+.muted-cat{opacity:.65;margin-left:.25rem}
+.tent-form textarea{grid-column:1/-1}
+
 @media(max-width:800px){.dashboard-stats{grid-template-columns:repeat(2,1fr)}.dashboard-pins{grid-template-columns:1fr}.hub-form.two-col,.hub-form.three-col,.task-controls{grid-template-columns:1fr}.mini-card{grid-template-columns:1fr}.stack-actions{align-items:flex-start}.hub-stats-inline{justify-content:flex-start}}
 @media print{.topbar,.sync-bar,.phase-nav,.doc-form,.hub-form,.input-row,.side-panel,.chat-panel,.modal-overlay,.comment-btn,.task-delete,.doc-delete,.send-btn,.task-controls,button{display:none!important}body{background:#fff;color:#000;font-size:12px}.container{max-width:none;padding:0}.hub-section,.documents-section,.progress-section{break-inside:avoid;border:1px solid #999;background:#fff;margin-bottom:1rem}.task,.doc-card,.mini-card,.dashboard-pin{break-inside:avoid;background:#fff;border-color:#999}.task-text{text-decoration:none!important;color:#000!important;opacity:1!important}a{color:#000;text-decoration:underline}.task-meta{font-size:10px;color:#333}.dashboard-stats{grid-template-columns:repeat(5,1fr)}}
 
 
 /* Cleaner Orga-Hub layout */
-.workspace-tabs{position:sticky;top:43px;z-index:90;background:var(--parchment);border:1px solid var(--rule);display:grid;grid-template-columns:repeat(8,1fr);gap:0;margin:0 0 1.25rem;box-shadow:0 2px 0 rgba(26,20,16,.04)}
+.workspace-tabs{position:sticky;top:43px;z-index:90;background:var(--parchment);border:1px solid var(--rule);display:grid;grid-template-columns:repeat(9,1fr);gap:0;margin:0 0 1.25rem;box-shadow:0 2px 0 rgba(26,20,16,.04)}
 .view-tab{background:var(--parch2);border:0;border-right:1px solid var(--rule);padding:.7rem .35rem;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.58rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ash)}
 .view-tab:last-child{border-right:none}.view-tab:hover{background:#dfd4bc;color:var(--ember)}.view-tab.active{background:var(--ink);color:var(--gold)}
 .orga-view{display:none}.orga-view.is-active{display:block}.task-phase-nav{margin-bottom:1.25rem}.hub-nav{display:none!important}
@@ -1244,6 +1502,13 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 @media(max-width:800px){.task-details .task-controls{grid-template-columns:1fr}}
 @media print{.task-details{display:none!important}}
 
+
+/* Final task layout overrides after toggle/detail rules */
+.task{grid-template-columns:18px 20px auto 1fr auto!important}
+.task-details{grid-column:1/6!important}
+.task-controls{grid-column:auto!important}
+.task-meta{grid-column:auto!important}
+@media(max-width:600px){.task{grid-template-columns:18px 20px 1fr auto!important}.task-priority{grid-column:3/4}.task-text{grid-column:3/5}.task-actions{grid-column:4/5}.task-details{grid-column:1/5!important}}
 </style>
 </head>
 <body>
@@ -1293,6 +1558,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <button class="view-tab" data-view="budget" onclick="APP.switchView('budget')">Budget</button>
     <button class="view-tab" data-view="shopping" onclick="APP.switchView('shopping')">Einkauf</button>
     <button class="view-tab" data-view="helpers" onclick="APP.switchView('helpers')">Helfer</button>
+    <button class="view-tab" data-view="tentleads" onclick="APP.switchView('tentleads')">Zelte</button>
     <button class="view-tab" data-view="decisions" onclick="APP.switchView('decisions')">Beschlüsse</button>
     <button class="view-tab" data-view="pins" onclick="APP.switchView('pins')">Pins</button>
   </nav>
@@ -1409,6 +1675,23 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
       <button class="send-btn doc-add-btn" onclick="APP.addHelper()">Helferrolle eintragen</button>
     </div>
     <div class="hub-list" id="helpersList"></div>
+  </section>
+
+  <section class="hub-section orga-view" data-view="tentleads" id="tentleads">
+    <div class="hub-head"><div><p class="progress-title">Zeltverleih & Anfrage-Tracking</p><p class="documents-subtitle">Für Vereine, LARP-Gruppen, Verleiher, private Kontakte und alle offenen Zeltoptionen. Status, Preis und Nachfassdatum nicht im Chat vergraben.</p></div><div class="hub-stats-inline" id="tentLeadsStats"></div></div>
+    <div class="hub-form three-col tent-form">
+      <input id="tentName" type="text" maxlength="100" placeholder="Name / Anbieter / Gruppe, z.B. Tombo-Ritter">
+      <select id="tentType"><option>Verein</option><option>Zeltverleih</option><option>LARP-Gruppe</option><option>Mittelaltergruppe</option><option>Privatkontakt</option><option>Shop</option><option>Sonstiges</option></select>
+      <select id="tentStatus"><option>Idee</option><option>Angefragt</option><option>Nachfassen</option><option>Zusage</option><option>Absage</option><option>Gebucht</option><option>Unklar</option></select>
+      <input id="tentContact" type="text" maxlength="120" placeholder="Kontakt / Person / Mail / Telefon">
+      <input id="tentLink" type="url" maxlength="1000" placeholder="Website / Kontaktlink / Dokumentlink">
+      <input id="tentPrice" type="number" min="0" step="0.01" placeholder="Preis grob €">
+      <input id="tentFollowUp" type="date" title="Nachfassdatum">
+      <label class="doc-pin-row"><input id="tentPinned" type="checkbox"> Wichtig</label>
+      <textarea id="tentNote" maxlength="500" placeholder="Notiz, z.B. angefragt am ..., haben 6x6 Baldachin, Absagegrund, Kaution, Transport"></textarea>
+      <button class="send-btn doc-add-btn" onclick="APP.addTentLead()">Option eintragen</button>
+    </div>
+    <div class="hub-list" id="tentLeadsList"></div>
   </section>
 
   <section class="hub-section orga-view" data-view="decisions" id="decisions">
