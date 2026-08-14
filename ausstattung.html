@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Das 30. Winterfest - Ausstattung & Beschaffung</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+:root{--ink:#1a1410;--parchment:#f0e8d6;--parch2:#e8dcc4;--ember:#8b3a0f;--gold:#c49a2a;--moss:#4a5c3a;--ash:#6b6055;--rule:#c49a2a44;--blue:#42636d}
+*{box-sizing:border-box}body{margin:0;background:var(--parchment);color:var(--ink);font-family:'Crimson Text',Georgia,serif;font-size:17px;line-height:1.5}
+.topbar{position:sticky;top:0;z-index:30;background:var(--ink);border-bottom:2px solid var(--gold);display:flex;align-items:center;gap:.65rem;padding:.6rem 1rem}
+.brand{font-family:'Cinzel',serif;color:var(--gold);font-weight:700;letter-spacing:.08em;flex:1}
+.toplink,.btn{font-family:'JetBrains Mono',monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--gold);border-radius:2px;padding:.38rem .55rem;text-decoration:none;cursor:pointer}
+.toplink{color:var(--gold)}.toplink:hover,.btn:hover{background:var(--gold);color:var(--ink)}.sync{font-family:'JetBrains Mono',monospace;font-size:.56rem;color:#ffffff77}.sync.ok{color:#8fc78f}.sync.err{color:#e59b8a}
+.wrap{max-width:1260px;margin:0 auto;padding:1.2rem 1rem 5rem}.hero{background:var(--ink);color:var(--parchment);border:1px solid var(--gold);padding:1.25rem 1.35rem;margin-bottom:1rem}
+.eyebrow{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:.6rem;letter-spacing:.18em;text-transform:uppercase}.hero h1{font-family:'Cinzel',serif;font-size:clamp(1.45rem,3vw,2.15rem);margin:.15rem 0 .3rem}.hero p{margin:0;color:#ffffffaa;max-width:900px}
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:.5rem;margin:1rem 0}.stat{background:var(--parch2);border:1px solid var(--rule);padding:.72rem;text-align:center}.stat strong{display:block;color:var(--ember);font-family:'Cinzel',serif;font-size:1.04rem}.stat span{display:block;color:var(--ash);font-family:'JetBrains Mono',monospace;font-size:.52rem;text-transform:uppercase;letter-spacing:.06em}
+.toolbar,.addbox{background:var(--parch2);border:1px solid var(--rule);padding:.75rem;margin-bottom:.8rem}.toolbar{display:grid;grid-template-columns:1.5fr repeat(3,.8fr) auto;gap:.45rem}
+.toolbar input,.toolbar select,.addgrid input,.addgrid select,.addgrid textarea,.editgrid input,.editgrid select,.editgrid textarea{width:100%;background:var(--parchment);border:1px solid var(--rule);color:var(--ink);padding:.5rem .55rem;outline:none;border-radius:2px;font:inherit}
+.toolbar input:focus,.toolbar select:focus,.addgrid input:focus,.addgrid select:focus,.addgrid textarea:focus,.editgrid input:focus,.editgrid select:focus,.editgrid textarea:focus{border-color:var(--gold)}
+.btn{background:var(--gold);color:var(--ink)}.btn.secondary{background:transparent;color:var(--ember)}.btn.danger{background:transparent;color:var(--ember);border-color:#8b3a0f66}.btn:disabled{opacity:.45;cursor:not-allowed}
+.addbox summary,.details summary{font-family:'JetBrains Mono',monospace;font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ember);cursor:pointer}
+.addgrid,.editgrid{display:grid;grid-template-columns:1.2fr .8fr .8fr .8fr;gap:.45rem;margin-top:.6rem}.span2{grid-column:span 2}.span4{grid-column:1/-1}.addgrid textarea,.editgrid textarea{min-height:68px;resize:vertical}.actions-row{grid-column:1/-1;display:flex;justify-content:flex-end;gap:.35rem}
+.group{margin-top:1.2rem}.group-title{display:flex;justify-content:space-between;gap:1rem;align-items:baseline;border-bottom:1px solid var(--moss);padding-bottom:.3rem;margin-bottom:.5rem;font-family:'Cinzel',serif;font-size:.92rem;color:var(--moss);text-transform:uppercase;letter-spacing:.08em}.group-title small{font-family:'JetBrains Mono',monospace;color:var(--ash);font-size:.54rem;font-weight:400}
+.list{display:grid;gap:.45rem}.asset{background:var(--parch2);border:1px solid var(--rule);border-left:3px solid var(--gold);padding:.68rem .72rem}.asset.complete{border-left-color:var(--moss);background:#4a5c3a10;opacity:.8}.asset.wait{border-left-color:var(--blue)}.asset.open{border-left-color:var(--ember)}.asset.optional{border-left-color:var(--ash);opacity:.8}
+.head{display:grid;grid-template-columns:minmax(230px,1.55fr) minmax(100px,.5fr) minmax(110px,.5fr) minmax(110px,.5fr) minmax(110px,.5fr) auto;gap:.5rem;align-items:center}.title{font-family:'Cinzel',serif;color:var(--ember);font-size:.86rem;font-weight:700;line-height:1.25}
+.badges{display:flex;gap:.24rem;flex-wrap:wrap;margin-top:.2rem}.badge{font-family:'JetBrains Mono',monospace;font-size:.49rem;text-transform:uppercase;letter-spacing:.04em;border:1px solid var(--rule);background:var(--parchment);color:var(--ash);padding:1px 4px;border-radius:2px}.badge.status{color:var(--ember);border-color:#8b3a0f44}
+.cell{font-size:.8rem;line-height:1.2}.label{display:block;color:var(--ash);font-family:'JetBrains Mono',monospace;font-size:.47rem;text-transform:uppercase;letter-spacing:.05em}.money{font-family:'JetBrains Mono',monospace}
+.cardactions{display:flex;flex-wrap:wrap;gap:.28rem;justify-content:flex-end}.next,.note{margin:.36rem 0 0;font-size:.81rem;line-height:1.35}.next strong{color:var(--moss)}.note{color:#443a32}.details{margin-top:.42rem;border-top:1px solid var(--rule);padding-top:.35rem}.editgrid{grid-template-columns:repeat(4,1fr)}
+.empty{border:1px dashed var(--rule);padding:1rem;text-align:center;color:var(--ash);font-style:italic}.footnote{font-size:.75rem;color:var(--ash);margin-top:.9rem}.setup{max-width:700px;margin:4rem auto;padding:1.5rem;background:var(--parch2);border:1px solid var(--gold)}.setup h1{font-family:'Cinzel',serif;color:var(--ember)}.setup input{width:100%;padding:.65rem;background:var(--parchment);border:1px solid var(--rule);margin:.6rem 0}.hidden{display:none!important}
+@media(max-width:1050px){.stats{grid-template-columns:repeat(3,1fr)}.toolbar{grid-template-columns:1fr 1fr}.toolbar .search{grid-column:1/-1}.head{grid-template-columns:1.4fr .7fr .7fr .7fr}.cardactions{grid-column:1/-1;justify-content:flex-start}.addgrid,.editgrid{grid-template-columns:1fr 1fr}.span4{grid-column:1/-1}.span2{grid-column:span 2}}
+@media(max-width:650px){.topbar{flex-wrap:wrap}.brand{flex-basis:100%}.stats{grid-template-columns:1fr 1fr}.toolbar{grid-template-columns:1fr}.toolbar .search{grid-column:auto}.head{grid-template-columns:1fr 1fr}.title{grid-column:1/-1}.cardactions{grid-column:1/-1}.addgrid,.editgrid{grid-template-columns:1fr}.span2,.span4{grid-column:auto}.wrap{padding:.75rem .55rem 4rem}}
+</style>
+</head>
+<body>
+<div id="setup" class="setup hidden">
+  <h1>Ausstattung verbinden</h1>
+  <p>Beim ersten Aufruf einmal den bestehenden Winterfest-Link oder nur den Event-Key eintragen. Danach wird der Key lokal gespeichert.</p>
+  <input id="setupInput" type="text" placeholder="Winterfest-Link oder Event-Key">
+  <button id="setupBtn" class="btn" type="button">Verbinden</button>
+</div>
+<div id="app" class="hidden">
+  <div class="topbar"><div class="brand">Das 30. Winterfest</div><a id="backLink" class="toplink" href="#">Orga-Hub</a><span id="sync" class="sync">verbinde...</span></div>
+  <main class="wrap">
+    <section class="hero"><div class="eyebrow">Zentrale Materialsteuerung</div><h1>Ausstattung & Beschaffung</h1><p>Eine Übersicht für Kaufen, Mieten, DIY, vorhandene Ausstattung, offene Anfragen und spätere Bestätigungen. Plan- und Ist-Kosten können direkt in die bestehenden Bereiche Budget und Einkauf übernommen werden.</p></section>
+    <div id="stats" class="stats"></div>
+    <div class="toolbar"><input id="search" class="search" type="search" placeholder="Suchen, z.B. Vendera, Pavillon, Other Ages"><select id="filterArea"><option value="">Alle Bereiche</option></select><select id="filterStatus"><option value="">Alle Status</option></select><select id="filterType"><option value="">Alle Typen</option></select><button id="reset" class="btn secondary" type="button">Filter löschen</button></div>
+    <details class="addbox" id="addbox"><summary>Neuen Posten hinzufügen</summary><div class="addgrid"><input id="nItem" class="span2" maxlength="100" placeholder="Gegenstand / Aufgabe"><select id="nArea"></select><select id="nType"></select><select id="nStatus"></select><input id="nSource" maxlength="100" placeholder="Quelle / Anbieter"><input id="nQty" maxlength="60" placeholder="Menge"><input id="nPlanned" type="number" min="0" step="0.01" placeholder="Planpreis EUR"><input id="nActual" type="number" min="0" step="0.01" placeholder="Ist-Kosten EUR"><input id="nDue" type="date"><input id="nNext" class="span2" maxlength="180" placeholder="Nächster Schritt"><textarea id="nNote" class="span4" maxlength="700" placeholder="Notiz, Maße, Transport, Abhängigkeiten"></textarea><div class="actions-row"><button id="add" class="btn" type="button">Posten hinzufügen</button></div></div></details>
+    <div id="groups"></div>
+    <p class="footnote">Other Ages ist als "Später bestätigen" eingeordnet: Umfang und Selbstabholung sind weitgehend geklärt, das Angebot ist aber freibleibend und noch nicht final beauftragt.</p>
+  </main>
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig={apiKey:"AIzaSyCKzCIluCSXOoJR1RtbavOQkPYKXdGKvVY",authDomain:"winterfest30.firebaseapp.com",databaseURL:"https://winterfest30-default-rtdb.europe-west1.firebasedatabase.app",projectId:"winterfest30",storageBucket:"winterfest30.firebasestorage.app",messagingSenderId:"927755122816",appId:"1:927755122816:web:3abeaf35c87457ff634e65"};
+const VALID=/^[A-Za-z0-9_-]{20,100}$/;
+function keyFrom(raw){const v=String(raw||"").trim();if(!v)return"";try{if(v.includes("#"))return decodeURIComponent(v.split("#").pop()).trim();}catch{}return v.replace(/^#/,"").trim();}
+let EVENT_ID=keyFrom(location.hash);
+if(!VALID.test(EVENT_ID)){
+  const saved=localStorage.getItem("wf_event_id")||"";
+  if(VALID.test(saved)){location.hash=saved;location.reload();}
+  else{
+    document.getElementById("setup").classList.remove("hidden");
+    document.getElementById("setupBtn").onclick=()=>{
+      const k=keyFrom(document.getElementById("setupInput").value);
+      if(!VALID.test(k)){alert("Der Link oder Event-Key ist ungültig.");return;}
+      localStorage.setItem("wf_event_id",k);location.hash=k;location.reload();
+    };
+    throw new Error("Event-Key fehlt");
+  }
+}
+localStorage.setItem("wf_event_id",EVENT_ID);
+document.getElementById("setup").classList.add("hidden");
+document.getElementById("app").classList.remove("hidden");
+document.getElementById("backLink").href=`index.html#${encodeURIComponent(EVENT_ID)}`;
+
+const app=initializeApp(firebaseConfig),db=getDatabase(app),dbPath=sub=>`events/${EVENT_ID}/${sub}`;
+const AREAS=["Zelt & Pavillon","Other Ages","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];
+const TYPES=["Vorhanden","Kaufen","Mieten","DIY","Leihen","Beauftragen","Verbrauch","Entscheidung"];
+const STATUSES=["Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Optional"];
+const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));
+let assets={},budget={},shopping={};
+const esc=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const fmt=n=>Number(n||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
+const num=v=>{const n=Number(String(v??"").replace(",","."));return Number.isFinite(n)?Math.round(n*100)/100:0;};
+const opts=(arr,sel)=>arr.map(v=>`<option value="${esc(v)}" ${v===sel?"selected":""}>${esc(v)}</option>`).join("");
+function user(){let u=(localStorage.getItem("wf_user")||"").trim();if(!u){u=(prompt("Name für Änderungen:")||"").trim().slice(0,30);if(u)localStorage.setItem("wf_user",u);}return u||"Unbekannt";}
+function sync(t,c=""){const e=document.getElementById("sync");e.textContent=t;e.className="sync "+c;}
+
+function seedRows(){
+  const now=Date.now();
+  const r=(area,item,type,status,source="",qty="",planned=0,actual=0,next="",note="")=>({area,item,type,status,source,qty,planned,actual,next,note,due:"",seeded:true,ts:now,updatedAt:now,updatedBy:"Planstand 14.08.2026"});
+  return {
+    vendera_doppelmaster:r("Zelt & Pavillon","Vendera Doppelmaster 8x6 m","Mieten","Warten auf Antwort","Vendera","1",0,0,"Einzelpreis abwarten und mit Baldachin sowie DIY vergleichen","Gesamtangebot für Doppelmaster plus 6x6-Baldachin: 1.200 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug. Das Gesamtpaket liegt über dem vorgesehenen Zeltbudget; Einzelpreis angefragt."),
+    vendera_baldachin:r("Zelt & Pavillon","Vendera Baldachin 6x6 m","Mieten","Warten auf Antwort","Vendera","1",0,0,"Einzelpreis abwarten und mit Doppelmaster sowie DIY vergleichen","Als Einzelmiete angefragt. Bei ähnlichem Einzelpreis ist der 8x6-Doppelmaster wegen der größeren Fläche voraussichtlich attraktiver."),
+    pavillon:r("Zelt & Pavillon","Vorhandener Pavillon 3x6 m","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Mit Schabracken, Stoff/Jute, Sisalseil und Bannern verkleiden","Bleibt als zweiter überdachter Bereich neben dem Vendera-Zelt."),
+    regenregel:r("Zelt & Pavillon","Keine zusätzlichen Lagerplanen einplanen","Entscheidung","Erledigt","Planungsentscheidung","-",0,0,"Keine weitere Beschaffung","Bei ernsthaftem Regen wird das Event verschoben. Daher keine zusätzliche Stoffhaut oder aufwendige Schlechtwetterlösung für den Pavillon."),
+    schabracken:r("Zelt & Pavillon","Schabracken für den vorhandenen Pavillon","Beauftragen","Zu beauftragen","Schneiderei","für 3x6 m Pavillon",0,0,"Maße und Höhe festlegen, Stoff auswählen, Schneiderei anfragen","Saubere lange Nähte; nur für den vorhandenen Pavillon erforderlich, wenn zusätzlich ein echtes Vendera-Zelt gemietet wird."),
+    schabracken_stoff:r("Zelt & Pavillon","Stoff für Schabracken","Kaufen","Zu kaufen","noch offen","nach Zuschnitt",0,0,"Nach finalen Maßen kaufen","Robuster Stoff in passender Optik."),
+    beinverkleidung:r("Zelt & Pavillon","Jutestoff / Stoff für Pavillonbeine","Kaufen","Zu kaufen","noch offen","für sichtbare Beine",0,0,"Bedarf nach Aufbauposition messen","Mit Schnüren oder vorhandenem Sisalseil befestigen."),
+    sisal:r("Deko","Sisalseile","Vorhanden","Vorhanden","Eigenbestand","mehrere",0,0,"Für Pavillon und Geländedeko reservieren","Für Befestigung, optische Verkleidung und einzelne Abgrenzungen nutzbar."),
+    banner:r("Deko","Eigene Banner aus IKEA-Stoff und Acrylfarbe","DIY","Zu basteln","IKEA / Baumarkt","ca. 4-6",0,0,"Motive und Bannerformate festlegen, danach bemalen","Große, einfache Wappen oder Symbole."),
+    bannermaterial:r("Deko","Stoff und Acrylfarbe für Banner","Kaufen","Zu kaufen","IKEA / Baumarkt","nach Bannerformat",0,0,"Nach Motiv- und Größenentscheidung kaufen","Acryl dünn auftragen; optional mit Textilmedium."),
+    pfosten:r("Gelände","Fichtenlatten als Gelände-Pfähle","Kaufen","Zu kaufen","Baumarkt","ca. 15-25",0,0,"Geländeaufteilung festlegen und Stückzahl daraus ableiten","Unten anschrägen; bei Bedarf schleifen oder lasieren."),
+    wimpel:r("Gelände","Wimpelketten","Kaufen","Zu kaufen","noch offen","grob 30-40 m",0,0,"Benötigte Strecken im Lageplan markieren","Gezielt für Eingang, Hauptbereich und Zonentrennung einsetzen."),
+    stroh:r("Gelände","Strohballen","Kaufen","Später organisieren","lokal","ca. 4-8",0,0,"Kurz vor dem Event lokal besorgen","Als Deko und Zonierung. Abstand zu Grill, Feuerschale und Jute halten."),
+    laternen:r("Beleuchtung","LED-Laternen","Vorhanden","Vorhanden","Eigenbestand","8",0,0,"Positionen im Lageplan festlegen","Für Atmosphäre und Tischbereiche."),
+    ledkerzen:r("Beleuchtung","LED-Kerzen","Vorhanden","Vorhanden","Eigenbestand","8",0,0,"Je eine pro Laterne vorsehen","Bereits vorhanden."),
+    funktionslicht:r("Beleuchtung","Funktionale Beleuchtung für Wege, Grill und Toilette","Kaufen","Offene Entscheidung","noch offen","wenige Leuchten",0,0,"Nach Lageplan und Stromplanung Bedarf bestimmen","Die acht Laternen sind Stimmungslicht, nicht die alleinige Sicherheits- und Arbeitsbeleuchtung."),
+    kruege:r("Deko","Gekaufte Tonkrüge","Vorhanden","Gekauft","Gebrauchtkauf","Bestand noch zählen",0,0,"Bestand, Größen und Kaufpreise bei Gelegenheit ergänzen","Für Ausschank, Trinkgefäße und Dekoration."),
+    feuerschale:r("Essen & Feuer","Feuerschale","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Sicheren Standort festlegen","Bereits vorhanden."),
+    grillrost:r("Essen & Feuer","Grillrost","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Grillaufbau später testen","Bereits vorhanden."),
+    oa_bankett:r("Other Ages","Bankettsets","Mieten","Später bestätigen","Other Ages","5 Sets / 30 Personen",125,0,"Frühjahr 2027 final bestätigen und beauftragen","Angebot vom 08.08.2026: 125 EUR. Transportkoffer laut Mail nicht im Anhänger transportieren."),
+    oa_weinkruege:r("Other Ages","Große Weinkrüge","Mieten","Später bestätigen","Other Ages","4",16,0,"Bedarf gegen eigenen Krugbestand prüfen, dann 2027 bestätigen","Angebot: 16 EUR. Laut Mail nicht im Anhänger transportieren."),
+    oa_jute:r("Other Ages","Jutetischdecken","Mieten","Später bestätigen","Other Ages","4",20,0,"Frühjahr 2027 final bestätigen","Angebot: 20 EUR."),
+    oa_pranger:r("Other Ages","Fotopranger","Mieten","Später bestätigen","Other Ages","1",50,0,"Frühjahr 2027 final bestätigen","Angebot: 50 EUR. Zusammengebaut ca. 120 x 160 x 125 cm, ca. 50 kg."),
+    oa_garnituren:r("Other Ages","Festzeltgarnituren breit","Mieten","Später bestätigen","Other Ages","4",40,0,"Frühjahr 2027 final bestätigen","Angebot: 40 EUR. Je Garnitur Tisch 220 x 70 cm und zwei Bänke 220 x 25 cm; zusammen ca. 45 kg."),
+    oa_feuerkoerbe:r("Other Ages","Feuerkörbe","Mieten","Optional","Other Ages","2",10,0,"Entscheiden, ob zusätzlich zur vorhandenen Feuerschale nötig","Angebot: 10 EUR. Ca. 5 kg je Stück."),
+    oa_transport:r("Logistik","Other Ages Selbstabholung und Rückgabe","Mieten","Später bestätigen","Other Ages","1 Transport",0,0,"Transportfahrzeug und Helfer 2027 festziehen","Abholung Freitag 15-18 Uhr, Rückgabe Montag 17-18 Uhr. Sperriges Material passt laut Mail in Anhänger 251 x 128 x 135 cm mit 900 kg Nutzlast; Bankettset-Koffer und Weinkrüge separat transportieren."),
+    spender:r("Alchemistenstation","Getränkespender","Vorhanden","Vorhanden","Eigenbestand","2",0,0,"Rezepte für Heil- und Manatrank festlegen","Beide Spender für die Alchemistenstation vorgesehen."),
+    alchemie:r("Alchemistenstation","Alchemistenstation aufbauen und beschriften","DIY","Zu basteln","Eigenbau","1 Station",0,0,"Aufbau, Beschriftung, Gefäße und Deko konkretisieren","Mit den zwei vorhandenen Getränkespendern als starker Heiltrank und starker Manatrank."),
+    met:r("Getränke","Verschiedene Metsorten","Verbrauch","Zu kaufen","noch offen","für ca. 30 Gäste",0,0,"Sorten und Menge nach finaler Gästezahl festlegen","Tavernengetränk; Mengen später finalisieren."),
+    wein:r("Getränke","Wein","Verbrauch","Zu kaufen","noch offen","1-2 Sorten",0,0,"Sorten und Menge später festlegen","Ergänzend zum Met."),
+    soft:r("Getränke","Softdrinks und Wasser","Verbrauch","Zu kaufen","noch offen","für ca. 30 Gäste",0,0,"Mengen nach finaler Gästezahl berechnen","Ausreichend Wasser frei zugänglich einplanen; dazu Softdrinks nach Konzept."),
+    spirit:r("Getränke","Härterer Alkohol","Verbrauch","Zu kaufen","noch offen","gezielte Auswahl",0,0,"Auswahl begrenzen und Mengen festlegen","Zusätzlich zu Met, Wein und Alchemistenstation."),
+    kuehlung:r("Getränke","Kühlung, Eis und Kühlbehälter","Leihen","Offene Entscheidung","noch offen","nach Getränkemenge",0,0,"Kühlkonzept spätestens April 2027 festlegen","Für Getränke und Lebensmittel ausreichend Reserve vorsehen."),
+    wettkampf:r("Wettkampf","Wettkampfmaterial vollständig prüfen","Leihen","Später organisieren","Freundeskreis / Eigenbestand","Bögen, Pfeile, Äxte, Ziele, Krug",0,0,"Leihzusagen und Eigenbestand nach und nach verbindlich machen","Detailplanung läuft separat; hier nur als zentraler Beschaffungsblock geführt."),
+    absperrung:r("Sicherheit","Sichere Abgrenzung der Wettkampfbereiche","DIY","Offene Entscheidung","Pfähle / Seil / Wimpel","nach Lageplan",0,0,"Sicherheits- und Zuschauerbereiche im Lageplan definieren","Wimpel dienen der Sichtbarkeit; sicherheitskritische Zonen müssen eindeutig abgesperrt sein."),
+    muell:r("Logistik","Müllsäcke und Entsorgung","Verbrauch","Zu kaufen","Supermarkt / Baumarkt","ausreichend",0,0,"Menge kurz vor dem Event festlegen","Für Aufbau, Event und Abbau einplanen."),
+    hygiene:r("Logistik","Handwasch- und Hygienelösung","Kaufen","Offene Entscheidung","noch offen","1 Station",0,0,"Mit Toiletten- und Wasserplanung abstimmen","Seife, Wasser, Papier und ggf. Handdesinfektion einplanen.")
+  };
+}
+
+async function seed(){
+  try{
+    const marker=await get(ref(db,dbPath("assetMeta/seedVersion")));
+    if(marker.exists())return;
+    const existing=(await get(ref(db,dbPath("assets")))).val()||{},patch={};
+    Object.entries(seedRows()).forEach(([k,v])=>{if(!existing[k])patch[`assets/${k}`]=v;});
+    patch["assetMeta/seedVersion"]="2026-08-14-v1";
+    patch["assetMeta/seededAt"]=Date.now();
+    await update(ref(db,dbPath("")),patch);
+  }catch(e){console.error(e);sync("Initialisierung fehlgeschlagen","err");}
+}
+
+async function selfLink(){
+  try{
+    const p="documents/system_assets_overview",snap=await get(ref(db,dbPath(p)));
+    if(snap.exists())return;
+    const link=location.origin+location.pathname+"#"+encodeURIComponent(EVENT_ID);
+    await update(ref(db,dbPath(p)),{
+      title:"Ausstattung & Beschaffung",category:"Einkauf",link,
+      note:"Zentrale Übersicht für Bestand, Kauf, Miete, DIY, Anfragen und spätere Bestätigungen.",
+      pinned:true,by:"System",ts:Date.now()
+    });
+  }catch(e){console.warn("Selbstverlinkung fehlgeschlagen",e);}
+}
+
+function fill(){
+  const put=(id,a)=>document.getElementById(id).innerHTML=a.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  put("nArea",AREAS);put("nType",TYPES);put("nStatus",STATUSES);
+  document.getElementById("filterArea").innerHTML='<option value="">Alle Bereiche</option>'+AREAS.map(v=>`<option>${esc(v)}</option>`).join("");
+  document.getElementById("filterStatus").innerHTML='<option value="">Alle Status</option>'+STATUSES.map(v=>`<option>${esc(v)}</option>`).join("");
+  document.getElementById("filterType").innerHTML='<option value="">Alle Typen</option>'+TYPES.map(v=>`<option>${esc(v)}</option>`).join("");
+}
+fill();
+
+function klass(s){if(COMPLETE.has(s))return"complete";if(WAIT.has(s))return"wait";if(OPTIONAL.has(s))return"optional";return"open";}
+
+function card(i){
+  const p=num(i.planned),a=num(i.actual);
+  return `<article class="asset ${klass(i.status)}">
+    <div class="head">
+      <div><div class="title">${esc(i.item||"Ohne Titel")}</div><div class="badges"><span class="badge status">${esc(i.status||"Offen")}</span><span class="badge">${esc(i.type||"Sonstiges")}</span>${i.source?`<span class="badge">${esc(i.source)}</span>`:""}</div></div>
+      <div class="cell"><span class="label">Menge</span>${esc(i.qty||"offen")}</div>
+      <div class="cell money"><span class="label">Plan</span>${p?fmt(p):"offen"}</div>
+      <div class="cell money"><span class="label">Ist</span>${a?fmt(a):"-"}</div>
+      <div class="cell"><span class="label">Frist</span>${i.due?new Date(i.due+"T12:00:00").toLocaleDateString("de-DE"):"-"}</div>
+      <div class="cardactions">
+        <button class="btn secondary" type="button" onclick='AS.copyShopping(${JSON.stringify(i.key)})' ${i.shoppingKey?"disabled":""}>${i.shoppingKey?"Im Einkauf":"In Einkauf"}</button>
+        <button class="btn secondary" type="button" onclick='AS.copyBudget(${JSON.stringify(i.key)})' ${i.budgetKey?"disabled":""}>${i.budgetKey?"Im Budget":"Ins Budget"}</button>
+      </div>
+    </div>
+    ${i.next?`<p class="next"><strong>Nächster Schritt:</strong> ${esc(i.next)}</p>`:""}
+    ${i.note?`<p class="note">${esc(i.note)}</p>`:""}
+    <details class="details"><summary>Bearbeiten</summary><div class="editgrid">
+      <label class="span2">Gegenstand<input value="${esc(i.item||"")}" maxlength="100" onchange='AS.field(${JSON.stringify(i.key)},"item",this.value)'></label>
+      <label>Bereich<select onchange='AS.field(${JSON.stringify(i.key)},"area",this.value)'>${opts(AREAS,i.area||"Sonstiges")}</select></label>
+      <label>Typ<select onchange='AS.field(${JSON.stringify(i.key)},"type",this.value)'>${opts(TYPES,i.type||"Kaufen")}</select></label>
+      <label>Status<select onchange='AS.field(${JSON.stringify(i.key)},"status",this.value)'>${opts(STATUSES,i.status||"Offene Entscheidung")}</select></label>
+      <label>Quelle<input value="${esc(i.source||"")}" maxlength="100" onchange='AS.field(${JSON.stringify(i.key)},"source",this.value)'></label>
+      <label>Menge<input value="${esc(i.qty||"")}" maxlength="60" onchange='AS.field(${JSON.stringify(i.key)},"qty",this.value)'></label>
+      <label>Plan EUR<input type="number" min="0" step="0.01" value="${p||""}" onchange='AS.field(${JSON.stringify(i.key)},"planned",this.value)'></label>
+      <label>Ist EUR<input type="number" min="0" step="0.01" value="${a||""}" onchange='AS.field(${JSON.stringify(i.key)},"actual",this.value)'></label>
+      <label>Frist<input type="date" value="${esc(i.due||"")}" onchange='AS.field(${JSON.stringify(i.key)},"due",this.value)'></label>
+      <label class="span2">Nächster Schritt<input value="${esc(i.next||"")}" maxlength="180" onchange='AS.field(${JSON.stringify(i.key)},"next",this.value)'></label>
+      <label class="span4">Notiz<textarea maxlength="700" onchange='AS.field(${JSON.stringify(i.key)},"note",this.value)'>${esc(i.note||"")}</textarea></label>
+      <div class="actions-row"><button class="btn danger" type="button" onclick='AS.del(${JSON.stringify(i.key)})'>Löschen</button></div>
+    </div></details>
+  </article>`;
+}
+
+function render(){
+  const rows=Object.entries(assets).map(([key,v])=>({key,...v}));
+  const planned=rows.reduce((s,i)=>s+num(i.planned),0),actual=rows.reduce((s,i)=>s+num(i.actual),0);
+  const done=rows.filter(i=>COMPLETE.has(i.status)).length,waiting=rows.filter(i=>WAIT.has(i.status)).length;
+  const open=rows.filter(i=>!COMPLETE.has(i.status)&&!OPTIONAL.has(i.status)).length;
+  document.getElementById("stats").innerHTML=`
+    <div class="stat"><strong>${rows.length}</strong><span>Posten gesamt</span></div>
+    <div class="stat"><strong>${done}</strong><span>vorhanden / fertig</span></div>
+    <div class="stat"><strong>${open}</strong><span>aktiv offen</span></div>
+    <div class="stat"><strong>${waiting}</strong><span>angefragt / später</span></div>
+    <div class="stat"><strong>${fmt(planned)}</strong><span>Plan hier</span></div>
+    <div class="stat"><strong>${fmt(actual)}</strong><span>Ist hier</span></div>`;
+  const q=document.getElementById("search").value.trim().toLowerCase(),fa=document.getElementById("filterArea").value,fs=document.getElementById("filterStatus").value,ft=document.getElementById("filterType").value;
+  const filtered=rows.filter(i=>(!fa||i.area===fa)&&(!fs||i.status===fs)&&(!ft||i.type===ft)&&(!q||[i.item,i.area,i.status,i.type,i.source,i.next,i.note].join(" ").toLowerCase().includes(q)));
+  filtered.sort((a,b)=>AREAS.indexOf(a.area)-AREAS.indexOf(b.area)||(ORDER[a.status]??99)-(ORDER[b.status]??99)||String(a.item).localeCompare(String(b.item),"de"));
+  const groups=filtered.reduce((o,i)=>{(o[i.area||"Sonstiges"]??=[]).push(i);return o;},{});
+  document.getElementById("groups").innerHTML=filtered.length?Object.entries(groups).map(([g,rs])=>`<section class="group"><div class="group-title">${esc(g)} <small>${rs.length} Posten</small></div><div class="list">${rs.map(card).join("")}</div></section>`).join(""):'<div class="empty">Keine Posten für diesen Filter.</div>';
+}
+
+window.AS={
+  field(k,f,v){
+    if(!["item","area","type","status","source","qty","planned","actual","due","next","note"].includes(f))return;
+    const val=["planned","actual"].includes(f)?num(v):String(v||"").trim();
+    update(ref(db,dbPath(`assets/${k}`)),{[f]:val,updatedAt:Date.now(),updatedBy:user()}).catch(e=>alert(e.message));
+  },
+  del(k){if(confirm("Posten wirklich löschen?"))remove(ref(db,dbPath(`assets/${k}`))).catch(e=>alert(e.message));},
+  async copyShopping(k){
+    const i=assets[k];if(!i)return;
+    const rr=push(ref(db,dbPath("shopping")));
+    await update(rr,{item:String(i.item||"Posten").slice(0,80),qty:String(i.qty||"").slice(0,60),category:i.area||"Sonstiges",responsible:"",note:`Aus Ausstattung übernommen${i.source?" | "+i.source:""}${i.note?" | "+i.note:""}`.slice(0,300),bought:COMPLETE.has(i.status),by:user(),ts:Date.now()});
+    await update(ref(db,dbPath(`assets/${k}`)),{shoppingKey:rr.key,updatedAt:Date.now(),updatedBy:user()});
+  },
+  async copyBudget(k){
+    const i=assets[k];if(!i)return;
+    const rr=push(ref(db,dbPath("budget")));
+    await update(rr,{title:String(i.item||"Posten").slice(0,80),category:i.area||"Sonstiges",planned:num(i.planned),actual:num(i.actual),paidBy:"",reimbursed:false,note:`Aus Ausstattung übernommen${i.source?" | "+i.source:""}${i.note?" | "+i.note:""}`.slice(0,300),by:user(),ts:Date.now()});
+    await update(ref(db,dbPath(`assets/${k}`)),{budgetKey:rr.key,updatedAt:Date.now(),updatedBy:user()});
+  }
+};
+
+document.getElementById("add").onclick=()=>{
+  const item=document.getElementById("nItem").value.trim();if(!item){alert("Gegenstand eintragen.");return;}
+  push(ref(db,dbPath("assets")),{item:item.slice(0,100),area:document.getElementById("nArea").value,type:document.getElementById("nType").value,status:document.getElementById("nStatus").value,source:document.getElementById("nSource").value.trim().slice(0,100),qty:document.getElementById("nQty").value.trim().slice(0,60),planned:num(document.getElementById("nPlanned").value),actual:num(document.getElementById("nActual").value),due:document.getElementById("nDue").value,next:document.getElementById("nNext").value.trim().slice(0,180),note:document.getElementById("nNote").value.trim().slice(0,700),by:user(),ts:Date.now(),updatedAt:Date.now(),updatedBy:user()})
+  .then(()=>{["nItem","nSource","nQty","nPlanned","nActual","nDue","nNext","nNote"].forEach(id=>document.getElementById(id).value="");document.getElementById("addbox").open=false;})
+  .catch(e=>alert(e.message));
+};
+
+["search","filterArea","filterStatus","filterType"].forEach(id=>document.getElementById(id).addEventListener(id==="search"?"input":"change",render));
+document.getElementById("reset").onclick=()=>{["search","filterArea","filterStatus","filterType"].forEach(id=>document.getElementById(id).value="");render();};
+
+onValue(ref(db,dbPath("assets")),s=>{assets=s.val()||{};render();sync("Firebase verbunden","ok");},e=>sync("Firebase-Fehler: "+e.message,"err"));
+onValue(ref(db,dbPath("budget")),s=>{budget=s.val()||{};render();});
+onValue(ref(db,dbPath("shopping")),s=>{shopping=s.val()||{};render();});
+await seed();
+await selfLink();
+</script>
+</body>
+</html>
