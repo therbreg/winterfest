@@ -1,0 +1,380 @@
+name: Getränkekonzept anwenden
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-beverage-concept:
+    name: Getränkekonzept und Aufgaben aktualisieren
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Änderungen anwenden
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("index.html")
+          text = path.read_text(encoding="utf-8")
+
+          changes = []
+
+          def replace_idempotent(old, new, label):
+              global text
+
+              if new in text:
+                  print(f"✓ {label}: bereits vorhanden")
+                  return
+
+              count = text.count(old)
+
+              if count == 1:
+                  text = text.replace(old, new, 1)
+                  changes.append(label)
+                  print(f"✓ {label}: geändert")
+                  return
+
+              if count == 0:
+                  raise SystemExit(
+                      f"FEHLER bei '{label}': "
+                      "Weder der alte noch der neue Zustand wurde gefunden. "
+                      "index.html wurde möglicherweise zwischenzeitlich verändert."
+                  )
+
+              raise SystemExit(
+                  f"FEHLER bei '{label}': "
+                  f"Die alte Fundstelle wurde {count} mal gefunden. "
+                  "Aus Sicherheitsgründen wird nichts verändert."
+              )
+
+          # ==========================================================
+          # 1. Getränkekonzept im Dokumente Reiter verlinken
+          # ==========================================================
+
+          document_marker = "<!-- system_getraenkekonzept -->"
+
+          if document_marker in text:
+              print("✓ Google Doc Verknüpfung: bereits vorhanden")
+          else:
+              old = '''    <div class="documents-list" id="documentsList"></div>'''
+
+              new = '''    <!-- system_getraenkekonzept -->
+              <div class="documents-list system-documents-list">
+                <article class="doc-card pinned">
+                  <div class="doc-main">
+
+                    <div class="doc-topline">
+                      <span class="doc-cat">Getränke</span>
+                      <span class="doc-pin">Wichtig</span>
+                    </div>
+
+                    <h3>Getränkekonzept Winterfest 2027</h3>
+
+                    <p class="doc-note">
+                      Getränkeplanung für maximal 30 Gäste:
+                      Alchemistenstation, Getränkemengen,
+                      Budgetrahmen und Beschaffungslogik.
+                    </p>
+
+                    <p class="doc-meta">
+                      Google Drive · fest verknüpft
+                    </p>
+
+                  </div>
+
+                  <div class="doc-actions">
+                    <a
+                      class="doc-open"
+                      href="https://docs.google.com/document/d/1ImYKog41ucwEE1uvvoB2Ss0IayGgK95XIXOCrU7R1fI/edit"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >Öffnen</a>
+                  </div>
+                </article>
+              </div>
+
+              <div class="documents-list" id="documentsList"></div>'''
+
+              replace_idempotent(
+                  old,
+                  new,
+                  "Google Doc Verknüpfung"
+              )
+
+          # ==========================================================
+          # 2. Januar 2027
+          # Getränkekonzept bestätigen, aber noch nichts kaufen
+          # ==========================================================
+
+          old = (
+              '"id":"jan_getraenkekategorien",'
+              '"prio":"prio-2",'
+              '"text":"Getränkekategorien festlegen: '
+              'Wasser, alkoholfrei, Bier, Met und weitere Optionen"'
+          )
+
+          new = (
+              '"id":"jan_getraenkekategorien",'
+              '"prio":"prio-2",'
+              '"text":"Getränkekonzept final bestätigen: '
+              'Heiltrank, Manatrank, Hausmet, Bier, '
+              'alkoholfreie Getränke und Sonderbedarf; '
+              'noch keine Getränke kaufen"'
+          )
+
+          replace_idempotent(
+              old,
+              new,
+              "Januar Getränkekonzept"
+          )
+
+          # ==========================================================
+          # 3. Februar / März 2027
+          # RSVP um Trinkpräferenzen ergänzen
+          # ==========================================================
+
+          old = (
+              '"id":"plan2_rsvp_auswerten",'
+              '"prio":"prio-1",'
+              '"text":"Rückmeldungen auswerten und '
+              'realistische Personenzahl für Essen, '
+              'Getränke und Sitzplätze festhalten"'
+          )
+
+          new = (
+              '"id":"plan2_rsvp_auswerten",'
+              '"prio":"prio-1",'
+              '"text":"Rückmeldungen auswerten, '
+              'realistische Personenzahl für Essen, '
+              'Getränke und Sitzplätze festhalten und '
+              'grobe Trinkpräferenzen für Met, Bier und '
+              'alkoholfreie Getränke berücksichtigen"'
+          )
+
+          replace_idempotent(
+              old,
+              new,
+              "RSVP Trinkpräferenzen"
+          )
+
+          # ==========================================================
+          # 4. April 2027
+          # Getränkemengen finalisieren
+          # ==========================================================
+
+          old = (
+              '"id":"apr_mengenplanung",'
+              '"prio":"prio-1",'
+              '"text":"Mengen für Essen und Getränke '
+              'anhand der bestätigten Gästezahl berechnen"'
+          )
+
+          new = (
+              '"id":"apr_mengenplanung",'
+              '"prio":"prio-1",'
+              '"text":"Mengen für Essen anhand der '
+              'bestätigten Gästezahl berechnen; '
+              'Getränkemengen gemäß Getränkekonzept '
+              'finalisieren: Heiltrank und Manatrank '
+              'je ca. 5 l, Hausmet 5 bis 10 l, '
+              'Biermenge und alkoholfreie Reserve '
+              'festlegen sowie Sondergetränk abstimmen"'
+          )
+
+          replace_idempotent(
+              old,
+              new,
+              "April Mengenplanung"
+          )
+
+          # ==========================================================
+          # 5. Mai 2027
+          # Spezialgetränke früh bestellen und normalen Einkauf
+          # in die Eventwoche legen
+          # ==========================================================
+
+          old = (
+              '"id":"plan2_finale_einkaufsliste",'
+              '"prio":"prio-1",'
+              '"text":"Finale Einkaufsliste nach '
+              'Supermarkt, Großhandel und Online aufteilen"},'
+              '{"id":"plan2_getraenke_einkauf",'
+              '"prio":"prio-1",'
+              '"text":"Getränke einschließlich zusätzlicher '
+              'Sixpacks Wasser einkaufen und Kühlung organisieren"'
+          )
+
+          new = (
+              '"id":"plan2_finale_einkaufsliste",'
+              '"prio":"prio-1",'
+              '"text":"Finale Einkaufsliste nach '
+              'Supermarkt, Großhandel und Online aufteilen"},'
+
+              '{"id":"may_spezialgetraenke_bestellen",'
+              '"prio":"prio-1",'
+              '"text":"Anfang bis Mitte Mai haltbare '
+              'Spezialgetränke bestellen: Met, Heiltrank- und '
+              'Manatrank-Basis sowie gegebenenfalls Bärenfang; '
+              'Lieferung kontrollieren und bei Problemen '
+              'rechtzeitig Ersatz beschaffen"},'
+
+              '{"id":"plan2_getraenke_einkauf",'
+              '"prio":"prio-1",'
+              '"text":"In der Eventwoche Bier, Wasser, '
+              'Softdrinks und Zero-Getränke sowie das '
+              'abgestimmte Sondergetränk einkaufen; '
+              'Kühlung und ausreichende Wasserreserve organisieren"'
+          )
+
+          replace_idempotent(
+              old,
+              new,
+              "Mai Getränkeplanung"
+          )
+
+          # ==========================================================
+          # 6. Aufbau
+          # Alchemistenstation konkretisieren
+          # ==========================================================
+
+          old = (
+              '"id":"plan2_getraenkestation",'
+              '"prio":"prio-1",'
+              '"text":"Getränkestation und frei '
+              'zugängliches Wasser aufbauen"'
+          )
+
+          new = (
+              '"id":"plan2_getraenkestation",'
+              '"prio":"prio-1",'
+              '"text":"Alchemistenstation aufbauen: '
+              'Heiltrank und Manatrank in die zwei vorhandenen '
+              'Getränkespender füllen, alkoholische Getränke '
+              'kennzeichnen, versiegelte Potion-Deko aufstellen '
+              'sowie Hausmet, Softdrinks und frei zugängliches '
+              'Wasser bereitstellen"'
+          )
+
+          replace_idempotent(
+              old,
+              new,
+              "Alchemistenstation"
+          )
+
+          # ==========================================================
+          # Datei speichern
+          # ==========================================================
+
+          if changes:
+              path.write_text(
+                  text,
+                  encoding="utf-8"
+              )
+
+              print()
+              print("Folgende Änderungen wurden vorgenommen:")
+
+              for change in changes:
+                  print(f"  • {change}")
+
+          else:
+              print()
+              print(
+                  "Alle Änderungen sind bereits vorhanden. "
+                  "index.html bleibt unverändert."
+              )
+          PY
+
+      - name: Ergebnis validieren
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff --check
+
+          grep -Fq \
+            '<!-- system_getraenkekonzept -->' \
+            index.html
+
+          grep -Fq \
+            'Getränkekonzept Winterfest 2027' \
+            index.html
+
+          grep -Fq \
+            '1ImYKog41ucwEE1uvvoB2Ss0IayGgK95XIXOCrU7R1fI' \
+            index.html
+
+          grep -Fq \
+            'noch keine Getränke kaufen' \
+            index.html
+
+          grep -Fq \
+            'grobe Trinkpräferenzen für Met, Bier' \
+            index.html
+
+          grep -Fq \
+            'Heiltrank und Manatrank je ca. 5 l' \
+            index.html
+
+          grep -Fq \
+            'may_spezialgetraenke_bestellen' \
+            index.html
+
+          grep -Fq \
+            'Anfang bis Mitte Mai haltbare Spezialgetränke bestellen' \
+            index.html
+
+          grep -Fq \
+            'In der Eventwoche Bier, Wasser' \
+            index.html
+
+          grep -Fq \
+            'Alchemistenstation aufbauen:' \
+            index.html
+
+          echo
+          echo "Validierung erfolgreich."
+
+          if git diff --quiet -- index.html; then
+            echo "Keine neuen Änderungen. Workflow wurde bereits früher ausgeführt."
+          else
+            echo
+            echo "Änderungen an index.html:"
+            git diff --stat -- index.html
+          fi
+
+      - name: Änderungen committen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- index.html; then
+            echo "Keine Änderungen vorhanden."
+            echo "Nichts zu committen."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add index.html
+
+          git diff --cached --check
+
+          git commit \
+            -m "Add beverage concept and purchase schedule"
+
+          git push
+
+          echo
+          echo "Getränkekonzept erfolgreich eingespielt."
