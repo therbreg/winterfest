@@ -1,0 +1,205 @@
+name: Seed potion drinks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add potion drink supplies
+        env:
+          EVENT_ID: ${{ secrets.WINTERFEST_EVENT_ID }}
+
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import time
+          import urllib.request
+
+          event_id = os.environ["EVENT_ID"].strip()
+
+          base = (
+              "https://winterfest30-default-rtdb."
+              "europe-west1.firebasedatabase.app/"
+              f"events/{event_id}/shopping"
+          )
+
+          now = int(time.time() * 1000)
+
+          # Bestehende Einkaufsliste lesen
+          with urllib.request.urlopen(base + ".json", timeout=30) as r:
+              existing = json.load(r) or {}
+
+          existing_names = [
+              str(v.get("item", "")).lower()
+              for v in existing.values()
+              if isinstance(v, dict)
+          ]
+
+          def exists(*terms):
+              return any(
+                  any(term.lower() in name for term in terms)
+                  for name in existing_names
+              )
+
+          wanted = {}
+
+          def add(key, item, qty, category, note, aliases=()):
+              if exists(item, *aliases):
+                  print("Schon vorhanden:", item)
+                  return
+
+              wanted[key] = {
+                  "item": item,
+                  "qty": qty,
+                  "category": category,
+                  "responsible": "",
+                  "note": note,
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              }
+
+          add(
+              "potion_health_juice",
+              "Sauerkirsch- oder Cranberrysaft",
+              "nach Rezepttest",
+              "Getränke",
+              "Rote Basis für den Health Potion.",
+              ("Sauerkirsch", "Cranberry")
+          )
+
+          add(
+              "potion_grenadine",
+              "Grenadine",
+              "nach Rezepttest",
+              "Getränke",
+              "Für Farbe und Süße des Health Potions."
+          )
+
+          add(
+              "potion_blue_curacao",
+              "Blue Curaçao",
+              "nach Rezepttest",
+              "Getränke",
+              "Blaue alkoholische Komponente für den Mana Potion.",
+              ("Blue Curacao",)
+          )
+
+          add(
+              "potion_clear_spirit",
+              "Vodka oder weißer Rum für Potions",
+              "nach Rezepttest",
+              "Getränke",
+              "Klare Alkoholbasis für Health- und Mana-Potion.",
+              ("Vodka", "weißer Rum")
+          )
+
+          add(
+              "potion_citrus",
+              "Zitronen- und Limettensaft",
+              "nach Rezepttest",
+              "Getränke",
+              "Säure für beide Potion-Rezepte.",
+              ("Zitronensaft", "Limettensaft")
+          )
+
+          add(
+              "potion_lemonade",
+              "Klare Zitronenlimonade / Sprite / 7Up",
+              "nach Rezepttest",
+              "Getränke",
+              "Zum Auffüllen der Potion-Mischungen.",
+              ("Sprite", "7Up", "Zitronenlimonade")
+          )
+
+          add(
+              "potion_sparkling_water",
+              "Mineralwasser für Potion-Mischungen",
+              "nach Rezepttest",
+              "Getränke",
+              "Zum Einstellen von Süße und Alkoholstärke der Potions."
+          )
+
+          add(
+              "potion_ice",
+              "Eiswürfel",
+              "nach Bedarf",
+              "Getränke",
+              "Für Alchemistenstation und Getränkekühlung.",
+              ("Eiswürfel",)
+          )
+
+          add(
+              "potion_edible_shimmer",
+              "Essbarer Perlglanz / Getränkeglitzer",
+              "1 Set",
+              "Getränke",
+              "Optional für echte Trink-Potions. Muss ausdrücklich lebensmittelecht sein.",
+              ("Getränkeglitzer", "essbarer Glitzer")
+          )
+
+          add(
+              "drinks_mead_wine",
+              "Met und Wein",
+              "Menge nach Gästeliste",
+              "Getränke",
+              "Mehrere Sorten für die Taverne.",
+              ("Met / Wein", "Metsorten")
+          )
+
+          add(
+              "drinks_water",
+              "Trinkwasser still und sprudelnd",
+              "Menge nach Gästeliste",
+              "Getränke",
+              "Grundversorgung über den gesamten Veranstaltungstag.",
+              ("Trinkwasser", "Wasser still")
+          )
+
+          add(
+              "drinks_soft",
+              "Softdrinks",
+              "Menge nach Gästeliste",
+              "Getränke",
+              "Alkoholfreie Getränkeauswahl.",
+              ("Softgetränke", "Cola")
+          )
+
+          add(
+              "drinks_spirits",
+              "Weitere Spirituosen",
+              "Menge nach Getränkekonzept",
+              "Getränke",
+              "Härtere Getränke außerhalb der Potion-Mischungen.",
+              ("Spirituosen",)
+          )
+
+          if not wanted:
+              print("Alle vorgesehenen Getränkeposten sind bereits vorhanden.")
+              raise SystemExit(0)
+
+          body = json.dumps(
+              wanted,
+              ensure_ascii=False
+          ).encode("utf-8")
+
+          req = urllib.request.Request(
+              base + ".json",
+              data=body,
+              method="PATCH",
+              headers={
+                  "Content-Type":
+                      "application/json; charset=utf-8"
+              }
+          )
+
+          with urllib.request.urlopen(req, timeout=30) as r:
+              print("Firebase:", r.status)
+              print("Neu ergänzt:", len(wanted))
+
+          print("Fertig.")
+          PY
