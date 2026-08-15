@@ -1,0 +1,316 @@
+name: Seed potion glassware
+
+on:
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add potion tasks and shopping items
+        env:
+          EVENT_ID: ${{ secrets.WINTERFEST_EVENT_ID }}
+
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import time
+          import urllib.request
+          import urllib.error
+
+          event_id = os.environ["EVENT_ID"].strip()
+
+          if not event_id:
+              raise SystemExit("WINTERFEST_EVENT_ID ist leer.")
+
+          base = (
+              "https://winterfest30-default-rtdb."
+              "europe-west1.firebasedatabase.app/"
+              f"events/{event_id}"
+          )
+
+          now = int(time.time() * 1000)
+
+          custom_tasks = {
+              "potion_glass_order_drinking": {
+                  "text": "Lebensmittelechte Trink-Zaubertrankflaschen bestellen: 12 x 100 ml Kugelflaschen und 6 x 200 ml Kugelflaschen",
+                  "phaseId": "phase3",
+                  "categoryIndex": 0,
+                  "prio": "prio-2",
+                  "tag": "Deko / Getränke",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_order_deco": {
+                  "text": "Dekoflaschen in gemischten Größen bestellen: ca. 6 kleine, 10 bis 12 mittlere und 3 bis 5 große Flaschen",
+                  "phaseId": "phase3",
+                  "categoryIndex": 0,
+                  "prio": "prio-2",
+                  "tag": "Deko",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_drink_plan": {
+                  "text": "Festlegen, welche Potion-Getränke in 100-ml- und 200-ml-Flaschen ausgeschenkt werden; Trink- und Dekoflaschen klar trennen",
+                  "phaseId": "phase3",
+                  "categoryIndex": 1,
+                  "prio": "prio-2",
+                  "tag": "Getränke",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_buy_filling": {
+                  "text": "Material für Potion-Deko beschaffen: Glukosesirup oder Glycerin, Lebensmittelfarben, Mica/Glitzer, Etiketten, Juteschnur und gegebenenfalls Siegelwachs/Naturkorken",
+                  "phaseId": "phase5",
+                  "categoryIndex": 3,
+                  "prio": "prio-3",
+                  "tag": "Deko / Einkauf",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_clean": {
+                  "text": "Trinkflaschen gründlich reinigen und auf Schäden, Dichtigkeit und brauchbare Korken prüfen",
+                  "phaseId": "phase5",
+                  "categoryIndex": 3,
+                  "prio": "prio-2",
+                  "tag": "Getränke",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_labels": {
+                  "text": "Etiketten für Heiltrank, Manatrank und weitere Potion-Flaschen gestalten und vorbereiten",
+                  "phaseId": "phase5",
+                  "categoryIndex": 3,
+                  "prio": "prio-3",
+                  "tag": "Deko",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_deco_fill": {
+                  "text": "Dekoflaschen mit farbiger Glukose-/Glycerinmischung und Mica/Glitzer befüllen und dauerhaft verschließen",
+                  "phaseId": "phase6",
+                  "categoryIndex": 2,
+                  "prio": "prio-2",
+                  "tag": "Deko",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_drink_prep": {
+                  "text": "Trinkflaschen vor dem Event erneut spülen und für die Befüllung bereitlegen",
+                  "phaseId": "phase6",
+                  "categoryIndex": 2,
+                  "prio": "prio-2",
+                  "tag": "Getränke",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_station": {
+                  "text": "Alchemistenstation mit Potion-Flaschen arrangieren; Dekoflaschen eindeutig außerhalb des Trinkbereichs platzieren",
+                  "phaseId": "phase7",
+                  "categoryIndex": 0,
+                  "prio": "prio-2",
+                  "tag": "Deko",
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_fill_drinks": {
+                  "text": "Trink-Potion-Flaschen mit den vorgesehenen Getränken befüllen und sauber beziehungsweise gekühlt bereitstellen",
+                  "phaseId": "phase7",
+                  "categoryIndex": 1,
+                  "prio": "prio-2",
+                  "tag": "Getränke",
+                  "by": "ChatGPT",
+                  "ts": now
+              }
+          }
+
+          shopping = {
+              "potion_glass_100ml": {
+                  "item": "Kugelflaschen 100 ml, lebensmittelecht",
+                  "qty": "12 Stück",
+                  "category": "Getränke",
+                  "responsible": "",
+                  "note": "Trink-Potions; bevorzugt mit Korken. Geplant bei Flaschen Gläser & Dosen.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glass_200ml": {
+                  "item": "Kugelflaschen 200 ml, lebensmittelecht",
+                  "qty": "6 Stück",
+                  "category": "Getränke",
+                  "responsible": "",
+                  "note": "Größere Trink-Potions; bevorzugt mit Korken. Geplant bei Flaschen Gläser & Dosen.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_deco_small": {
+                  "item": "Kleine Dekoflaschen",
+                  "qty": "ca. 6 Stück, 50 bis 80 ml",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Nur Dekoration, nicht zum Trinken.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_deco_medium": {
+                  "item": "Mittlere Dekoflaschen",
+                  "qty": "ca. 10 bis 12 Stück, 100 bis 150 ml",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Nur Dekoration, nicht zum Trinken.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_deco_large": {
+                  "item": "Große Dekoflaschen",
+                  "qty": "ca. 3 bis 5 Stück, 250 bis 500 ml",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Für optische Akzente an der Alchemistenstation; nicht zum Trinken.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_glucose_glycerin": {
+                  "item": "Glukosesirup oder Glycerin",
+                  "qty": "nach Bedarf",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Für dickflüssige Deko-Potions.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_food_colors": {
+                  "item": "Lebensmittelfarben für Potion-Deko",
+                  "qty": "Rot, Blau, Grün, Violett",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Zum Einfärben der Dekoflüssigkeiten.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_mica": {
+                  "item": "Mica-/Perlglanzpigmente oder Glitzer",
+                  "qty": "1 Set",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Für schimmernde und wirbelnde Deko-Potions. Dekoflaschen klar von Trinkflaschen trennen.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_labels": {
+                  "item": "Etikettenpapier für Potion-Flaschen",
+                  "qty": "1 Packung",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Für Heiltrank-, Manatrank- und weitere Alchemie-Etiketten.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_jute": {
+                  "item": "Juteschnur für Potion-Flaschen",
+                  "qty": "1 Rolle",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Für Korken, Etiketten und Flaschendekoration.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_sealing_wax": {
+                  "item": "Siegelwachs für Dekoflaschen",
+                  "qty": "optional",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Optional zum dauerhaften Versiegeln der reinen Dekoflaschen.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              },
+
+              "potion_corks": {
+                  "item": "Naturkorken als Reserve",
+                  "qty": "optional",
+                  "category": "Deko",
+                  "responsible": "",
+                  "note": "Nur falls die mitgelieferten Korken nicht ausreichen oder optisch nicht passen.",
+                  "bought": False,
+                  "by": "ChatGPT",
+                  "ts": now
+              }
+          }
+
+          def patch(path, payload):
+              url = f"{base}/{path}.json"
+              body = json.dumps(
+                  payload,
+                  ensure_ascii=False
+              ).encode("utf-8")
+
+              req = urllib.request.Request(
+                  url,
+                  data=body,
+                  method="PATCH",
+                  headers={
+                      "Content-Type":
+                          "application/json; charset=utf-8"
+                  }
+              )
+
+              try:
+                  with urllib.request.urlopen(
+                      req,
+                      timeout=30
+                  ) as response:
+                      result = response.read().decode("utf-8")
+                      print(
+                          f"{path}: HTTP {response.status}"
+                      )
+                      print(result[:500])
+
+              except urllib.error.HTTPError as exc:
+                  print(
+                      f"{path}: HTTP {exc.code}"
+                  )
+                  print(
+                      exc.read().decode(
+                          "utf-8",
+                          errors="replace"
+                      )
+                  )
+                  raise
+
+          patch("customTasks", custom_tasks)
+          patch("shopping", shopping)
+
+          print("Fertig.")
+          PY
