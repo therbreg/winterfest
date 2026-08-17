@@ -1,0 +1,14 @@
+.pwa-install-action{display:none}
+.pwa-install-action.is-ready{display:inline-flex;align-items:center;justify-content:center}
+.pwa-install-overlay{position:fixed;inset:0;z-index:500;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.68);padding:1rem}
+.pwa-install-overlay.open{display:flex}
+.pwa-install-card{width:min(430px,100%);background:#f0e8d6;color:#1a1410;border:2px solid #c49a2a;border-radius:14px 14px 4px 4px;padding:1.2rem;box-shadow:0 -16px 48px rgba(0,0,0,.35);font-family:'Crimson Text',Georgia,serif;position:relative}
+.pwa-install-card h2{font-family:'Cinzel',Georgia,serif;color:#8b3a0f;font-size:1.15rem;margin:0 2.5rem .35rem 0}
+.pwa-install-card p{margin:.3rem 0 .8rem;line-height:1.4}
+.pwa-install-card ol{margin:.6rem 0 1rem 1.25rem;padding:0}
+.pwa-install-card li{margin:.35rem 0}
+.pwa-install-close{position:absolute;top:.75rem;right:.75rem;width:40px;height:40px;border:1px solid rgba(196,154,42,.45);border-radius:50%;background:transparent;color:#6b6055;font-size:1.1rem;cursor:pointer}
+.pwa-install-primary{width:100%;min-height:46px;border:0;border-radius:4px;background:#8b3a0f;color:white;font-family:'Cinzel',Georgia,serif;font-weight:700;cursor:pointer}
+.pwa-install-mark{width:52px;height:52px;border-radius:12px;margin-bottom:.65rem;display:block}
+@media(min-width:700px){.pwa-install-overlay{align-items:center}.pwa-install-card{border-radius:8px}}
+@media(display-mode:standalone){html{background:#1a1410}body{overscroll-behavior-y:none}}

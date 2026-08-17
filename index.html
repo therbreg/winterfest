@@ -2,8 +2,18 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a1410">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Winterfest">
 <title>Das 30. Winterfest – Planung</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+<link rel="apple-touch-icon" href="./icons/icon.svg">
+<link rel="stylesheet" href="./pwa.css">
+<script src="./pwa.js" defer></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -23,9 +33,20 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-const EVENT_ID = decodeURIComponent(location.hash.replace("#", "").trim());
+const EVENT_ID_PATTERN = /^[A-Za-z0-9_-]{20,100}$/;
+let EVENT_ID = "";
+try {
+  EVENT_ID = decodeURIComponent(location.hash.replace("#", "").trim());
+} catch (_) {
+  EVENT_ID = "";
+}
 
-if (!EVENT_ID || !/^[A-Za-z0-9_-]{20,100}$/.test(EVENT_ID)) {
+if (!EVENT_ID_PATTERN.test(EVENT_ID)) {
+  const savedEventId = localStorage.getItem("wf_event_id") || "";
+  if (EVENT_ID_PATTERN.test(savedEventId)) {
+    location.replace(`${location.pathname}${location.search}#${encodeURIComponent(savedEventId)}`);
+    throw new Error("Gespeicherter Event-Key wird geladen.");
+  }
   document.body.innerHTML = `
     <div style="font-family: Georgia, serif; padding: 2rem; max-width: 700px; margin: 0 auto;">
       <h1>Zugriff fehlt</h1>
@@ -35,6 +56,7 @@ if (!EVENT_ID || !/^[A-Za-z0-9_-]{20,100}$/.test(EVENT_ID)) {
   `;
   throw new Error("Kein gültiger Event-Key im Link vorhanden.");
 }
+localStorage.setItem("wf_event_id", EVENT_ID);
 
 const dbPath = subpath => `events/${EVENT_ID}/${subpath}`;
 
@@ -1486,12 +1508,39 @@ window.APP = {
     const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins"];
     if (!valid.includes(view)) view = "overview";
     document.querySelectorAll(".orga-view").forEach(el => el.classList.toggle("is-active", el.dataset.view === view));
-    document.querySelectorAll(".view-tab").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
+    document.querySelectorAll(".view-tab").forEach(btn => {
+      const active = btn.dataset.view === view;
+      btn.classList.toggle("active", active);
+      if (active) btn.setAttribute("aria-current", "page");
+      else btn.removeAttribute("aria-current");
+    });
+    document.body.dataset.view = view;
+    const primary = ["overview","tasks","shopping","budget"];
+    document.getElementById("mobileMoreButton")?.classList.toggle("active", !primary.includes(view));
+    document.querySelectorAll("[data-menu-view]").forEach(item => item.classList.toggle("is-current", item.dataset.menuView === view));
     if (persist) localStorage.setItem("wf_view", view);
+    window.APP.closeMobileMenu();
     window.scrollTo({ top: 0, behavior: "smooth" });
   },
   printHub() { window.print(); },
-  toggleChat() { document.getElementById("chatPanel").classList.toggle("open"); },
+  openMobileMenu() {
+    const menu = document.getElementById("mobileMoreMenu");
+    if (!menu) return;
+    menu.classList.add("open");
+    menu.setAttribute("aria-hidden", "false");
+    document.body.classList.add("mobile-menu-open");
+    setTimeout(() => menu.querySelector(".mobile-more-close")?.focus(), 50);
+  },
+  closeMobileMenu() {
+    const menu = document.getElementById("mobileMoreMenu");
+    if (!menu) return;
+    menu.classList.remove("open");
+    menu.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("mobile-menu-open");
+  },
+  openMoreView(view) { window.APP.closeMobileMenu(); window.APP.switchView(view); },
+  openChatFromMenu() { window.APP.closeMobileMenu(); document.getElementById("chatPanel")?.classList.add("open"); },
+  toggleChat() { window.APP.closeMobileMenu(); document.getElementById("chatPanel").classList.toggle("open"); },
   scrollTo(id) { document.getElementById(id)?.scrollIntoView({behavior:"smooth",block:"start"}); },
   showName() { document.getElementById("nameModal").classList.add("open"); document.getElementById("nameInput").value = currentUser||""; setTimeout(()=>document.getElementById("nameInput").focus(),100); },
   confirmName() {
@@ -1615,7 +1664,14 @@ document.addEventListener("DOMContentLoaded",()=>{
   else window.APP.showName();
   populateCustomTaskForm();
   buildUI();
-  window.APP.switchView(localStorage.getItem("wf_view") || "overview", false);
+  const requestedView = new URLSearchParams(location.search).get("view");
+  window.APP.switchView(requestedView || localStorage.getItem("wf_view") || "overview", false);
+  const equipmentLink = document.getElementById("equipmentLink");
+  if (equipmentLink) {
+    equipmentLink.href = `ausstattung.html#${encodeURIComponent(EVENT_ID)}`;
+    equipmentLink.addEventListener("click", () => window.APP.closeMobileMenu());
+  }
+  document.addEventListener("keydown", event => { if (event.key === "Escape") window.APP.closeMobileMenu(); });
   setSyncBar("⟳ Verbinde mit Firebase…");
   ensureTentPlanData();
   bindFirebase();
@@ -1909,15 +1965,106 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
   .done-task-rendered .task-details{grid-row:4!important}
 }
 
+/* Mobile App Shell */
+.tab-icon{display:none}
+.mobile-more-btn,.mobile-more-overlay{display:none}
+.mobile-menu-open{overflow:hidden}
+
+@media(max-width:700px){
+  body{font-size:16px;line-height:1.5;padding-bottom:calc(76px + env(safe-area-inset-bottom));-webkit-tap-highlight-color:rgba(196,154,42,.18)}
+  button,a,input,select,textarea,summary{touch-action:manipulation}
+  .topbar{min-height:52px;padding:calc(.45rem + env(safe-area-inset-top)) .62rem .45rem;gap:.42rem}
+  .topbar-title{font-size:.72rem;letter-spacing:.05em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar-user{max-width:92px;overflow:hidden;text-overflow:ellipsis;font-size:.58rem}
+  .topbar-user span{display:inline}
+  .topbar-btn{min-width:42px;min-height:40px;padding:.35rem .52rem;font-size:.58rem}
+  .topbar-documents{display:none!important}
+  .sync-bar{font-size:.52rem;padding:.22rem;min-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header{padding:1.25rem .8rem 1.1rem}
+  header h1{font-size:1.65rem}
+  .header-eyebrow{font-size:.53rem;letter-spacing:.16em}
+  .header-date{font-size:.72rem}
+  body[data-view]:not([data-view="overview"]) header{display:none}
+  .container{width:100%;padding:.65rem .62rem calc(5.6rem + env(safe-area-inset-bottom));}
+  .progress-section,.dashboard-section{margin:.65rem 0 1rem}
+  .progress-section,.hub-section,.documents-section{padding:.9rem;border-radius:5px}
+  .hub-section,.documents-section{margin-bottom:1rem}
+  .dashboard-stats{gap:.4rem;margin:.65rem 0}
+  .dash-stat{padding:.58rem .35rem}
+  .dash-stat strong{font-size:1rem}
+  .dashboard-pin,.mini-card,.doc-card{padding:.75rem;border-radius:4px}
+  .hub-head,.documents-head{gap:.55rem;margin-bottom:.7rem}
+  .print-btn{width:100%}
+
+  .workspace-tabs{position:fixed;inset:auto 0 0 0;z-index:180;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%;margin:0;border:0;border-top:1px solid rgba(196,154,42,.55);background:var(--ink);box-shadow:0 -8px 24px rgba(26,20,16,.22);padding:0 0 env(safe-area-inset-bottom);top:auto}
+  .workspace-tabs .view-tab{display:none}
+  .workspace-tabs .view-tab.mobile-primary,.mobile-more-btn{min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.16rem;border:0;border-right:1px solid rgba(196,154,42,.18);background:var(--ink);color:#d1c6b5;font-family:'JetBrains Mono',monospace;font-size:.5rem;letter-spacing:.02em;text-transform:uppercase;padding:.38rem .15rem;cursor:pointer}
+  .workspace-tabs .view-tab[data-view="overview"]{order:1}
+  .workspace-tabs .view-tab[data-view="tasks"]{order:2}
+  .workspace-tabs .view-tab[data-view="shopping"]{order:3}
+  .workspace-tabs .view-tab[data-view="budget"]{order:4}
+  .mobile-more-btn{order:5}
+  .workspace-tabs .view-tab.mobile-primary.active,.mobile-more-btn.active{background:#2b2119;color:var(--gold);box-shadow:inset 0 3px 0 var(--gold)}
+  .tab-icon{display:block;font-family:Georgia,serif;font-size:1.18rem;line-height:1;color:inherit}
+  .mobile-more-btn{display:flex}
+
+  .task-phase-nav{display:flex!important;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;margin:0 0 1rem;scrollbar-width:none}
+  .task-phase-nav::-webkit-scrollbar{display:none}
+  .task-phase-nav .pni{flex:0 0 104px;min-width:104px;scroll-snap-align:start;min-height:54px;padding:.48rem .3rem}
+  .task-phase-nav .pni .pm{font-size:.7rem}
+
+  .hub-form,.doc-form,.task-add-form,.budget-quick-form,.inline-edit-grid,.task-controls,.task-details .task-controls{gap:.62rem}
+  .hub-form input,.hub-form select,.hub-form textarea,.doc-form input,.doc-form select,.doc-form textarea,.inline-edit-grid input,.inline-edit-grid select,.inline-edit-grid textarea,.task-controls input,.task-controls select{font-size:16px;min-height:44px;padding:.62rem .68rem}
+  .send-btn,.doc-open,.doc-delete,.tiny-check,.done-toggle{min-height:44px}
+  .doc-add-btn,.actions-row .send-btn{width:100%;justify-self:stretch}
+  .stack-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;align-items:stretch}
+  .stack-actions>*{width:100%;justify-content:center}
+
+  .task{grid-template-columns:28px minmax(0,1fr) auto!important;grid-template-rows:auto auto auto!important;gap:.38rem .55rem;padding:.72rem .68rem;margin-bottom:.18rem;border-radius:4px}
+  .task-drag{display:none}
+  .task-check{grid-column:1!important;grid-row:1!important;width:24px;height:24px;margin:0}
+  .task-priority{grid-column:2!important;grid-row:1!important;align-self:center;padding:3px 6px}
+  .task-actions{grid-column:3!important;grid-row:1!important;gap:.35rem}
+  .task-text{grid-column:1/4!important;grid-row:2!important;padding:.18rem 0 0;font-size:.95rem;line-height:1.4}
+  .task-details{grid-column:1/4!important;grid-row:3!important}
+  .done-task-category{grid-column:1/4!important;grid-row:3!important}
+  .done-task-rendered .task-details{grid-row:4!important}
+  .comment-btn,.task-delete{min-height:34px;min-width:34px;display:inline-flex;align-items:center;justify-content:center}
+
+  .side-panel{width:100%;height:100dvh;padding-bottom:env(safe-area-inset-bottom)}
+  .chat-panel{left:0;right:0;bottom:0;width:100%;height:min(72dvh,620px);border-left:0;border-right:0;padding-bottom:env(safe-area-inset-bottom)}
+  .input-row{padding:.72rem}
+  .input-row textarea{font-size:16px;min-height:46px;height:46px}
+  .modal-overlay{align-items:flex-end;padding:.65rem .65rem calc(.65rem + env(safe-area-inset-bottom))}
+  .modal-box{width:100%;border-radius:8px 8px 3px 3px;padding:1.25rem}
+  footer{padding:1.25rem .7rem calc(5rem + env(safe-area-inset-bottom))}
+
+  .mobile-more-overlay{position:fixed;inset:0;z-index:240;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.66);padding:0;opacity:0;pointer-events:none;transition:opacity .2s ease}
+  .mobile-more-overlay.open{display:flex;opacity:1;pointer-events:auto}
+  .mobile-more-sheet{width:100%;max-height:82dvh;overflow-y:auto;background:var(--parchment);border-top:2px solid var(--gold);border-radius:16px 16px 0 0;padding:1rem .8rem calc(1rem + env(safe-area-inset-bottom));box-shadow:0 -18px 48px rgba(0,0,0,.35)}
+  .mobile-more-head{display:flex;align-items:center;gap:.65rem;margin-bottom:.75rem;padding:0 .2rem}
+  .mobile-more-head h2{font-family:'Cinzel',serif;font-size:1rem;color:var(--ember);flex:1}
+  .mobile-more-close{width:42px;height:42px;border:1px solid var(--rule);border-radius:50%;background:transparent;color:var(--ash);font-size:1rem}
+  .mobile-more-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+  .mobile-menu-item{min-height:64px;display:flex;align-items:center;gap:.65rem;background:var(--parch2);border:1px solid var(--rule);border-radius:5px;padding:.7rem;color:var(--ink);text-decoration:none;text-align:left;font-family:'Crimson Text',Georgia,serif;font-size:.92rem;cursor:pointer}
+  .mobile-menu-item strong{font-family:'Cinzel',serif;font-size:.72rem;color:var(--ember);display:block}
+  .mobile-menu-icon{font-size:1.25rem;width:1.6rem;text-align:center;flex:0 0 auto}
+  .mobile-menu-item.is-current{background:var(--ink);color:var(--parchment);border-color:var(--gold)}
+  .mobile-menu-item.is-current strong{color:var(--gold)}
+  .mobile-menu-item.pwa-install-action.is-ready{display:flex}
+}
+
+@media(min-width:701px){.mobile-more-overlay{display:none!important}.progress-section.orga-view{display:block!important}}
+
 </style>
 </head>
-<body>
+<body data-view="overview">
 
 <div class="topbar">
   <div class="topbar-title">⚔ Das 30. Winterfest</div>
   <div class="topbar-user">Du: <span id="userLabel" onclick="APP.changeName()">…</span></div>
-  <button class="topbar-btn" onclick="APP.switchView('documents')">📎 Dokumente</button>
-  <button class="topbar-btn" onclick="APP.toggleChat()">💬 Chat</button>
+  <button class="topbar-btn topbar-documents" onclick="APP.switchView('documents')">📎 Dokumente</button>
+  <button class="topbar-btn" onclick="APP.toggleChat()" aria-label="Chat öffnen">💬 Chat</button>
 </div>
 
 <div class="sync-bar" id="syncBar">⟳ Verbinde mit Firebase…</div>
@@ -1929,7 +2076,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 </header>
 
 <div class="container">
-  <div class="progress-section">
+  <div class="progress-section orga-view is-active" data-view="overview">
     <p class="progress-title">Gesamtfortschritt</p>
     <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progressFill"></div></div>
     <div class="progress-stats">
@@ -1952,15 +2099,16 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
   </section>
 
   <nav class="workspace-tabs" aria-label="Arbeitsbereiche">
-    <button class="view-tab active" data-view="overview" onclick="APP.switchView('overview')">Übersicht</button>
-    <button class="view-tab" data-view="tasks" onclick="APP.switchView('tasks')">Aufgaben</button>
+    <button class="view-tab mobile-primary active" data-view="overview" onclick="APP.switchView('overview')"><span class="tab-icon" aria-hidden="true">⌂</span><span>Übersicht</span></button>
+    <button class="view-tab mobile-primary" data-view="tasks" onclick="APP.switchView('tasks')"><span class="tab-icon" aria-hidden="true">✓</span><span>Aufgaben</span></button>
     <button class="view-tab" data-view="documents" onclick="APP.switchView('documents')">Dokumente</button>
-    <button class="view-tab" data-view="budget" onclick="APP.switchView('budget')">Budget</button>
-    <button class="view-tab" data-view="shopping" onclick="APP.switchView('shopping')">Einkauf</button>
+    <button class="view-tab mobile-primary" data-view="budget" onclick="APP.switchView('budget')"><span class="tab-icon" aria-hidden="true">€</span><span>Budget</span></button>
+    <button class="view-tab mobile-primary" data-view="shopping" onclick="APP.switchView('shopping')"><span class="tab-icon" aria-hidden="true">▣</span><span>Einkauf</span></button>
     <button class="view-tab" data-view="helpers" onclick="APP.switchView('helpers')">Helfer</button>
     <button class="view-tab" data-view="tentleads" onclick="APP.switchView('tentleads')">Zelte</button>
     <button class="view-tab" data-view="decisions" onclick="APP.switchView('decisions')">Beschlüsse</button>
     <button class="view-tab" data-view="pins" onclick="APP.switchView('pins')">Pins</button>
+    <button class="mobile-more-btn" id="mobileMoreButton" type="button" onclick="APP.openMobileMenu()" aria-haspopup="dialog" aria-controls="mobileMoreMenu"><span class="tab-icon" aria-hidden="true">☰</span><span>Mehr</span></button>
   </nav>
 
   <section class="hub-section task-add-section orga-view" data-view="tasks" id="taskAddSection">
@@ -2145,6 +2293,25 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 </div>
 
 <footer>Das 30. Winterfest · 29. Mai 2027 · Mittelalterliches Waldlager</footer>
+
+<div class="mobile-more-overlay" id="mobileMoreMenu" aria-hidden="true" onclick="if(event.target===this)APP.closeMobileMenu()">
+  <section class="mobile-more-sheet" role="dialog" aria-modal="true" aria-labelledby="mobileMoreTitle">
+    <div class="mobile-more-head">
+      <h2 id="mobileMoreTitle">Weitere Bereiche</h2>
+      <button class="mobile-more-close" type="button" onclick="APP.closeMobileMenu()" aria-label="Menü schließen">✕</button>
+    </div>
+    <div class="mobile-more-grid">
+      <button class="mobile-menu-item" data-menu-view="documents" type="button" onclick="APP.openMoreView('documents')"><span class="mobile-menu-icon" aria-hidden="true">📎</span><span><strong>Dokumente</strong>Unterlagen und Links</span></button>
+      <a class="mobile-menu-item" id="equipmentLink" href="ausstattung.html"><span class="mobile-menu-icon" aria-hidden="true">⚒</span><span><strong>Ausstattung</strong>Material und Beschaffung</span></a>
+      <button class="mobile-menu-item" data-menu-view="helpers" type="button" onclick="APP.openMoreView('helpers')"><span class="mobile-menu-icon" aria-hidden="true">♟</span><span><strong>Helfer</strong>Rollen und Zeiten</span></button>
+      <button class="mobile-menu-item" data-menu-view="tentleads" type="button" onclick="APP.openMoreView('tentleads')"><span class="mobile-menu-icon" aria-hidden="true">⌂</span><span><strong>Zelte</strong>Anfragen und Optionen</span></button>
+      <button class="mobile-menu-item" data-menu-view="decisions" type="button" onclick="APP.openMoreView('decisions')"><span class="mobile-menu-icon" aria-hidden="true">✦</span><span><strong>Beschlüsse</strong>Feste Entscheidungen</span></button>
+      <button class="mobile-menu-item" data-menu-view="pins" type="button" onclick="APP.openMoreView('pins')"><span class="mobile-menu-icon" aria-hidden="true">⌖</span><span><strong>Pins</strong>Wichtige Hinweise</span></button>
+      <button class="mobile-menu-item" type="button" onclick="APP.openChatFromMenu()"><span class="mobile-menu-icon" aria-hidden="true">💬</span><span><strong>Chat</strong>Gruppenabstimmung</span></button>
+      <button class="mobile-menu-item pwa-install-action" type="button" data-install-app onclick="APP.closeMobileMenu()"><span class="mobile-menu-icon" aria-hidden="true">⇩</span><span><strong>App installieren</strong>Zum Startbildschirm</span></button>
+    </div>
+  </section>
+</div>
 
 <div class="side-panel" id="commentPanel">
   <div class="panel-header">
