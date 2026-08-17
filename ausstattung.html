@@ -47,7 +47,7 @@
     <div class="toolbar"><input id="search" class="search" type="search" placeholder="Suchen, z.B. Vendera, Pavillon, Other Ages"><select id="filterArea"><option value="">Alle Bereiche</option></select><select id="filterStatus"><option value="">Alle Status</option></select><select id="filterType"><option value="">Alle Typen</option></select><button id="reset" class="btn secondary" type="button">Filter löschen</button></div>
     <details class="addbox" id="addbox"><summary>Neuen Posten hinzufügen</summary><div class="addgrid"><input id="nItem" class="span2" maxlength="100" placeholder="Gegenstand / Aufgabe"><select id="nArea"></select><select id="nType"></select><select id="nStatus"></select><input id="nSource" maxlength="100" placeholder="Quelle / Anbieter"><input id="nQty" maxlength="60" placeholder="Menge"><input id="nPlanned" type="number" min="0" step="0.01" placeholder="Planpreis EUR"><input id="nActual" type="number" min="0" step="0.01" placeholder="Ist-Kosten EUR"><input id="nDue" type="date"><input id="nNext" class="span2" maxlength="180" placeholder="Nächster Schritt"><textarea id="nNote" class="span4" maxlength="700" placeholder="Notiz, Maße, Transport, Abhängigkeiten"></textarea><div class="actions-row"><button id="add" class="btn" type="button">Posten hinzufügen</button></div></div></details>
     <div id="groups"></div>
-    <p class="footnote">Other Ages ist als "Später bestätigen" eingeordnet: Umfang und Selbstabholung sind weitgehend geklärt, das Angebot ist aber freibleibend und noch nicht final beauftragt.</p>
+    <p class="footnote"><strong>Zeltkonzept:</strong> Eigener 6x6-m-Baldachin inklusive Holzgestänge + vorhandener 3x6-m-Pavillon. Ab 28.09. Suchagenten aktivieren, ab 02.11.2026 intensiv gebraucht suchen. Falls bis Ende Januar kein überzeugender Gebrauchter gefunden wird, neu spätestens bis 15.02.2027 bestellen. Vendera und Mittelalter-Zelte24 bleiben Fallback. Other Ages bleibt auf "Später bestätigen" für Frühjahr 2027.</p>
   </main>
 </div>
 <script type="module">
@@ -79,8 +79,8 @@ document.getElementById("backLink").href=`index.html#${encodeURIComponent(EVENT_
 const app=initializeApp(firebaseConfig),db=getDatabase(app),dbPath=sub=>`events/${EVENT_ID}/${sub}`;
 const AREAS=["Zelt & Pavillon","Other Ages","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];
 const TYPES=["Vorhanden","Kaufen","Mieten","DIY","Leihen","Beauftragen","Verbrauch","Entscheidung"];
-const STATUSES=["Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Optional"];
-const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));
+const STATUSES=["Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional"];
+const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Fallback","Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));
 let assets={},budget={},shopping={};
 const esc=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const fmt=n=>Number(n||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
@@ -93,11 +93,13 @@ function seedRows(){
   const now=Date.now();
   const r=(area,item,type,status,source="",qty="",planned=0,actual=0,next="",note="")=>({area,item,type,status,source,qty,planned,actual,next,note,due:"",seeded:true,ts:now,updatedAt:now,updatedBy:"Planstand 14.08.2026"});
   return {
-    vendera_doppelmaster:r("Zelt & Pavillon","Vendera Doppelmaster 8x6 m","Mieten","Warten auf Antwort","Vendera","1",0,0,"Einzelpreis abwarten und mit Baldachin sowie DIY vergleichen","Gesamtangebot für Doppelmaster plus 6x6-Baldachin: 1.200 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug. Das Gesamtpaket liegt über dem vorgesehenen Zeltbudget; Einzelpreis angefragt."),
-    vendera_baldachin:r("Zelt & Pavillon","Vendera Baldachin 6x6 m","Mieten","Warten auf Antwort","Vendera","1",0,0,"Einzelpreis abwarten und mit Doppelmaster sowie DIY vergleichen","Als Einzelmiete angefragt. Bei ähnlichem Einzelpreis ist der 8x6-Doppelmaster wegen der größeren Fläche voraussichtlich attraktiver."),
-    pavillon:r("Zelt & Pavillon","Vorhandener Pavillon 3x6 m","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Mit Schabracken, Stoff/Jute, Sisalseil und Bannern verkleiden","Bleibt als zweiter überdachter Bereich neben dem Vendera-Zelt."),
+    baldachin_kauf:r("Zelt & Pavillon","Eigener Baldachin 6x6 m inkl. Holzgestänge","Kaufen","Gewählte Lösung","Gebrauchtmarkt / LARP-Zelte","1 komplett",1125.80,0,"Ab 02.11.2026 intensiv gebraucht suchen; wenn bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen","Primärlösung. MPS endet am 27.09.2026; die breitere Herbst-Marktsaison reicht bis Anfang November. Referenz neu: LARP-Zelte 1.125,80 EUR plus Versand."),
+    mz24_baldachin_miete:r("Zelt & Pavillon","Mittelalter-Zelte24 Baldachin 6x6 m mieten","Mieten","Fallback","Mittelalter-Zelte24","1",624.97,0,"Nur als Rückfalllösung behalten","Frühere Rechnung: 3 Tage Miete zu 84,99 EUR plus 370 EUR Hin- und Rücktransport = ca. 624,97 EUR."),
+    vendera_doppelmaster:r("Zelt & Pavillon","Vendera Doppelmaster 8x6 m","Mieten","Fallback","Vendera","1",900,0,"Nur nutzen, falls Kauf des eigenen Baldachins scheitert","Einzelpreis 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug. Nicht mehr Teil des aktiven Planbudgets."),
+    vendera_baldachin:r("Zelt & Pavillon","Vendera Baldachin 6x6 m","Mieten","Fallback","Vendera","1",750,0,"Nur nutzen, falls Kauf des eigenen Baldachins scheitert","Einzelpreis 750 EUR inklusive Vendera-Service. Nicht mehr Teil des aktiven Planbudgets."),
+    pavillon:r("Zelt & Pavillon","Vorhandener Pavillon 3x6 m","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Mit Schabracken, Stoff/Jute, Sisalseil und Bannern verkleiden","Bleibt als zweiter überdachter Bereich neben dem eigenen 6x6-m-Baldachin."),
     regenregel:r("Zelt & Pavillon","Keine zusätzlichen Lagerplanen einplanen","Entscheidung","Erledigt","Planungsentscheidung","-",0,0,"Keine weitere Beschaffung","Bei ernsthaftem Regen wird das Event verschoben. Daher keine zusätzliche Stoffhaut oder aufwendige Schlechtwetterlösung für den Pavillon."),
-    schabracken:r("Zelt & Pavillon","Schabracken für den vorhandenen Pavillon","Beauftragen","Zu beauftragen","Schneiderei","für 3x6 m Pavillon",0,0,"Maße und Höhe festlegen, Stoff auswählen, Schneiderei anfragen","Saubere lange Nähte; nur für den vorhandenen Pavillon erforderlich, wenn zusätzlich ein echtes Vendera-Zelt gemietet wird."),
+    schabracken:r("Zelt & Pavillon","Schabracken für den vorhandenen Pavillon","Beauftragen","Zu beauftragen","Schneiderei","für 3x6 m Pavillon",0,0,"Maße und Höhe festlegen, Stoff auswählen, Schneiderei anfragen","Saubere lange Nähte; Bestandteil der endgültigen Lösung aus eigenem Baldachin plus vorhandenem Pavillon."),
     schabracken_stoff:r("Zelt & Pavillon","Stoff für Schabracken","Kaufen","Zu kaufen","noch offen","nach Zuschnitt",0,0,"Nach finalen Maßen kaufen","Robuster Stoff in passender Optik."),
     beinverkleidung:r("Zelt & Pavillon","Jutestoff / Stoff für Pavillonbeine","Kaufen","Zu kaufen","noch offen","für sichtbare Beine",0,0,"Bedarf nach Aufbauposition messen","Mit Schnüren oder vorhandenem Sisalseil befestigen."),
     sisal:r("Deko","Sisalseile","Vorhanden","Vorhanden","Eigenbestand","mehrere",0,0,"Für Pavillon und Geländedeko reservieren","Für Befestigung, optische Verkleidung und einzelne Abgrenzungen nutzbar."),
@@ -143,6 +145,107 @@ async function seed(){
     patch["assetMeta/seededAt"]=Date.now();
     await update(ref(db,dbPath("")),patch);
   }catch(e){console.error(e);sync("Initialisierung fehlgeschlagen","err");}
+}
+
+
+// system_asset_tent_plan_migration_20260817
+async function migrateTentPlan(){
+  const version="2026-08-17-v1";
+  try{
+    const marker=await get(ref(db,dbPath("assetMeta/tentPlanVersion")));
+    if(marker.val()===version)return;
+
+    const current=(await get(ref(db,dbPath("assets")))).val()||{};
+    const now=Date.now(),patch={};
+
+    const put=(key,fields)=>{
+      Object.entries(fields).forEach(([field,value])=>{
+        patch[`assets/${key}/${field}`]=value;
+      });
+      patch[`assets/${key}/updatedAt`]=now;
+      patch[`assets/${key}/updatedBy`]="Planstand 17.08.2026";
+    };
+
+    if(!current.baldachin_kauf){
+      patch["assets/baldachin_kauf"]={
+        area:"Zelt & Pavillon",
+        item:"Eigener Baldachin 6x6 m inkl. Holzgestänge",
+        type:"Kaufen",
+        status:"Gewählte Lösung",
+        source:"Gebrauchtmarkt / LARP-Zelte",
+        qty:"1 komplett",
+        planned:1125.80,
+        actual:0,
+        due:"2027-02-15",
+        next:"Ab 02.11.2026 intensiv gebraucht suchen; wenn bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen",
+        note:"Primärlösung. MPS endet am 27.09.2026; die breitere Herbst-Marktsaison reicht bis Anfang November. Referenz neu: LARP-Zelte 1.125,80 EUR plus Versand.",
+        seeded:true,
+        ts:now,
+        updatedAt:now,
+        updatedBy:"Planstand 17.08.2026"
+      };
+    }else{
+      put("baldachin_kauf",{
+        status:"Gewählte Lösung",
+        planned:1125.80,
+        due:"2027-02-15",
+        next:"Ab 02.11.2026 intensiv gebraucht suchen; wenn bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen"
+      });
+    }
+
+    if(!current.mz24_baldachin_miete){
+      patch["assets/mz24_baldachin_miete"]={
+        area:"Zelt & Pavillon",
+        item:"Mittelalter-Zelte24 Baldachin 6x6 m mieten",
+        type:"Mieten",
+        status:"Fallback",
+        source:"Mittelalter-Zelte24",
+        qty:"1",
+        planned:624.97,
+        actual:0,
+        due:"",
+        next:"Nur als Rückfalllösung behalten",
+        note:"Frühere Rechnung: 3 Tage Miete zu 84,99 EUR plus 370 EUR Hin- und Rücktransport = ca. 624,97 EUR.",
+        seeded:true,
+        ts:now,
+        updatedAt:now,
+        updatedBy:"Planstand 17.08.2026"
+      };
+    }else{
+      put("mz24_baldachin_miete",{status:"Fallback",planned:624.97});
+    }
+
+    put("vendera_doppelmaster",{
+      status:"Fallback",
+      planned:900,
+      next:"Nur nutzen, falls Kauf des eigenen Baldachins scheitert",
+      note:"Einzelpreis 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug. Nicht mehr Teil des aktiven Planbudgets."
+    });
+
+    put("vendera_baldachin",{
+      status:"Fallback",
+      planned:750,
+      next:"Nur nutzen, falls Kauf des eigenen Baldachins scheitert",
+      note:"Einzelpreis 750 EUR inklusive Vendera-Service. Nicht mehr Teil des aktiven Planbudgets."
+    });
+
+    put("pavillon",{
+      next:"Mit Schabracken, Stoff/Jute, Sisalseil und Bannern verkleiden",
+      note:"Bleibt als zweiter überdachter Bereich neben dem eigenen 6x6-m-Baldachin."
+    });
+
+    put("schabracken",{
+      next:"Maße und Höhe festlegen, Stoff auswählen, Schneiderei anfragen",
+      note:"Saubere lange Nähte; Bestandteil der endgültigen Lösung aus eigenem Baldachin plus vorhandenem Pavillon."
+    });
+
+    patch["assetMeta/tentPlanVersion"]=version;
+    patch["assetMeta/tentPlanUpdatedAt"]=now;
+    await update(ref(db,dbPath("")),patch);
+  }catch(e){
+    console.error("Zeltplan-Migration Ausstattung fehlgeschlagen",e);
+    sync("Zeltplan-Migration fehlgeschlagen","err");
+  }
 }
 
 async function selfLink(){
@@ -204,7 +307,7 @@ function card(i){
 
 function render(){
   const rows=Object.entries(assets).map(([key,v])=>({key,...v}));
-  const planned=rows.reduce((s,i)=>s+num(i.planned),0),actual=rows.reduce((s,i)=>s+num(i.actual),0);
+  const planned=rows.filter(i=>i.status!=="Fallback").reduce((s,i)=>s+num(i.planned),0),actual=rows.reduce((s,i)=>s+num(i.actual),0);
   const done=rows.filter(i=>COMPLETE.has(i.status)).length,waiting=rows.filter(i=>WAIT.has(i.status)).length;
   const open=rows.filter(i=>!COMPLETE.has(i.status)&&!OPTIONAL.has(i.status)).length;
   document.getElementById("stats").innerHTML=`
@@ -256,6 +359,7 @@ onValue(ref(db,dbPath("assets")),s=>{assets=s.val()||{};render();sync("Firebase 
 onValue(ref(db,dbPath("budget")),s=>{budget=s.val()||{};render();});
 onValue(ref(db,dbPath("shopping")),s=>{shopping=s.val()||{};render();});
 await seed();
+await migrateTentPlan();
 await selfLink();
 </script>
 </body>

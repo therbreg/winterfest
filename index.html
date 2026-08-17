@@ -7,7 +7,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, update, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCKzCIluCSXOoJR1RtbavOQkPYKXdGKvVY",
@@ -84,13 +84,13 @@ const normalizeDocLink = raw => {
   return "";
 };
 
-const COMMON_CATEGORIES = ["Toilette", "Essen", "Getränke", "Deko", "Technik", "Sicherheit", "Wettkampf", "Gelände", "Helfer", "Einkauf", "Budget", "Gästeliste", "Infrastruktur", "Musik", "Sonstiges"];
+const COMMON_CATEGORIES = ["Toilette", "Essen", "Getränke", "Deko", "Technik", "Sicherheit", "Wettkampf", "Gelände", "Helfer", "Einkauf", "Budget", "Gästeliste", "Infrastruktur", "Zelt", "Musik", "Sonstiges"];
 const DOC_CATEGORIES = ["Gelände", "Toiletten", "Essen", "Getränke", "Budget", "Helfer", "Einkauf", "Gästeliste", "Angebot", "Lageplan", "Sonstiges"];
 const PIN_CATEGORIES = ["Info", "Deadline", "Warnung", "Fokus", "Offen", "Budget", "Einkauf", "Helfer", "Gelände", "Sonstiges"];
-const DECISION_CATEGORIES = ["Datum", "Gelände", "Toilette", "Essen", "Budget", "Programm", "Helfer", "Einkauf", "Technik", "Sonstiges"];
+const DECISION_CATEGORIES = ["Datum", "Gelände", "Toilette", "Essen", "Budget", "Programm", "Helfer", "Einkauf", "Technik", "Zelt", "Sonstiges"];
 const TENT_TYPES = ["Verein", "Zeltverleih", "LARP-Gruppe", "Mittelaltergruppe", "Privatkontakt", "Shop", "Sonstiges"];
-const TENT_STATUS = ["Idee", "Angefragt", "Nachfassen", "Zusage", "Absage", "Gebucht", "Unklar"];
-const TENT_STATUS_ORDER = {"Gebucht":0,"Zusage":1,"Nachfassen":2,"Angefragt":3,"Idee":4,"Unklar":5,"Absage":6};
+const TENT_STATUS = ["Gewählte Lösung", "Idee", "Angefragt", "Nachfassen", "Zusage", "Fallback", "Absage", "Gebucht", "Unklar"];
+const TENT_STATUS_ORDER = {"Gewählte Lösung":0,"Gebucht":1,"Zusage":2,"Nachfassen":3,"Angefragt":4,"Fallback":5,"Idee":6,"Unklar":7,"Absage":8};
 const optionList = (items, selected) => items.map(v => `<option value="${esc(v)}" ${String(selected || "") === v ? "selected" : ""}>${esc(v)}</option>`).join("");
 
 const setSyncBar = (msg,cls) => {
@@ -137,6 +137,321 @@ function maybeMigrateLegacyTaskData() {
       setSyncBar("✕ Aufgabenmigration fehlgeschlagen: "+err.message,"err");
     })
     .finally(() => { legacyMigrationRunning = false; });
+}
+
+
+// system_tent_plan_migration_20260817
+async function ensureTentPlanData() {
+  const version = "2026-08-17-v1";
+  try {
+    const marker = await get(ref(db, dbPath("meta/tentPlanVersion")));
+    if (marker.val() === version) return;
+
+    const now = Date.now();
+    const patch = {};
+
+    const [decisionSnap, leadSnap, budgetSnap, shoppingSnap] = await Promise.all([
+      get(ref(db, dbPath("decisions"))),
+      get(ref(db, dbPath("tentLeads"))),
+      get(ref(db, dbPath("budget"))),
+      get(ref(db, dbPath("shopping")))
+    ]);
+
+    const decisions = decisionSnap.val() || {};
+    const leads = leadSnap.val() || {};
+    const budgets = budgetSnap.val() || {};
+    const shopping = shoppingSnap.val() || {};
+
+    const norm = value => String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const findKey = (obj, predicate) => {
+      const hit = Object.entries(obj).find(([, value]) => predicate(value || {}));
+      return hit ? hit[0] : "";
+    };
+    const appendNote = (oldNote, extra) => {
+      const base = String(oldNote || "").trim();
+      if (base.includes(extra)) return base;
+      return [base, extra].filter(Boolean).join(" | ").slice(0, 500);
+    };
+
+    if (!findKey(decisions, d => norm(d.title).includes("zeltkonzept"))) {
+      patch["decisions/system_zeltkonzept_20260817"] = {
+        title: "Zeltkonzept final",
+        category: "Zelt",
+        text: "Gewählte Lösung: eigenen 6x6-m-Mittelalter-Baldachin inklusive vollständigem Holzgestänge kaufen und mit dem vorhandenen 3x6-m-Pavillon kombinieren. Pavillon mit Schabracken, Jute, Sisalseilen und DIY-Bannern verkleiden. Vendera und Mittelalter-Zelte24 bleiben nur Fallback. Bei ernsthaftem Regen wird das Event verschoben.",
+        pinned: true,
+        by: "System",
+        ts: now
+      };
+    }
+
+    const upsertLead = (fixedKey, predicate, fields) => {
+      const key = findKey(leads, predicate) || fixedKey;
+      Object.entries(fields).forEach(([field, value]) => {
+        patch[`tentLeads/${key}/${field}`] = value;
+      });
+      if (!leads[key] && key === fixedKey) {
+        patch[`tentLeads/${key}/by`] = "System";
+        patch[`tentLeads/${key}/ts`] = now;
+      } else {
+        patch[`tentLeads/${key}/updatedBy`] = "System";
+        patch[`tentLeads/${key}/updatedAt`] = now;
+      }
+    };
+
+    upsertLead(
+      "system_baldachin_kauf_20260817",
+      v => norm(v.name).includes("eigener 6x6") || (norm(v.name).includes("baldachin") && norm(v.status).includes("gewählte")),
+      {
+        name: "Eigener 6x6-m-Baldachin inkl. Holzgestänge",
+        type: "Shop",
+        status: "Gewählte Lösung",
+        contact: "Gebrauchtmarkt / LARP-Zelte als Neupreis-Referenz",
+        link: "https://www.larp-zelte.com/produkte/baldachin-6x6-32080",
+        price: 1125.80,
+        followUp: "2026-11-02",
+        pinned: true,
+        note: "Primärlösung. Erst nach Saisonende gezielt gebraucht suchen. Referenz neu: 1.125,80 EUR plus Versand. Wenn bis Ende Januar kein guter Gebrauchter gefunden wird, Neubestellung spätestens 15.02.2027."
+      }
+    );
+
+    const vdKey = findKey(leads, v => norm(v.name).includes("vendera") && norm(v.name).includes("doppel"));
+    if (vdKey) {
+      patch[`tentLeads/${vdKey}/status`] = "Fallback";
+      patch[`tentLeads/${vdKey}/price`] = 900;
+      patch[`tentLeads/${vdKey}/note`] = appendNote(
+        leads[vdKey].note,
+        "Nur noch Fallback: 8x6-m-Doppelmaster 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug."
+      );
+    } else {
+      upsertLead(
+        "system_vendera_doppelmaster_20260817",
+        () => false,
+        {
+          name: "Vendera Doppelmaster 8x6 m",
+          type: "Verein",
+          status: "Fallback",
+          price: 900,
+          followUp: "",
+          pinned: false,
+          note: "Fallback zur Kaufstrategie. 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug."
+        }
+      );
+    }
+
+    const vbKey = findKey(leads, v => norm(v.name).includes("vendera") && norm(v.name).includes("baldachin"));
+    if (vbKey) {
+      patch[`tentLeads/${vbKey}/status`] = "Fallback";
+      patch[`tentLeads/${vbKey}/price`] = 750;
+      patch[`tentLeads/${vbKey}/note`] = appendNote(
+        leads[vbKey].note,
+        "Nur noch Fallback: 6x6-m-Baldachin 750 EUR inklusive Vendera-Service."
+      );
+    } else {
+      upsertLead(
+        "system_vendera_baldachin_20260817",
+        () => false,
+        {
+          name: "Vendera Baldachin 6x6 m",
+          type: "Verein",
+          status: "Fallback",
+          price: 750,
+          followUp: "",
+          pinned: false,
+          note: "Fallback zur Kaufstrategie. 750 EUR inklusive Lieferung, Abholung und angebotener Aufbau-Begleitung."
+        }
+      );
+    }
+
+    const mzKey = findKey(leads, v => norm(v.name).includes("mittelalter-zelt") || norm(v.name).includes("mittelalter zelt"));
+    if (mzKey) {
+      patch[`tentLeads/${mzKey}/status`] = "Fallback";
+      patch[`tentLeads/${mzKey}/price`] = 624.97;
+      patch[`tentLeads/${mzKey}/note`] = appendNote(
+        leads[mzKey].note,
+        "Nur noch Fallback: frühere 6x6-m-Mietrechnung ca. 624,97 EUR für drei Tage inklusive 370 EUR Hin- und Rücktransport."
+      );
+    } else {
+      upsertLead(
+        "system_mz24_baldachin_miete_20260817",
+        () => false,
+        {
+          name: "Mittelalter-Zelte24 Baldachin 6x6 m Miete",
+          type: "Zeltverleih",
+          status: "Fallback",
+          price: 624.97,
+          followUp: "",
+          pinned: false,
+          note: "Fallback. Frühere Rechnung: drei Tage Miete zu 84,99 EUR plus 370 EUR Hin- und Rücktransport."
+        }
+      );
+    }
+
+    const baldBudgetKey = findKey(
+      budgets,
+      b => norm(b.title).includes("baldachin") && (norm(b.title).includes("eigen") || norm(b.note).includes("eigentum"))
+    );
+
+    if (!baldBudgetKey) {
+      patch["budget/system_baldachin_kauf_20260817"] = {
+        title: "Eigener 6x6-m-Baldachin inkl. Gestänge",
+        category: "Zelt",
+        planned: 1125.80,
+        actual: 0,
+        paidBy: "",
+        reimbursed: false,
+        note: "Aktuelle Neupreis-Referenz LARP-Zelte: 1.125,80 EUR plus Versand. Gebrauchtkauf wird vorher bis Ende Januar geprüft.",
+        by: "System",
+        ts: now
+      };
+    }
+
+    Object.entries(budgets).forEach(([key, b]) => {
+      const title = norm(b.title);
+      if (
+        Number(b.actual || 0) === 0
+        && !b.reimbursed
+        && (
+          title.includes("vendera")
+          || (title.includes("mittelalter") && title.includes("zelt") && title.includes("miet"))
+        )
+      ) {
+        patch[`budget/${key}/planned`] = 0;
+        patch[`budget/${key}/note`] = appendNote(
+          b.note,
+          "Nicht mehr im aktiven Planbudget: nur noch Fallback zur gewählten Baldachin-Kauflösung."
+        ).slice(0, 300);
+        patch[`budget/${key}/updatedBy`] = "System";
+        patch[`budget/${key}/updatedAt`] = now;
+      }
+    });
+
+    const ensureShopping = (fixedKey, needles, entry) => {
+      const exists = findKey(
+        shopping,
+        s => needles.every(n => norm(s.item).includes(n))
+      );
+      if (!exists) patch[`shopping/${fixedKey}`] = entry;
+    };
+
+    ensureShopping(
+      "system_baldachin_purchase_20260817",
+      ["baldachin"],
+      {
+        item: "6x6-m-Baldachin inkl. Holzgestänge",
+        qty: "1 komplett",
+        category: "Zelt",
+        responsible: "",
+        note: "Primär gebraucht suchen; falls bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen.",
+        bought: false,
+        by: "System",
+        ts: now
+      }
+    );
+
+    ensureShopping(
+      "system_schabracken_stoff_20260817",
+      ["schabrack"],
+      {
+        item: "Stoff für Pavillon-Schabracken",
+        qty: "nach Aufmaß",
+        category: "Deko",
+        responsible: "",
+        note: "Für vorhandenen 3x6-m-Pavillon; Nähen ggf. beauftragen.",
+        bought: false,
+        by: "System",
+        ts: now
+      }
+    );
+
+    ensureShopping(
+      "system_jute_pavillon_20260817",
+      ["jute", "pavillon"],
+      {
+        item: "Jutestoff für Pavillonbeine",
+        qty: "nach Aufmaß",
+        category: "Deko",
+        responsible: "",
+        note: "Mit vorhandenen Sisalseilen befestigen.",
+        bought: false,
+        by: "System",
+        ts: now
+      }
+    );
+
+    ensureShopping(
+      "system_banner_material_20260817",
+      ["banner"],
+      {
+        item: "Stoff und Acrylfarbe für DIY-Banner",
+        qty: "für ca. 4-6 Banner",
+        category: "Deko",
+        responsible: "",
+        note: "Günstiger Stoff, z.B. IKEA, plus Acrylfarbe aus dem Baumarkt.",
+        bought: false,
+        by: "System",
+        ts: now
+      }
+    );
+
+    ensureShopping(
+      "system_wimpel_20260817",
+      ["wimpel"],
+      {
+        item: "Wimpelketten",
+        qty: "ca. 30-40 m",
+        category: "Gelände",
+        responsible: "",
+        note: "Für Eingang, Zonentrennung und optische Abgrenzung.",
+        bought: false,
+        by: "System",
+        ts: now
+      }
+    );
+
+    ensureShopping(
+      "system_fichtenlatten_20260817",
+      ["fichten"],
+      {
+        item: "Fichtenlatten als Gelände-Pfähle",
+        qty: "ca. 15-25",
+        category: "Gelände",
+        responsible: "",
+        note: "Stückzahl nach finalem Lageplan festlegen.",
+        bought: false,
+        by: "System",
+        ts: now
+      }
+    );
+
+    ensureShopping(
+      "system_strohballen_20260817",
+      ["stroh"],
+      {
+        item: "Strohballen",
+        qty: "ca. 4-8",
+        category: "Gelände",
+        responsible: "",
+        note: "Erst kurz vor dem Event lokal beschaffen; Abstand zu Grill, Feuer und Jute halten.",
+        bought: false,
+        by: "System",
+        ts: now
+      }
+    );
+
+    patch["tasks/oct_suchagenten_start/due"] = "2026-09-28";
+    patch["tasks/oct_gebrauchtmarkt/due"] = "2026-11-02";
+    patch["tasks/oct_wetterschutzentscheidung/due"] = "2027-01-31";
+    patch["tasks/jan_wetterschutz_kaufen/due"] = "2027-02-15";
+    patch["tasks/apr_planen_testaufbau/due"] = "2027-04-30";
+
+    patch["meta/tentPlanVersion"] = version;
+    patch["meta/tentPlanUpdatedAt"] = now;
+
+    await update(ref(db, dbPath("")), patch);
+    console.info("Zeltplan-Migration angewendet:", version);
+  } catch (err) {
+    console.error("Zeltplan-Migration fehlgeschlagen", err);
+  }
 }
 
 function bindFirebase() {
@@ -500,9 +815,10 @@ function renderTentLeads(data) {
   const statusCounts = items.reduce((acc,i)=>{ const s=i.status||"Unklar"; acc[s]=(acc[s]||0)+1; return acc; },{});
   if (stats) stats.innerHTML = `
     <span>${items.length} Optionen</span>
+    <span>${statusCounts["Gewählte Lösung"] || 0} gewählt</span>
     <span>${statusCounts["Angefragt"] || 0} angefragt</span>
     <span>${statusCounts["Nachfassen"] || 0} nachfassen</span>
-    <span>${(statusCounts["Zusage"] || 0) + (statusCounts["Gebucht"] || 0)} positiv</span>
+    <span>${statusCounts["Fallback"] || 0} Fallback</span>
     <span>${statusCounts["Absage"] || 0} Absagen</span>`;
   list.innerHTML = items.length ? items.map(i=>{
     const href = normalizeDocLink(i.link);
@@ -551,7 +867,7 @@ function renderDashboard() {
   const overdue = activeTaskValues.filter(t=>t.due && validStatus(t.status)!=="done" && new Date(t.due+"T12:00:00") < today).length;
   const budgetActual = Object.values(window._budget || {}).reduce((s,i)=>s+Number(i.actual||0),0);
   const shoppingOpen = Object.values(window._shopping || {}).filter(i=>!i.bought).length;
-  const tentActive = Object.values(window._tentLeads || {}).filter(i=>!["Absage","Gebucht"].includes(i.status)).length;
+  const tentActive = Object.values(window._tentLeads || {}).filter(i=>!["Absage","Gebucht","Fallback"].includes(i.status)).length;
   stats.innerHTML = `
     <div class="dash-stat"><strong>${done}/${total}</strong><span>Aufgaben erledigt</span></div>
     <div class="dash-stat"><strong>${blocked}</strong><span>blockiert</span></div>
@@ -1301,12 +1617,13 @@ document.addEventListener("DOMContentLoaded",()=>{
   buildUI();
   window.APP.switchView(localStorage.getItem("wf_view") || "overview", false);
   setSyncBar("⟳ Verbinde mit Firebase…");
+  ensureTentPlanData();
   bindFirebase();
 });
 </script>
 
 <script>
-const PHASES_DATA = [{"id":"phase1","label":"Jetzt","title":"Planung sichern","subtitle":"August – September 2026","categories":[{"title":"📍 Gelände & Dokumentation","tasks":[{"id":"plan2_gelaende_fotos","prio":"prio-2","text":"Gelände vollständig fotografieren: Übersicht, Toilettenstandort, Strom- und Wasseranschlüsse, Sonnensegel-Flächen und Problemstellen dokumentieren"},{"id":"now_lageplan_abgleich","prio":"prio-2","text":"Vorhandenen Lageplan mit den Fotos und den tatsächlichen Anschlüssen abgleichen und bei Bedarf ergänzen"}]},{"title":"💰 Finanzen & Kaufstopp","tasks":[{"id":"plan2_budgetrahmen","prio":"prio-1","text":"Vorläufigen Gesamtbudgetrahmen festlegen und eine harte Auszahlungsgrenze bestimmen"},{"id":"plan2_budgetstruktur","prio":"prio-1","text":"Budget in Kernbudget, Gestaltung und Reserve aufteilen; dauerhafte Anschaffungen getrennt von Verbrauchskosten ausweisen"},{"id":"now_kaufstopp_reisen","prio":"prio-1","text":"Bis nach China-, Berlin- und Wanderurlaub keine größeren Eventkäufe tätigen; Ausnahme nur bei außergewöhnlich gutem Gebrauchtangebot"},{"id":"now_eventruecklage","prio":"prio-1","text":"Nach den Reisen verfügbares Eventbudget und monatliche Rücklage bis Mai 2027 neu berechnen"},{"id":"now_kauf_freigabe","prio":"prio-2","text":"Vor jedem größeren Kauf prüfen: tatsächlicher Bedarf, Leihoption, Lagerort, Transport und vorhandene Rücklage"}]},{"title":"👥 Helfer & Organisation","tasks":[{"id":"now_helfer_parkposition","prio":"prio-3","text":"Kernhelfer nur vorläufig festhalten; verbindliche Rollen erst im Februar oder März vergeben"}]},{"title":"🚽 Vorhandenes Dixie","tasks":[{"id":"now_dixie_zustand","prio":"prio-1","text":"Zustand des vorhandenen Dixies dokumentieren: Innenraum, Tankfüllstand, Tür, Schloss, Belüftung und sichtbare Schäden"},{"id":"now_dixie_absaugung_anfragen","prio":"prio-1","text":"Mindestens zwei lokale Anbieter nach Preis für reines Auspumpen des kleinen Toilettentanks fragen"},{"id":"now_dixie_reinigung_anfragen","prio":"prio-1","text":"Preis für Auspumpen plus Innenreinigung sowie Anfahrt und mögliche Mindestpauschalen erfragen"},{"id":"now_dixie_reinigungsentscheidung","prio":"prio-2","text":"Entscheiden: komplett professionell reinigen lassen oder nur auspumpen lassen und den leeren Innenraum selbst reinigen"},{"id":"now_dixie_zeitplan","prio":"prio-2","text":"Reinigungszeitplan festlegen: Grundreinigung im Oktober und kurze Endreinigung im Mai einplanen"}]},{"title":"⛺ Wetterschutz & Stangen","tasks":[{"id":"plan2_wetterschutz_inventur","prio":"prio-2","text":"Inventur vorhandener Pavillons, Planen, Heringe, Seile und Befestigungsmittel durchführen"},{"id":"plan2_planen_aufbauvariante","prio":"prio-1","text":"Aufbauvariante für zwei Lagerplanen beziehungsweise Sonnensegel 7 × 5 m festlegen"},{"id":"now_stangenbedarf","prio":"prio-1","text":"Benötigte Anzahl, Länge und Mindeststärke der Stangen berechnen"},{"id":"plan2_befestigungspunkte","prio":"prio-2","text":"Bäume und andere Befestigungspunkte auf dem Gelände prüfen; baumschonende Befestigung und Zustimmung klären"},{"id":"now_stangen_baumarkt","prio":"prio-2","text":"Baumarktpreise für geeignete Holzstangen als Rückfalllösung dokumentieren"},{"id":"now_lager_transport","prio":"prio-1","text":"Lagerort und Transportmöglichkeit für Planen und lange Stangen klären"}]},{"title":"⚔️ Wettkampfmaterial","tasks":[{"id":"plan2_bogenbedarf","prio":"prio-1","text":"Bogenbedarf exakt bestimmen: Anzahl, Zuggewicht, Links-/Rechtshand, Pfeilmenge, Ersatzpfeile, Zielscheiben und Pfeilfang"},{"id":"now_bogen_leihcheck","prio":"prio-2","text":"Leihoptionen für Bögen und Pfeile einmal abschließend bei Freundeskreis und örtlichen Bogensportvereinen prüfen"},{"id":"now_bogen_budget","prio":"prio-1","text":"Konkretes Budget für Bogenschießen inklusive Sicherheitsmaterial erstellen"},{"id":"plan2_axtbedarf","prio":"prio-1","text":"Wurfäxte konkretisieren: Anzahl, geeignete Modelle, Zielscheibe, Sicherheitsabstand und Budget festlegen"},{"id":"now_wettkampf_kaufstopp","prio":"prio-2","text":"Wettkampfausrüstung erst kaufen, wenn Stückzahl, Modell, Sicherheitskonzept, Lagerung und Gesamtbudget feststehen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase2","label":"Phase 2","title":"Bestand, Reinigung & Gebrauchtmarkt","subtitle":"Oktober – November 2026","categories":[{"title":"🚽 Toilette","tasks":[{"id":"oct_dixie_angebote","prio":"prio-1","text":"Angebote für Auspumpen und Reinigung auswerten und Vorgehen festlegen"},{"id":"oct_dixie_auspumpen","prio":"prio-1","text":"Dixie fachgerecht auspumpen lassen"},{"id":"oct_dixie_grundreinigung","prio":"prio-2","text":"Grundreinigung professionell organisieren oder den leeren Innenraum selbst reinigen"},{"id":"oct_dixie_nachkontrolle","prio":"prio-2","text":"Zustand nach Reinigung dokumentieren und klären, wie das Dixie bis Mai sauber und trocken bleibt"}]},{"title":"⛺ Wetterschutz","tasks":[{"id":"oct_gebrauchtmarkt","prio":"prio-1","text":"Ab Mitte Oktober eBay Kleinanzeigen, eBay sowie LARP- und Mittelaltergruppen intensiv nach Baldachinen, Lagerplanen und Saisonauflösungen durchsuchen"},{"id":"oct_angebote_vergleichen","prio":"prio-1","text":"Gebrauchtangebote nur vollständig inklusive Zustand, Zubehör, Transport und Gesamtkosten vergleichen"},{"id":"oct_wetterschutzentscheidung","prio":"prio-1","text":"Bis Ende November entscheiden: gute Gebrauchtlösung kaufen oder zwei neue Lagerplanen bestellen"},{"id":"oct_wetterschutz_gesamtkosten","prio":"prio-1","text":"Gesamtkosten der gewählten Lösung inklusive Stangen, Seilen, Heringen und Transport berechnen"},{"id":"oct_lager_transport_bestaetigen","prio":"prio-2","text":"Lagerort und Transport der ausgewählten Wetterschutzlösung verbindlich bestätigen"}]},{"title":"⚔️ Wettkampfmaterial","tasks":[{"id":"oct_wettkampf_gebrauchtmarkt","prio":"prio-2","text":"Gebrauchtmarkt für geeignete Einsteigerbögen, Pfeile, Zielscheiben und Wurfäxte beobachten; noch keine überhasteten Käufe"}]},{"title":"🌿 Gelände","tasks":[{"id":"oct_gruenschnitt","prio":"prio-1","text":"Ersten Grünschnitt Anfang Oktober durchführen"},{"id":"oct_gelaende_fotos","prio":"prio-2","text":"Gelände nach dem Grünschnitt erneut fotografieren"},{"id":"oct_aufstellflaechen","prio":"prio-2","text":"Aufstellflächen und Abstände für Sonnensegel und Wettkampfbereiche vor Ort nachmessen"},{"id":"oct_stangen_bewerten","prio":"prio-2","text":"Auf dem Gelände verfügbare Stangen beziehungsweise Äste auf Länge, Stabilität, Zulässigkeit und Transportfähigkeit prüfen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase3","label":"Phase 3","title":"Umfang festschreiben & Hauptentscheidungen","subtitle":"Januar 2027","categories":[{"title":"🪵 Hauptanschaffungen & Atmosphäre","tasks":[{"id":"jan_budget_final","prio":"prio-1","text":"Budget nach den Reisen endgültig freigeben und maximale Gesamtauszahlung festlegen"},{"id":"jan_wetterschutz_kaufen","prio":"prio-1","text":"Gewählte Wetterschutzlösung endgültig kaufen, sofern nicht bereits ein Gebrauchtangebot genutzt wurde"},{"id":"jan_stangenloesung","prio":"prio-1","text":"Stangenlösung endgültig festlegen und fehlende Stangen beschaffen oder reservieren"},{"id":"jan_bogenmodelle","prio":"prio-1","text":"Konkrete Bogenmodelle, Pfeile, Zielscheiben und Pfeilfang auswählen"},{"id":"jan_wurfaexte","prio":"prio-1","text":"Konkrete Wurfäxte und Zielscheibenlösung auswählen"},{"id":"jan_kaufkontrolle","prio":"prio-1","text":"Alle Hauptkäufe nur innerhalb des aktualisierten Budgets freigeben; keine parallelen Alternativlösungen kaufen"}]},{"title":"🍲 Essen & Getränke","tasks":[{"id":"plan2_essenskonzept","prio":"prio-1","text":"Finales Essenskonzept auf wenige verlässliche Komponenten begrenzen"},{"id":"jan_testkochen_planen","prio":"prio-2","text":"Testkochen für Grillkomponenten und Kesselgericht terminieren"},{"id":"jan_mengenlogik","prio":"prio-2","text":"Grundannahmen für Portionen und Reservemenge pro Person festlegen"},{"id":"jan_getraenkekategorien","prio":"prio-2","text":"Getränkekonzept final bestätigen: Heiltrank, Manatrank, Hausmet, Bier, alkoholfreie Getränke und Sonderbedarf; noch keine Getränke kaufen"}]},{"title":"👥 Gäste & Helfer","tasks":[{"id":"plan2_einladung","prio":"prio-1","text":"Verbindliche Einladung verschicken"},{"id":"plan2_einladungsinhalt","prio":"prio-2","text":"Einladung mit Datum, Ort, Outdoor-Hinweis, Parken, Übernachtung und Verschiebungsregel vervollständigen"},{"id":"jan_rsvp_deadline","prio":"prio-1","text":"Rückmeldefrist für Ende Februar oder Anfang März setzen"},{"id":"plan2_uebernachtung_fahrt","prio":"prio-2","text":"Übernachtungs-, Fahr- und Taxibedarf der Gäste erfassen"},{"id":"jan_helfer_grob","prio":"prio-2","text":"Aufbau, Küche, Wettkampfaufsicht, Getränke und Abbau grob mit den Kernhelfern vorbesprechen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase4","label":"Phase 4","title":"Testen, Mengen bilden & Sicherheit","subtitle":"Februar – März 2027","categories":[{"title":"🛒 Technik & Material","tasks":[{"id":"plan2_kabelinventur","prio":"prio-1","text":"Vorhandene Kabeltrommeln, Outdoor-Verlängerungen und Kabelbrücken inventarisieren und fehlende Menge bestimmen"},{"id":"feb_strombedarf","prio":"prio-1","text":"Strombedarf je Bereich bestimmen und Kabelwege aus dem Lageplan ableiten"},{"id":"feb_beleuchtung","prio":"prio-2","text":"Notwendige Beleuchtung für Wege, Sitzbereiche, Küche und Toilette festlegen"},{"id":"feb_materialluecken","prio":"prio-2","text":"Materiallücken bei Wetterschutz, Befestigung, Kühlung, Sitzplätzen und Sicherheit erfassen"}]},{"title":"📨 Gäste & Helfer","tasks":[{"id":"plan2_rsvp_auswerten","prio":"prio-1","text":"Rückmeldungen auswerten, realistische Personenzahl für Essen, Getränke und Sitzplätze festhalten und grobe Trinkpräferenzen für Met, Bier und alkoholfreie Getränke berücksichtigen"},{"id":"plan2_helferrollen","prio":"prio-1","text":"Helferrollen verbindlich vergeben: Aufbau, Küche, Bogen-/Axtaufsicht, Getränke und Abbau"},{"id":"feb_helferzeiten","prio":"prio-2","text":"Einsatzzeiten und Erreichbarkeit der Helfer im Helferreiter eintragen"}]},{"title":"🧪 Tests & Sicherheit","tasks":[{"id":"plan2_test_grillfleisch","prio":"prio-2","text":"Veganes Grillfleisch testen und Menge pro Person dokumentieren"},{"id":"plan2_test_bratwurst","prio":"prio-2","text":"Vegane Bratwürste testen und Grillbarkeit beurteilen"},{"id":"plan2_test_kesselgericht","prio":"prio-2","text":"Kesselgericht im vorhandenen Kessel testen: Kochzeit, Menge und Wärmehaltung dokumentieren"},{"id":"plan2_test_bogenschießen","prio":"prio-1","text":"Bogenschießen mit der gewählten Ausrüstung testen; Sicherheitsabstand und Pfeilfang prüfen"},{"id":"plan2_test_axtwerfen","prio":"prio-1","text":"Axtwerfen testen und Sicherheitsprotokoll sowie Einweisung ausarbeiten"},{"id":"plan2_test_metkrug","prio":"prio-2","text":"Metkrughalten mit realistischer Füllung testen"},{"id":"plan2_test_punktesystem","prio":"prio-2","text":"Punktesystem mit mehreren Personen auf Verständlichkeit und Fairness prüfen"}]},{"title":"🗺 Gelände & Ablauf","tasks":[{"id":"plan2_gelaendebegehung","prio":"prio-1","text":"Gelände nach dem Winter begehen und Wuchs, Löcher, Wurzeln, Matsch und Rampe prüfen"},{"id":"plan2_lageplan_final","prio":"prio-1","text":"Lageplan mit Zonen, Wegen, Lichtpunkten, Strom, Küche, Toilette und Wettkampfbereichen finalisieren"},{"id":"plan2_sicherheitsplan","prio":"prio-1","text":"Sicherheitsplan für Bogen, Axt, Feuer und Verantwortlichkeiten erstellen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase5","label":"Phase 5","title":"Lücken schließen & Gesamtprobe","subtitle":"April 2027","categories":[{"title":"🥩 Essen & Küche","tasks":[{"id":"plan2_beilagen_final","prio":"prio-2","text":"Beilagen und Dips final festlegen: selbst vorbereiten oder fertig kaufen"},{"id":"plan2_prep_zeitplan","prio":"prio-1","text":"Prep-Zeitplan für Vortag und Eventtag erstellen und Zuständigkeiten verteilen"},{"id":"apr_kuecheninventur","prio":"prio-1","text":"Küchenequipment vollständig inventarisieren und fehlende Behälter, Werkzeuge und Arbeitsflächen ergänzen"},{"id":"apr_mengenplanung","prio":"prio-1","text":"Mengen für Essen anhand der bestätigten Gästezahl berechnen; Getränkemengen gemäß Getränkekonzept finalisieren: Heiltrank und Manatrank je ca. 5 l, Hausmet 5 bis 10 l, Biermenge und alkoholfreie Reserve festlegen sowie Sondergetränk abstimmen"}]},{"title":"🏹 Wettkampf & Sicherheit","tasks":[{"id":"plan2_wettkampfmaterial_vollständig","prio":"prio-1","text":"Bögen, Pfeile, Äxte, Zielscheiben, Seile, Krüge und Sandsäcke vollständig prüfen"},{"id":"apr_wettkampf_gesamtprobe","prio":"prio-1","text":"Wettkampfmaterial und Abläufe einmal vollständig testen"},{"id":"apr_regelschilder","prio":"prio-2","text":"Regeln, Sicherheitsabstände und Hinweisschilder fertigstellen"}]},{"title":"🎟 Helfer & Ablauf","tasks":[{"id":"plan2_ablaufplan","prio":"prio-1","text":"Detaillierten Ablaufplan mit Uhrzeiten, Zuständigkeiten und Puffern schreiben"},{"id":"plan2_notfallkontakte","prio":"prio-1","text":"Notfallkontakte, nächste Klinik, Taxi und Grundstückskontakt schriftlich zusammenstellen"},{"id":"apr_helferplan","prio":"prio-1","text":"Helferplan vollständig im Helferreiter pflegen und offene Rollen schließen"}]},{"title":"🛒 Finale Beschaffung","tasks":[{"id":"plan2_deko_fehlteile","prio":"prio-3","text":"Nur noch fehlende, budgetierte Dekoration beschaffen"},{"id":"apr_kabel_beschaffen","prio":"prio-1","text":"Fehlende Kabeltrommeln, Outdoor-Verlängerungen und Kabelbrücken kaufen oder leihen"},{"id":"plan2_erste_hilfe","prio":"prio-1","text":"Erste-Hilfe-Material vollständig prüfen und ergänzen"},{"id":"plan2_loeschmittel","prio":"prio-1","text":"Feuerlöscher beziehungsweise geeignete Löschmittel und Wassereimer organisieren"},{"id":"plan2_kueche_geschirr","prio":"prio-1","text":"Küchen- und Geschirrausstattung vollständig machen"},{"id":"plan2_schilder","prio":"prio-2","text":"Holzschilder und Beschriftungen fertigstellen"}]},{"title":"⛺ Aufbauprobe","tasks":[{"id":"apr_planen_testaufbau","prio":"prio-1","text":"Lagerplanen, Stangen, Seile und Heringe einmal vollständig testweise aufbauen"},{"id":"apr_transportprobe","prio":"prio-2","text":"Transport- und Packlogik für lange Stangen und sperriges Material testen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase6","label":"Phase 6","title":"Finalisierung vor dem Event","subtitle":"Mai 2027","categories":[{"title":"🗺 Gelände","tasks":[{"id":"plan2_gelaende_maehen","prio":"prio-1","text":"Gelände ein bis zwei Wochen vor dem Event mähen, freischneiden und Wege prüfen"},{"id":"plan2_rampe_sichern","prio":"prio-1","text":"Rampe und problematische Wege gegen Rutschen und Stolpern sichern"},{"id":"may_gelaende_endcheck","prio":"prio-1","text":"Gelände kurz vor dem Aufbau final auf Schäden, Äste, Matsch und Hindernisse prüfen"}]},{"title":"📋 Ablauf & Kommunikation","tasks":[{"id":"plan2_ablauf_verteilen","prio":"prio-1","text":"Ablauf- und Helferplan ausdrucken beziehungsweise digital an alle Verantwortlichen verteilen"},{"id":"may_personenzahl","prio":"prio-1","text":"Finale Personenzahl festhalten"},{"id":"may_helfer_bestaetigen","prio":"prio-1","text":"Alle Helferrollen und Ankunftszeiten nochmals bestätigen"},{"id":"plan2_wetter_pruefen","prio":"prio-1","text":"Wettervorhersage ab etwa einer Woche vorher täglich prüfen und gegebenenfalls Verschiebungsentscheidung treffen"}]},{"title":"🛒 Einkäufe & Material","tasks":[{"id":"plan2_finale_einkaufsliste","prio":"prio-1","text":"Finale Einkaufsliste nach Supermarkt, Großhandel und Online aufteilen"},{"id":"may_spezialgetraenke_bestellen","prio":"prio-1","text":"Anfang bis Mitte Mai haltbare Spezialgetränke bestellen: Met, Heiltrank- und Manatrank-Basis sowie gegebenenfalls Bärenfang; Lieferung kontrollieren und bei Problemen rechtzeitig Ersatz beschaffen"},{"id":"plan2_getraenke_einkauf","prio":"prio-1","text":"In der Eventwoche Bier, Wasser, Softdrinks und Zero-Getränke sowie das abgestimmte Sondergetränk einkaufen; Kühlung und ausreichende Wasserreserve organisieren"},{"id":"plan2_lebensmittel_einkauf","prio":"prio-1","text":"Lebensmittel gestaffelt einkaufen: haltbare Ware früh, frische Ware ein bis zwei Tage vorher"},{"id":"may_material_packen","prio":"prio-1","text":"Gesamtes Material nach Bereichen packen und Transportfahrzeuge zuordnen"},{"id":"may_elektrik_test","prio":"prio-1","text":"Kabeltrommeln, Verlängerungen, Beleuchtung und alle elektrischen Verbraucher testen"}]},{"title":"🚽 Toilette & Versorgung","tasks":[{"id":"may_dixie_endreinigung","prio":"prio-1","text":"Dixie kurz vor dem Event endreinigen und auf Funktion prüfen"},{"id":"plan2_toilettenmaterial","prio":"prio-1","text":"Toilettenpapier, Seife, Handdesinfektion, Licht und Reinigungsmittel bereitstellen"},{"id":"plan2_trinkwasser_besorgen","prio":"prio-1","text":"Trinkwasser gut sichtbar und frei zugänglich bereitstellen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase7","label":"Phase 7","title":"Aufbau & Vorbereitung","subtitle":"27.–28. Mai 2027","categories":[{"title":"🔨 Infrastruktur & Aufbau","tasks":[{"id":"plan2_dixie_positionieren","prio":"prio-1","text":"Vorhandenes Dixie final positionieren, reinigen, ausstatten und Zugang freihalten"},{"id":"plan2_wetterschutz_aufbauen","prio":"prio-1","text":"Lagerplanen beziehungsweise Pavillons aufstellen und vollständig abspannen; Küche zuerst"},{"id":"plan2_rampe_beleuchtung","prio":"prio-1","text":"Rampe sichern, Tau und Beleuchtung montieren"},{"id":"plan2_strom_verlegen","prio":"prio-1","text":"Kabeltrommeln verlegen, Kabelquerungen sichern und alle Verbraucher testen"},{"id":"plan2_wettkampfbereiche_markieren","prio":"prio-1","text":"Wettkampfbereiche markieren und absperren"},{"id":"plan2_deko_aufhaengen","prio":"prio-2","text":"Dekoration, Schilder, Banner und Lichterketten anbringen; Lichtcheck im Dunkeln durchführen"},{"id":"plan2_kueche_aufbauen","prio":"prio-1","text":"Küche mit Grill, Dreibein, Arbeitsflächen und Wasserversorgung einrichten"},{"id":"plan2_getraenkestation","prio":"prio-1","text":"Alchemistenstation aufbauen: Heiltrank und Manatrank in die zwei vorhandenen Getränkespender füllen, alkoholische Getränke kennzeichnen, versiegelte Potion-Deko aufstellen sowie Hausmet, Softdrinks und frei zugängliches Wasser bereitstellen"},{"id":"plan2_sicherheitscheck_aufbau","prio":"prio-1","text":"Sicherheitscheck durchführen: Stolperstellen, Kabel, Rampe, Feuerlöscher und Erste Hilfe"},{"id":"plan2_spendenkasse","prio":"prio-3","text":"Spendenkasse beziehungsweise QR-Code nur aufstellen, falls weiterhin vorgesehen"}]},{"title":"🍳 Küche am Vorabend","tasks":[{"id":"plan2_grill_marinieren","prio":"prio-1","text":"Grillkomponenten marinieren und sicher kühlen"},{"id":"plan2_kessel_vorbereiten","prio":"prio-1","text":"Gemüse und Zutaten für das Kesselgericht vorbereiten und gekühlt lagern"},{"id":"plan2_beilagen_vorbereiten","prio":"prio-2","text":"Beilagen und Dips vorbereiten"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase8","label":"29. Mai 2027","title":"Eventtag & Abbau","subtitle":"Das 30. Winterfest","categories":[{"title":"✅ Eventtag-Checkliste","tasks":[{"id":"plan2_event_strom","prio":"prio-1","text":"Strom und Beleuchtung in allen benötigten Bereichen funktionieren"},{"id":"plan2_trinkwasser","prio":"prio-1","text":"Wasser sichtbar und frei zugänglich bereitstellen"},{"id":"plan2_event_dixie","prio":"prio-1","text":"Dixie zugänglich, beleuchtet und mit Papier, Seife und Handdesinfektion ausgestattet"},{"id":"plan2_event_erstehilfe","prio":"prio-1","text":"Erste-Hilfe-Set am Helfer- oder Küchenbereich griffbereit positionieren"},{"id":"plan2_event_loeschmittel","prio":"prio-1","text":"Feuerlöscher und Wassereimer am Grill- und Kesselbereich positionieren"},{"id":"plan2_event_aufsicht","prio":"prio-1","text":"Axt- und Bogenaufsicht briefen, Wartezonen markieren und Regeln sichtbar aufstellen"},{"id":"plan2_event_punkteliste","prio":"prio-2","text":"Punkteliste, Stifte und verantwortliche Person festlegen"},{"id":"plan2_event_rampe","prio":"prio-1","text":"Rampe und Laufwege auf Trockenheit, Beleuchtung und Stolperstellen prüfen"},{"id":"plan2_event_musik","prio":"prio-2","text":"Musik und Atmosphäre vor Ankunft der Gäste starten"},{"id":"plan2_event_begruessung","prio":"prio-3","text":"Begrüßungsgetränk bereitstellen, falls weiterhin vorgesehen"}]},{"title":"🏕 Abbau & Übergabe","tasks":[{"id":"plan2_abbau_dixie","prio":"prio-1","text":"Dixie nach der Nutzung grob reinigen, sichern und späteren Entleerungsbedarf prüfen"},{"id":"plan2_abbau_muell","prio":"prio-1","text":"Müll vollständig entfernen"},{"id":"plan2_abbau_material","prio":"prio-1","text":"Planen, Stangen, Sitzmöbel und Equipment vollständig verstauen"},{"id":"plan2_abbau_endkontrolle","prio":"prio-1","text":"Gelände final abgehen: Heringe, Kabel, Werkzeuge und Müll kontrollieren"},{"id":"plan2_abbau_uebergabe","prio":"prio-2","text":"Grundstückseigentümer informieren und Gelände übergeben"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[{"time":"07:00 – 08:00","text":"Frühaufbau-Helfer: Letzte Checks, Kesselgericht ansetzen, Grill vorbereiten, Stromanschlüsse kontrollieren"},{"time":"08:00 – 10:00","text":"Küche startet: Kesselgericht auf dem Dreibein, Bratwürste vorbereiten, Saucen und Beilagen anrichten"},{"time":"10:00 – 11:00","text":"Finale Checks: Wettkampfbereiche nochmals prüfen, Bogenschießen-Sicherheit kontrollieren, Axtwerfen-Bereich absperren bis Aufsicht da ist"},{"time":"12:00","text":"Tore öffnen – Gäste kommen an. Begrüßungsgetränk bereit. Gelände wirkt sofort. Snacks vorhanden"},{"time":"12:00 – 14:00","text":"Ankunftsphase: Freies Erkunden, Begrüßung, Getränke, Bogenbaukurs mit Freund (optional), Teamlisten aushängen"},{"time":"14:00 – 16:00","text":"Wettkämpfe Block 1: Bogenschießen + Axtwerfen. Nüchtern oder halbwegs nüchtern. Aufsicht aktiv. Punkte werden notiert"},{"time":"16:00 – 17:30","text":"Festessen: Grillstation läuft, Kesselgericht ausgeben, Brot, Beilagen, Saucen. Kein Stress, kein Buffet-Chaos – strukturierte Ausgabe"},{"time":"17:30 – 19:00","text":"Wettkämpfe Block 2: Tauziehen, Sandsack Team-Carry, Metkrug halten. Punkte werden addiert"},{"time":"19:00","text":"Bögen und Äxte wegschließen. Kein Ausnahmen. Verantwortliche Person übernimmt"},{"time":"19:00 – 20:00","text":"Siegerehrung: Punkteauszählung, Titel vergeben, Schärpe übergeben, Sondertitel für lustige Kategorien"},{"time":"20:00 – open end","text":"Tavernenabend: Kesselgericht für Spätkommer, Getränke, Musik, Lichtinszenierung, Lagerfeuer (falls erlaubt), Chillbereiche"},{"time":"Nacht","text":"Wasser sichtbar halten, Müll sammeln, Ruhezone für Übernachter, Taxi-Koordination für Heimfahrer"}]}] ;
+const PHASES_DATA = [{"id":"phase1","label":"Jetzt","title":"Planung sichern","subtitle":"August – September 2026","categories":[{"title":"📍 Gelände & Dokumentation","tasks":[{"id":"plan2_gelaende_fotos","prio":"prio-2","text":"Gelände vollständig fotografieren: Übersicht, Toilettenstandort, Strom- und Wasseranschlüsse, Sonnensegel-Flächen und Problemstellen dokumentieren"},{"id":"now_lageplan_abgleich","prio":"prio-2","text":"Vorhandenen Lageplan mit den Fotos und den tatsächlichen Anschlüssen abgleichen und bei Bedarf ergänzen"}]},{"title":"💰 Finanzen & Kaufstopp","tasks":[{"id":"plan2_budgetrahmen","prio":"prio-1","text":"Vorläufigen Gesamtbudgetrahmen festlegen und eine harte Auszahlungsgrenze bestimmen"},{"id":"plan2_budgetstruktur","prio":"prio-1","text":"Budget in Kernbudget, Gestaltung und Reserve aufteilen; dauerhafte Anschaffungen getrennt von Verbrauchskosten ausweisen"},{"id":"now_kaufstopp_reisen","prio":"prio-1","text":"Bis nach China-, Berlin- und Wanderurlaub keine größeren Eventkäufe tätigen; Ausnahme nur bei außergewöhnlich gutem Gebrauchtangebot"},{"id":"now_eventruecklage","prio":"prio-1","text":"Nach den Reisen verfügbares Eventbudget und monatliche Rücklage bis Mai 2027 neu berechnen"},{"id":"now_kauf_freigabe","prio":"prio-2","text":"Vor jedem größeren Kauf prüfen: tatsächlicher Bedarf, Leihoption, Lagerort, Transport und vorhandene Rücklage"}]},{"title":"👥 Helfer & Organisation","tasks":[{"id":"now_helfer_parkposition","prio":"prio-3","text":"Kernhelfer nur vorläufig festhalten; verbindliche Rollen erst im Februar oder März vergeben"}]},{"title":"🚽 Vorhandenes Dixie","tasks":[{"id":"now_dixie_zustand","prio":"prio-1","text":"Zustand des vorhandenen Dixies dokumentieren: Innenraum, Tankfüllstand, Tür, Schloss, Belüftung und sichtbare Schäden"},{"id":"now_dixie_absaugung_anfragen","prio":"prio-1","text":"Mindestens zwei lokale Anbieter nach Preis für reines Auspumpen des kleinen Toilettentanks fragen"},{"id":"now_dixie_reinigung_anfragen","prio":"prio-1","text":"Preis für Auspumpen plus Innenreinigung sowie Anfahrt und mögliche Mindestpauschalen erfragen"},{"id":"now_dixie_reinigungsentscheidung","prio":"prio-2","text":"Entscheiden: komplett professionell reinigen lassen oder nur auspumpen lassen und den leeren Innenraum selbst reinigen"},{"id":"now_dixie_zeitplan","prio":"prio-2","text":"Reinigungszeitplan festlegen: Grundreinigung im Oktober und kurze Endreinigung im Mai einplanen"}]},{"title":"⛺ Baldachin & Pavillon","tasks":[{"id":"plan2_wetterschutz_inventur","prio":"prio-2","text":"Vorhandenen 3x6-m-Pavillon, Heringe, Sisalseile und Befestigungsmaterial vollständig inventarisieren"},{"id":"now_pavillon_ausmessen","prio":"prio-1","text":"Vorhandenen 3x6-m-Pavillon exakt ausmessen: Kantenlängen, Höhe der Schabracken, sichtbare Beine und Befestigungspunkte dokumentieren"},{"id":"now_baldachin_lager_transport","prio":"prio-1","text":"Trockenen Lagerort und Transportmöglichkeit für einen 6x6-m-Baldachin inklusive etwa 2,1 m langer Seitenstangen verbindlich klären"},{"id":"now_schabracken_planen","prio":"prio-2","text":"Schabracken, Jute-Beinverkleidung und Banner für den vorhandenen Pavillon planen und benötigte Stoffmengen bestimmen"},{"id":"now_baldachin_preisbeobachtung","prio":"prio-2","text":"Neupreise für vollständige 6x6-m-Baldachine inklusive Holzgestänge beobachten; aktueller Referenzwert LARP-Zelte 1.125,80 EUR plus Versand"}]},{"title":"⚔️ Wettkampfmaterial","tasks":[{"id":"plan2_bogenbedarf","prio":"prio-1","text":"Bogenbedarf exakt bestimmen: Anzahl, Zuggewicht, Links-/Rechtshand, Pfeilmenge, Ersatzpfeile, Zielscheiben und Pfeilfang"},{"id":"now_bogen_leihcheck","prio":"prio-2","text":"Leihoptionen für Bögen und Pfeile einmal abschließend bei Freundeskreis und örtlichen Bogensportvereinen prüfen"},{"id":"now_bogen_budget","prio":"prio-1","text":"Konkretes Budget für Bogenschießen inklusive Sicherheitsmaterial erstellen"},{"id":"plan2_axtbedarf","prio":"prio-1","text":"Wurfäxte konkretisieren: Anzahl, geeignete Modelle, Zielscheibe, Sicherheitsabstand und Budget festlegen"},{"id":"now_wettkampf_kaufstopp","prio":"prio-2","text":"Wettkampfausrüstung erst kaufen, wenn Stückzahl, Modell, Sicherheitskonzept, Lagerung und Gesamtbudget feststehen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase2","label":"Phase 2","title":"Bestand, Reinigung & Gebrauchtmarkt","subtitle":"Oktober – November 2026","categories":[{"title":"🚽 Toilette","tasks":[{"id":"oct_dixie_angebote","prio":"prio-1","text":"Angebote für Auspumpen und Reinigung auswerten und Vorgehen festlegen"},{"id":"oct_dixie_auspumpen","prio":"prio-1","text":"Dixie fachgerecht auspumpen lassen"},{"id":"oct_dixie_grundreinigung","prio":"prio-2","text":"Grundreinigung professionell organisieren oder den leeren Innenraum selbst reinigen"},{"id":"oct_dixie_nachkontrolle","prio":"prio-2","text":"Zustand nach Reinigung dokumentieren und klären, wie das Dixie bis Mai sauber und trocken bleibt"}]},{"title":"⛺ Baldachin - Gebrauchtmarkt","tasks":[{"id":"oct_suchagenten_start","prio":"prio-2","text":"Ab 28.09.2026 Suchagenten für 6x6-m-Baldachin, Mittelalterzelt und vollständiges Holzgestänge bei Kleinanzeigen, eBay sowie LARP- und Mittelaltergruppen aktivieren"},{"id":"oct_gebrauchtmarkt","prio":"prio-1","text":"Ab 02.11.2026 nach dem Ende der regulären Herbst-Marktsaison gezielt und intensiv nach gebrauchten 6x6-m-Baldachinen inklusive vollständigem Gestänge suchen"},{"id":"oct_angebote_vergleichen","prio":"prio-1","text":"Gebrauchtangebote nur vollständig vergleichen: Zelthaut, Mittelmast, 16 Seitenstangen, Seile, Heringe, Schimmel- und Stockfleckenfreiheit, Reparaturen, Alter, Lagerung, Transport und Gesamtpreis prüfen"},{"id":"oct_wetterschutzentscheidung","prio":"prio-1","text":"Gebrauchtmarkt bis Ende Januar 2027 beobachten; nur bei wirklich gutem Zustand und deutlichem Preisvorteil gebraucht kaufen"},{"id":"oct_lager_transport_bestaetigen","prio":"prio-2","text":"Vor jedem Gebrauchtkauf Lagerort, Transport der langen Stangen und Möglichkeit zum vollständigen Trocknen der Baumwollplane bestätigen"}]},{"title":"⚔️ Wettkampfmaterial","tasks":[{"id":"oct_wettkampf_gebrauchtmarkt","prio":"prio-2","text":"Gebrauchtmarkt für geeignete Einsteigerbögen, Pfeile, Zielscheiben und Wurfäxte beobachten; noch keine überhasteten Käufe"}]},{"title":"🌿 Gelände","tasks":[{"id":"oct_gruenschnitt","prio":"prio-1","text":"Ersten Grünschnitt Anfang Oktober durchführen"},{"id":"oct_gelaende_fotos","prio":"prio-2","text":"Gelände nach dem Grünschnitt erneut fotografieren"},{"id":"oct_aufstellflaechen","prio":"prio-2","text":"Aufstellfläche für 6x6-m-Baldachin samt Abspannraum und den vorhandenen 3x6-m-Pavillon vor Ort nachmessen"},{"id":"oct_stangen_bewerten","prio":"prio-2","text":"Baldachin- und Pavillonposition so festlegen, dass Abspannseile, Wege, Grill, Feuerstelle und Wettkampfbereiche sich nicht gegenseitig behindern"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase3","label":"Phase 3","title":"Umfang festschreiben & Hauptentscheidungen","subtitle":"Januar 2027","categories":[{"title":"🪵 Hauptanschaffungen & Atmosphäre","tasks":[{"id":"jan_budget_final","prio":"prio-1","text":"Budget nach den Reisen endgültig freigeben und maximale Gesamtauszahlung festlegen"},{"id":"jan_wetterschutz_kaufen","prio":"prio-1","text":"Bis 31.01.2027 Gebrauchtmarkt final auswerten; falls kein überzeugender kompletter 6x6-m-Baldachin gefunden wurde, Neubestellung inklusive Holzgestänge spätestens bis 15.02.2027 auslösen"},{"id":"jan_baldachin_neupreis","prio":"prio-2","text":"Vor Neubestellung aktuelle Komplettpreise vergleichen; Ziel unter 1.100 EUR, bis etwa 1.150 EUR noch akzeptabel, Versand und Lieferzeit einrechnen"},{"id":"jan_bogenmodelle","prio":"prio-1","text":"Konkrete Bogenmodelle, Pfeile, Zielscheiben und Pfeilfang auswählen"},{"id":"jan_wurfaexte","prio":"prio-1","text":"Konkrete Wurfäxte und Zielscheibenlösung auswählen"},{"id":"jan_kaufkontrolle","prio":"prio-1","text":"Alle Hauptkäufe nur innerhalb des aktualisierten Budgets freigeben; keine parallelen Alternativlösungen kaufen"}]},{"title":"🍲 Essen & Getränke","tasks":[{"id":"plan2_essenskonzept","prio":"prio-1","text":"Finales Essenskonzept auf wenige verlässliche Komponenten begrenzen"},{"id":"jan_testkochen_planen","prio":"prio-2","text":"Testkochen für Grillkomponenten und Kesselgericht terminieren"},{"id":"jan_mengenlogik","prio":"prio-2","text":"Grundannahmen für Portionen und Reservemenge pro Person festlegen"},{"id":"jan_getraenkekategorien","prio":"prio-2","text":"Getränkekonzept final bestätigen: Heiltrank, Manatrank, Hausmet, Bier, alkoholfreie Getränke und Sonderbedarf; noch keine Getränke kaufen"}]},{"title":"👥 Gäste & Helfer","tasks":[{"id":"plan2_einladung","prio":"prio-1","text":"Verbindliche Einladung verschicken"},{"id":"plan2_einladungsinhalt","prio":"prio-2","text":"Einladung mit Datum, Ort, Outdoor-Hinweis, Parken, Übernachtung und Verschiebungsregel vervollständigen"},{"id":"jan_rsvp_deadline","prio":"prio-1","text":"Rückmeldefrist für Ende Februar oder Anfang März setzen"},{"id":"plan2_uebernachtung_fahrt","prio":"prio-2","text":"Übernachtungs-, Fahr- und Taxibedarf der Gäste erfassen"},{"id":"jan_helfer_grob","prio":"prio-2","text":"Aufbau, Küche, Wettkampfaufsicht, Getränke und Abbau grob mit den Kernhelfern vorbesprechen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase4","label":"Phase 4","title":"Testen, Mengen bilden & Sicherheit","subtitle":"Februar – März 2027","categories":[{"title":"🛒 Technik & Material","tasks":[{"id":"plan2_kabelinventur","prio":"prio-1","text":"Vorhandene Kabeltrommeln, Outdoor-Verlängerungen und Kabelbrücken inventarisieren und fehlende Menge bestimmen"},{"id":"feb_strombedarf","prio":"prio-1","text":"Strombedarf je Bereich bestimmen und Kabelwege aus dem Lageplan ableiten"},{"id":"feb_beleuchtung","prio":"prio-2","text":"Notwendige Beleuchtung für Wege, Sitzbereiche, Küche und Toilette festlegen"},{"id":"feb_materialluecken","prio":"prio-2","text":"Materiallücken bei Wetterschutz, Befestigung, Kühlung, Sitzplätzen und Sicherheit erfassen"}]},{"title":"📨 Gäste & Helfer","tasks":[{"id":"plan2_rsvp_auswerten","prio":"prio-1","text":"Rückmeldungen auswerten, realistische Personenzahl für Essen, Getränke und Sitzplätze festhalten und grobe Trinkpräferenzen für Met, Bier und alkoholfreie Getränke berücksichtigen"},{"id":"plan2_helferrollen","prio":"prio-1","text":"Helferrollen verbindlich vergeben: Aufbau, Küche, Bogen-/Axtaufsicht, Getränke und Abbau"},{"id":"feb_helferzeiten","prio":"prio-2","text":"Einsatzzeiten und Erreichbarkeit der Helfer im Helferreiter eintragen"}]},{"title":"🧪 Tests & Sicherheit","tasks":[{"id":"plan2_test_grillfleisch","prio":"prio-2","text":"Veganes Grillfleisch testen und Menge pro Person dokumentieren"},{"id":"plan2_test_bratwurst","prio":"prio-2","text":"Vegane Bratwürste testen und Grillbarkeit beurteilen"},{"id":"plan2_test_kesselgericht","prio":"prio-2","text":"Kesselgericht im vorhandenen Kessel testen: Kochzeit, Menge und Wärmehaltung dokumentieren"},{"id":"plan2_test_bogenschießen","prio":"prio-1","text":"Bogenschießen mit der gewählten Ausrüstung testen; Sicherheitsabstand und Pfeilfang prüfen"},{"id":"plan2_test_axtwerfen","prio":"prio-1","text":"Axtwerfen testen und Sicherheitsprotokoll sowie Einweisung ausarbeiten"},{"id":"plan2_test_metkrug","prio":"prio-2","text":"Metkrughalten mit realistischer Füllung testen"},{"id":"plan2_test_punktesystem","prio":"prio-2","text":"Punktesystem mit mehreren Personen auf Verständlichkeit und Fairness prüfen"}]},{"title":"🗺 Gelände & Ablauf","tasks":[{"id":"plan2_gelaendebegehung","prio":"prio-1","text":"Gelände nach dem Winter begehen und Wuchs, Löcher, Wurzeln, Matsch und Rampe prüfen"},{"id":"plan2_lageplan_final","prio":"prio-1","text":"Lageplan mit Zonen, Wegen, Lichtpunkten, Strom, Küche, Toilette und Wettkampfbereichen finalisieren"},{"id":"plan2_sicherheitsplan","prio":"prio-1","text":"Sicherheitsplan für Bogen, Axt, Feuer und Verantwortlichkeiten erstellen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase5","label":"Phase 5","title":"Lücken schließen & Gesamtprobe","subtitle":"April 2027","categories":[{"title":"🥩 Essen & Küche","tasks":[{"id":"plan2_beilagen_final","prio":"prio-2","text":"Beilagen und Dips final festlegen: selbst vorbereiten oder fertig kaufen"},{"id":"plan2_prep_zeitplan","prio":"prio-1","text":"Prep-Zeitplan für Vortag und Eventtag erstellen und Zuständigkeiten verteilen"},{"id":"apr_kuecheninventur","prio":"prio-1","text":"Küchenequipment vollständig inventarisieren und fehlende Behälter, Werkzeuge und Arbeitsflächen ergänzen"},{"id":"apr_mengenplanung","prio":"prio-1","text":"Mengen für Essen anhand der bestätigten Gästezahl berechnen; Getränkemengen gemäß Getränkekonzept finalisieren: Heiltrank und Manatrank je ca. 5 l, Hausmet 5 bis 10 l, Biermenge und alkoholfreie Reserve festlegen sowie Sondergetränk abstimmen"}]},{"title":"🏹 Wettkampf & Sicherheit","tasks":[{"id":"plan2_wettkampfmaterial_vollständig","prio":"prio-1","text":"Bögen, Pfeile, Äxte, Zielscheiben, Seile, Krüge und Sandsäcke vollständig prüfen"},{"id":"apr_wettkampf_gesamtprobe","prio":"prio-1","text":"Wettkampfmaterial und Abläufe einmal vollständig testen"},{"id":"apr_regelschilder","prio":"prio-2","text":"Regeln, Sicherheitsabstände und Hinweisschilder fertigstellen"}]},{"title":"🎟 Helfer & Ablauf","tasks":[{"id":"plan2_ablaufplan","prio":"prio-1","text":"Detaillierten Ablaufplan mit Uhrzeiten, Zuständigkeiten und Puffern schreiben"},{"id":"plan2_notfallkontakte","prio":"prio-1","text":"Notfallkontakte, nächste Klinik, Taxi und Grundstückskontakt schriftlich zusammenstellen"},{"id":"apr_helferplan","prio":"prio-1","text":"Helferplan vollständig im Helferreiter pflegen und offene Rollen schließen"}]},{"title":"🛒 Finale Beschaffung","tasks":[{"id":"plan2_deko_fehlteile","prio":"prio-3","text":"Nur noch fehlende, budgetierte Dekoration beschaffen"},{"id":"apr_kabel_beschaffen","prio":"prio-1","text":"Fehlende Kabeltrommeln, Outdoor-Verlängerungen und Kabelbrücken kaufen oder leihen"},{"id":"plan2_erste_hilfe","prio":"prio-1","text":"Erste-Hilfe-Material vollständig prüfen und ergänzen"},{"id":"plan2_loeschmittel","prio":"prio-1","text":"Feuerlöscher beziehungsweise geeignete Löschmittel und Wassereimer organisieren"},{"id":"plan2_kueche_geschirr","prio":"prio-1","text":"Küchen- und Geschirrausstattung vollständig machen"},{"id":"plan2_schilder","prio":"prio-2","text":"Holzschilder und Beschriftungen fertigstellen"}]},{"title":"⛺ Aufbauprobe","tasks":[{"id":"apr_planen_testaufbau","prio":"prio-1","text":"Eigenen 6x6-m-Baldachin inklusive Holzgestänge sowie den vorhandenen 3x6-m-Pavillon einmal vollständig testweise aufbauen, abspannen und Standfestigkeit prüfen"},{"id":"apr_transportprobe","prio":"prio-2","text":"Transport- und Packlogik für Baldachin, lange Holzstangen, Pavillon und Dekostoffe testen"},{"id":"apr_pavillon_dekotest","prio":"prio-2","text":"Schabracken, Jute-Beinverkleidung, Sisalseile und Banner am Pavillon im Probeaufbau montieren und nötige Korrekturen festhalten"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase6","label":"Phase 6","title":"Finalisierung vor dem Event","subtitle":"Mai 2027","categories":[{"title":"🗺 Gelände","tasks":[{"id":"plan2_gelaende_maehen","prio":"prio-1","text":"Gelände ein bis zwei Wochen vor dem Event mähen, freischneiden und Wege prüfen"},{"id":"plan2_rampe_sichern","prio":"prio-1","text":"Rampe und problematische Wege gegen Rutschen und Stolpern sichern"},{"id":"may_gelaende_endcheck","prio":"prio-1","text":"Gelände kurz vor dem Aufbau final auf Schäden, Äste, Matsch und Hindernisse prüfen"}]},{"title":"📋 Ablauf & Kommunikation","tasks":[{"id":"plan2_ablauf_verteilen","prio":"prio-1","text":"Ablauf- und Helferplan ausdrucken beziehungsweise digital an alle Verantwortlichen verteilen"},{"id":"may_personenzahl","prio":"prio-1","text":"Finale Personenzahl festhalten"},{"id":"may_helfer_bestaetigen","prio":"prio-1","text":"Alle Helferrollen und Ankunftszeiten nochmals bestätigen"},{"id":"plan2_wetter_pruefen","prio":"prio-1","text":"Wettervorhersage ab etwa einer Woche vorher täglich prüfen und gegebenenfalls Verschiebungsentscheidung treffen"}]},{"title":"🛒 Einkäufe & Material","tasks":[{"id":"plan2_finale_einkaufsliste","prio":"prio-1","text":"Finale Einkaufsliste nach Supermarkt, Großhandel und Online aufteilen"},{"id":"may_spezialgetraenke_bestellen","prio":"prio-1","text":"Anfang bis Mitte Mai haltbare Spezialgetränke bestellen: Met, Heiltrank- und Manatrank-Basis sowie gegebenenfalls Bärenfang; Lieferung kontrollieren und bei Problemen rechtzeitig Ersatz beschaffen"},{"id":"plan2_getraenke_einkauf","prio":"prio-1","text":"In der Eventwoche Bier, Wasser, Softdrinks und Zero-Getränke sowie das abgestimmte Sondergetränk einkaufen; Kühlung und ausreichende Wasserreserve organisieren"},{"id":"plan2_lebensmittel_einkauf","prio":"prio-1","text":"Lebensmittel gestaffelt einkaufen: haltbare Ware früh, frische Ware ein bis zwei Tage vorher"},{"id":"may_material_packen","prio":"prio-1","text":"Gesamtes Material nach Bereichen packen und Transportfahrzeuge zuordnen"},{"id":"may_elektrik_test","prio":"prio-1","text":"Kabeltrommeln, Verlängerungen, Beleuchtung und alle elektrischen Verbraucher testen"}]},{"title":"🚽 Toilette & Versorgung","tasks":[{"id":"may_dixie_endreinigung","prio":"prio-1","text":"Dixie kurz vor dem Event endreinigen und auf Funktion prüfen"},{"id":"plan2_toilettenmaterial","prio":"prio-1","text":"Toilettenpapier, Seife, Handdesinfektion, Licht und Reinigungsmittel bereitstellen"},{"id":"plan2_trinkwasser_besorgen","prio":"prio-1","text":"Trinkwasser gut sichtbar und frei zugänglich bereitstellen"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase7","label":"Phase 7","title":"Aufbau & Vorbereitung","subtitle":"27.–28. Mai 2027","categories":[{"title":"🔨 Infrastruktur & Aufbau","tasks":[{"id":"plan2_dixie_positionieren","prio":"prio-1","text":"Vorhandenes Dixie final positionieren, reinigen, ausstatten und Zugang freihalten"},{"id":"plan2_wetterschutz_aufbauen","prio":"prio-1","text":"Eigenen 6x6-m-Baldachin und vorhandenen 3x6-m-Pavillon aufstellen und vollständig abspannen; Pavillon anschließend mit Schabracken, Jute und Bannern verkleiden"},{"id":"plan2_rampe_beleuchtung","prio":"prio-1","text":"Rampe sichern, Tau und Beleuchtung montieren"},{"id":"plan2_strom_verlegen","prio":"prio-1","text":"Kabeltrommeln verlegen, Kabelquerungen sichern und alle Verbraucher testen"},{"id":"plan2_wettkampfbereiche_markieren","prio":"prio-1","text":"Wettkampfbereiche markieren und absperren"},{"id":"plan2_deko_aufhaengen","prio":"prio-2","text":"Dekoration, Schilder, Banner und Lichterketten anbringen; Lichtcheck im Dunkeln durchführen"},{"id":"plan2_kueche_aufbauen","prio":"prio-1","text":"Küche mit Grill, Dreibein, Arbeitsflächen und Wasserversorgung einrichten"},{"id":"plan2_getraenkestation","prio":"prio-1","text":"Alchemistenstation aufbauen: Heiltrank und Manatrank in die zwei vorhandenen Getränkespender füllen, alkoholische Getränke kennzeichnen, versiegelte Potion-Deko aufstellen sowie Hausmet, Softdrinks und frei zugängliches Wasser bereitstellen"},{"id":"plan2_sicherheitscheck_aufbau","prio":"prio-1","text":"Sicherheitscheck durchführen: Stolperstellen, Kabel, Rampe, Feuerlöscher und Erste Hilfe"},{"id":"plan2_spendenkasse","prio":"prio-3","text":"Spendenkasse beziehungsweise QR-Code nur aufstellen, falls weiterhin vorgesehen"}]},{"title":"🍳 Küche am Vorabend","tasks":[{"id":"plan2_grill_marinieren","prio":"prio-1","text":"Grillkomponenten marinieren und sicher kühlen"},{"id":"plan2_kessel_vorbereiten","prio":"prio-1","text":"Gemüse und Zutaten für das Kesselgericht vorbereiten und gekühlt lagern"},{"id":"plan2_beilagen_vorbereiten","prio":"prio-2","text":"Beilagen und Dips vorbereiten"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[]},{"id":"phase8","label":"29. Mai 2027","title":"Eventtag & Abbau","subtitle":"Das 30. Winterfest","categories":[{"title":"✅ Eventtag-Checkliste","tasks":[{"id":"plan2_event_strom","prio":"prio-1","text":"Strom und Beleuchtung in allen benötigten Bereichen funktionieren"},{"id":"plan2_trinkwasser","prio":"prio-1","text":"Wasser sichtbar und frei zugänglich bereitstellen"},{"id":"plan2_event_dixie","prio":"prio-1","text":"Dixie zugänglich, beleuchtet und mit Papier, Seife und Handdesinfektion ausgestattet"},{"id":"plan2_event_erstehilfe","prio":"prio-1","text":"Erste-Hilfe-Set am Helfer- oder Küchenbereich griffbereit positionieren"},{"id":"plan2_event_loeschmittel","prio":"prio-1","text":"Feuerlöscher und Wassereimer am Grill- und Kesselbereich positionieren"},{"id":"plan2_event_aufsicht","prio":"prio-1","text":"Axt- und Bogenaufsicht briefen, Wartezonen markieren und Regeln sichtbar aufstellen"},{"id":"plan2_event_punkteliste","prio":"prio-2","text":"Punkteliste, Stifte und verantwortliche Person festlegen"},{"id":"plan2_event_rampe","prio":"prio-1","text":"Rampe und Laufwege auf Trockenheit, Beleuchtung und Stolperstellen prüfen"},{"id":"plan2_event_musik","prio":"prio-2","text":"Musik und Atmosphäre vor Ankunft der Gäste starten"},{"id":"plan2_event_begruessung","prio":"prio-3","text":"Begrüßungsgetränk bereitstellen, falls weiterhin vorgesehen"}]},{"title":"🏕 Abbau & Übergabe","tasks":[{"id":"plan2_abbau_dixie","prio":"prio-1","text":"Dixie nach der Nutzung grob reinigen, sichern und späteren Entleerungsbedarf prüfen"},{"id":"plan2_abbau_muell","prio":"prio-1","text":"Müll vollständig entfernen"},{"id":"plan2_abbau_material","prio":"prio-1","text":"Baldachin trocken und vollständig abbauen, Holzgestänge, Pavillon, Sitzmöbel und Equipment vollständig verstauen; feuchte Baumwollplane nicht einlagern"},{"id":"plan2_abbau_endkontrolle","prio":"prio-1","text":"Gelände final abgehen: Heringe, Kabel, Werkzeuge und Müll kontrollieren"},{"id":"plan2_abbau_uebergabe","prio":"prio-2","text":"Grundstückseigentümer informieren und Gelände übergeben"}]},{"title":"➕ Freie Zusatzaufgaben","tasks":[]}],"timeline":[{"time":"07:00 – 08:00","text":"Frühaufbau-Helfer: Letzte Checks, Kesselgericht ansetzen, Grill vorbereiten, Stromanschlüsse kontrollieren"},{"time":"08:00 – 10:00","text":"Küche startet: Kesselgericht auf dem Dreibein, Bratwürste vorbereiten, Saucen und Beilagen anrichten"},{"time":"10:00 – 11:00","text":"Finale Checks: Wettkampfbereiche nochmals prüfen, Bogenschießen-Sicherheit kontrollieren, Axtwerfen-Bereich absperren bis Aufsicht da ist"},{"time":"12:00","text":"Tore öffnen – Gäste kommen an. Begrüßungsgetränk bereit. Gelände wirkt sofort. Snacks vorhanden"},{"time":"12:00 – 14:00","text":"Ankunftsphase: Freies Erkunden, Begrüßung, Getränke, Bogenbaukurs mit Freund (optional), Teamlisten aushängen"},{"time":"14:00 – 16:00","text":"Wettkämpfe Block 1: Bogenschießen + Axtwerfen. Nüchtern oder halbwegs nüchtern. Aufsicht aktiv. Punkte werden notiert"},{"time":"16:00 – 17:30","text":"Festessen: Grillstation läuft, Kesselgericht ausgeben, Brot, Beilagen, Saucen. Kein Stress, kein Buffet-Chaos – strukturierte Ausgabe"},{"time":"17:30 – 19:00","text":"Wettkämpfe Block 2: Tauziehen, Sandsack Team-Carry, Metkrug halten. Punkte werden addiert"},{"time":"19:00","text":"Bögen und Äxte wegschließen. Kein Ausnahmen. Verantwortliche Person übernimmt"},{"time":"19:00 – 20:00","text":"Siegerehrung: Punkteauszählung, Titel vergeben, Schärpe übergeben, Sondertitel für lustige Kategorien"},{"time":"20:00 – open end","text":"Tavernenabend: Kesselgericht für Spätkommer, Getränke, Musik, Lichtinszenierung, Lagerfeuer (falls erlaubt), Chillbereiche"},{"time":"Nacht","text":"Wasser sichtbar halten, Müll sammeln, Ruhezone für Übernachter, Taxi-Koordination für Heimfahrer"}]}] ;
 </script>
 
 <style>
@@ -1753,7 +2070,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-head"><div><p class="progress-title">Budget</p><p class="documents-subtitle">Budget ist für Kosten. Einkauf ist für Mengen und Beschaffung. Überschneidungen wie Essen sind normal: Essen kann Budget-Kategorie und Einkaufskategorie sein.</p></div><div class="hub-stats-inline" id="budgetStats"></div></div>
     <div class="hub-form budget-quick-form">
       <input id="budgetTitle" type="text" maxlength="80" placeholder="Posten, z.B. QUIXX24 Toiletten">
-      <select id="budgetCategory"><option>Toilette</option><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Musik</option><option>Sonstiges</option></select>
+      <select id="budgetCategory"><option>Toilette</option><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Zelt</option><option>Musik</option><option>Sonstiges</option></select>
       <input id="budgetPlanned" type="number" step="0.01" min="0" placeholder="Geplant €">
       <textarea id="budgetNote" maxlength="300" placeholder="Planungsnotiz, Linkhinweis, Annahme, Angebotstand"></textarea>
       <details class="form-advanced">
@@ -1774,7 +2091,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-form three-col">
       <input id="shoppingItem" type="text" maxlength="80" placeholder="Artikel, z.B. LED-Laternen">
       <input id="shoppingQty" type="text" maxlength="60" placeholder="Menge, z.B. 6 Stück">
-      <select id="shoppingCategory"><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Toilette</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Musik</option><option>Sonstiges</option></select>
+      <select id="shoppingCategory"><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Toilette</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Zelt</option><option>Musik</option><option>Sonstiges</option></select>
       <input id="shoppingResponsible" type="text" maxlength="40" placeholder="Zuständig">
       <textarea id="shoppingNote" maxlength="300" placeholder="Notiz / Bezugsquelle / Linkhinweis"></textarea>
       <button class="send-btn doc-add-btn" onclick="APP.addShopping()">Einkauf eintragen</button>
@@ -1800,7 +2117,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-form three-col tent-form">
       <input id="tentName" type="text" maxlength="100" placeholder="Name / Anbieter / Gruppe, z.B. Tombo-Ritter">
       <select id="tentType"><option>Verein</option><option>Zeltverleih</option><option>LARP-Gruppe</option><option>Mittelaltergruppe</option><option>Privatkontakt</option><option>Shop</option><option>Sonstiges</option></select>
-      <select id="tentStatus"><option>Idee</option><option>Angefragt</option><option>Nachfassen</option><option>Zusage</option><option>Absage</option><option>Gebucht</option><option>Unklar</option></select>
+      <select id="tentStatus"><option>Gewählte Lösung</option><option>Idee</option><option>Angefragt</option><option>Nachfassen</option><option>Zusage</option><option>Fallback</option><option>Absage</option><option>Gebucht</option><option>Unklar</option></select>
       <input id="tentContact" type="text" maxlength="120" placeholder="Kontakt / Person / Mail / Telefon">
       <input id="tentLink" type="url" maxlength="1000" placeholder="Website / Kontaktlink / Dokumentlink">
       <input id="tentPrice" type="number" min="0" step="0.01" placeholder="Preis grob €">
@@ -1816,7 +2133,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-head"><div><p class="progress-title">Beschlusslog</p><p class="documents-subtitle">Feste Entscheidungen, damit sie nicht im Chat verschwinden.</p></div></div>
     <div class="hub-form two-col">
       <input id="decisionTitle" type="text" maxlength="100" placeholder="Titel, z.B. Toilettenlösung final">
-      <select id="decisionCategory"><option>Datum</option><option>Gelände</option><option>Toilette</option><option>Essen</option><option>Budget</option><option>Programm</option><option>Helfer</option><option>Sonstiges</option></select>
+      <select id="decisionCategory"><option>Datum</option><option>Gelände</option><option>Toilette</option><option>Essen</option><option>Budget</option><option>Programm</option><option>Helfer</option><option>Zelt</option><option>Sonstiges</option></select>
       <textarea id="decisionText" maxlength="800" placeholder="Was wurde entschieden und warum?"></textarea>
       <label class="doc-pin-row"><input id="decisionPinned" type="checkbox"> Wichtig / oben anheften</label>
       <button class="send-btn doc-add-btn" onclick="APP.addDecision()">Beschluss eintragen</button>
