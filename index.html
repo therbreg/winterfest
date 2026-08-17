@@ -70,6 +70,7 @@ window._documents = {};
 window._pins = {};
 window._decisions = {};
 window._budget = {};
+window._assets = {};
 window._shopping = {};
 window._helpers = {};
 window._customTasks = {};
@@ -94,6 +95,7 @@ let legacyMigrationRunning = false;
 
 const validStatus = s => ["open","progress","blocked","done"].includes(s) ? s : "open";
 const statusLabel = s => ({open:"Offen", progress:"In Arbeit", blocked:"Blockiert", done:"Erledigt"})[validStatus(s)];
+const BUDGET_CAP = 4000;
 const parseMoney = v => {
   const n = Number(String(v || "").replace(",",".").replace(/[^0-9.-]/g,""));
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
@@ -476,6 +478,131 @@ async function ensureTentPlanData() {
   }
 }
 
+// system_final_budget_plan_20260817_v2
+async function ensureFinalBudgetPlanData(){
+  const version = "2026-08-17-final-budget-v2";
+  try {
+    const marker = await get(ref(db, dbPath("assetMeta/finalBudgetPlanVersion")));
+    if (marker.val() === version) return;
+
+    const current = (await get(ref(db, dbPath("assets")))).val() || {};
+    const patch = {};
+    const now = Date.now();
+
+    const appendNote = (oldNote, extra) => {
+      const base = String(oldNote || "").trim();
+      if (base.includes(extra)) return base;
+      return [base, extra].filter(Boolean).join(" ").slice(0, 700);
+    };
+
+    const put = (key, fields) => {
+      const row = current[key];
+      if (!row) return;
+
+      Object.entries(fields).forEach(([field, value]) => {
+        patch[`assets/${key}/${field}`] = value;
+      });
+
+      patch[`assets/${key}/updatedAt`] = now;
+      patch[`assets/${key}/updatedBy`] = "Finaler Kostenplan 17.08.2026";
+
+      if (row.budgetKey) {
+        if (Object.prototype.hasOwnProperty.call(fields, "planned")) {
+          patch[`budget/${row.budgetKey}/planned`] = fields.planned;
+        }
+        if (Object.prototype.hasOwnProperty.call(fields, "actual")) {
+          patch[`budget/${row.budgetKey}/actual`] = fields.actual;
+        }
+        patch[`budget/${row.budgetKey}/updatedAt`] = now;
+        patch[`budget/${row.budgetKey}/updatedBy`] = "Finaler Kostenplan 17.08.2026";
+      }
+    };
+
+    put("baldachin_kauf", {
+      planned: 1205.70,
+      note: appendNote(
+        current.baldachin_kauf?.note,
+        "Aktiver Planwert: 1.125,80 EUR Kaufpreis plus 79,90 EUR Versand = 1.205,70 EUR."
+      )
+    });
+
+    put("met", { planned: 100 });
+    put("wein", { planned: 30 });
+    put("soft", { planned: 60 });
+    put("spirit", { planned: 30 });
+
+    put("kuehlung", {
+      planned: 50,
+      note: appendNote(current.kuehlung?.note, "Separate Kühlreserve von 50 EUR zusätzlich zum Getränkedeckel.")
+    });
+
+    put("zauberflaschen", {
+      planned: 80,
+      note: appendNote(current.zauberflaschen?.note, "Bewusste Reserve: 80 EUR bleiben als Planwert bestehen.")
+    });
+
+    put("kruege", {
+      planned: 22,
+      actual: 22,
+      status: "Gekauft",
+      qty: "gekaufter Bestand",
+      note: appendNote(current.kruege?.note, "Kauf abgeschlossen; 22 EUR inklusive Versand.")
+    });
+
+    put("oa_feuerkoerbe", {
+      planned: 10,
+      status: "Später bestätigen",
+      next: "Mit den übrigen Other-Ages-Mietartikeln im Frühjahr 2027 final bestätigen",
+      note: appendNote(current.oa_feuerkoerbe?.note, "Fest eingeplant; nicht mehr optional.")
+    });
+
+    if (current.dixie_service) {
+      put("dixie_service", {
+        area: "Toilette",
+        item: "Dixie: Reinigung / Entleerung",
+        type: "Mieten",
+        status: "Später organisieren",
+        source: "noch offen",
+        qty: "1 vorhandenes Dixie",
+        planned: 430,
+        actual: Number(current.dixie_service.actual || 0),
+        next: "Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
+        note: appendNote(
+          current.dixie_service.note,
+          "Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies."
+        )
+      });
+    } else {
+      patch["assets/dixie_service"] = {
+        area: "Toilette",
+        item: "Dixie: Reinigung / Entleerung",
+        type: "Mieten",
+        status: "Später organisieren",
+        source: "noch offen",
+        qty: "1 vorhandenes Dixie",
+        planned: 430,
+        actual: 0,
+        due: "",
+        next: "Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
+        note: "Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies.",
+        seeded: true,
+        ts: now,
+        updatedAt: now,
+        updatedBy: "Finaler Kostenplan 17.08.2026"
+      };
+    }
+
+    patch["assetMeta/finalBudgetPlanVersion"] = version;
+    patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
+    patch["meta/budgetCap"] = 4000;
+    patch["meta/budgetPlanTarget"] = 3718.70;
+
+    await update(ref(db, dbPath("")), patch);
+  } catch (error) {
+    console.error("Finale Kostenplan-Migration fehlgeschlagen", error);
+  }
+}
+
 function bindFirebase() {
   bindValue("tasks", data => {
     window._taskData = data;
@@ -499,6 +626,7 @@ function bindFirebase() {
   bindValue("pins", data => { window._pins = data; renderPins(data); renderDashboard(); });
   bindValue("decisions", data => { window._decisions = data; renderDecisions(data); renderDashboard(); });
   bindValue("budget", data => { window._budget = data; renderBudget(data); renderDashboard(); });
+  bindValue("assets", data => { window._assets = data; renderBudget(window._budget); renderDashboard(); });
   bindValue("shopping", data => { window._shopping = data; renderShopping(data); renderDashboard(); });
   bindValue("helpers", data => { window._helpers = data; renderHelpers(data); renderDashboard(); });
   bindValue("tentLeads", data => { window._tentLeads = data; renderTentLeads(data); renderDashboard(); });
@@ -711,12 +839,15 @@ function renderBudget(data) {
   const stats = document.getElementById("budgetStats");
   if (!list) return;
   const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
-  const planned = items.reduce((s,i)=>s+Number(i.planned||0),0);
-  const actual = items.reduce((s,i)=>s+Number(i.actual||0),0);
-  const withoutActual = items.filter(i=>Number(i.actual||0) === 0).length;
-  const openActual = items.reduce((s,i)=>s+(!i.reimbursed?Number(i.actual||0):0),0);
-  const categoryRows = Object.entries(items.reduce((acc,i)=>{
-    const c = i.category || "Sonstiges";
+  const assetItems = Object.entries(window._assets || {}).map(([key,value])=>({key,...value}));
+  const activeAssets = assetItems.filter(i=>i.status!=="Fallback");
+  const planned = activeAssets.reduce((s,i)=>s+Number(i.planned||0),0);
+  const actual = activeAssets.reduce((s,i)=>s+Number(i.actual||0),0);
+  const openActual = activeAssets.reduce((s,i)=>s+Math.max(Number(i.planned||0)-Number(i.actual||0),0),0);
+  const withoutActual = activeAssets.filter(i=>Number(i.planned||0)>0 && Number(i.actual||0)===0).length;
+  const budgetBuffer = BUDGET_CAP - planned;
+  const categoryRows = Object.entries(activeAssets.reduce((acc,i)=>{
+    const c = i.area || "Sonstiges";
     if (!acc[c]) acc[c] = {planned:0, actual:0};
     acc[c].planned += Number(i.planned || 0);
     acc[c].actual += Number(i.actual || 0);
@@ -727,6 +858,9 @@ function renderBudget(data) {
     <span>Ist: <strong>${fmtMoney(actual)}</strong></span>
     <span>Offen/ungeklärt: <strong>${fmtMoney(openActual)}</strong></span>
     <span>ohne Ist-Kosten: <strong>${withoutActual}</strong></span>
+    <span>Obergrenze: <strong>${fmtMoney(BUDGET_CAP)}</strong></span>
+    <span>Puffer bis 4.000: <strong>${fmtMoney(budgetBuffer)}</strong></span>
+    <span>Summenquelle: <strong>Ausstattung &amp; Beschaffung</strong></span>
     ${categoryRows.length ? `<span class="budget-cat-summary">${categoryRows.map(([c,v])=>`${esc(c)}: ${fmtMoney(v.planned)}`).join(" · ")}</span>` : ""}`;
   list.innerHTML = items.length ? items.map(i=>{
     const plannedValue = Number(i.planned || 0);
@@ -887,7 +1021,7 @@ function renderDashboard() {
   const blocked = activeTaskValues.filter(t=>validStatus(t.status)==="blocked").length;
   const today = new Date(); today.setHours(0,0,0,0);
   const overdue = activeTaskValues.filter(t=>t.due && validStatus(t.status)!=="done" && new Date(t.due+"T12:00:00") < today).length;
-  const budgetActual = Object.values(window._budget || {}).reduce((s,i)=>s+Number(i.actual||0),0);
+  const budgetActual = Object.values(window._assets || {}).filter(i=>i.status!=="Fallback").reduce((s,i)=>s+Number(i.actual||0),0);
   const shoppingOpen = Object.values(window._shopping || {}).filter(i=>!i.bought).length;
   const tentActive = Object.values(window._tentLeads || {}).filter(i=>!["Absage","Gebucht","Fallback"].includes(i.status)).length;
   stats.innerHTML = `
@@ -1674,6 +1808,7 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.addEventListener("keydown", event => { if (event.key === "Escape") window.APP.closeMobileMenu(); });
   setSyncBar("⟳ Verbinde mit Firebase…");
   ensureTentPlanData();
+  ensureFinalBudgetPlanData();
   bindFirebase();
 });
 </script>

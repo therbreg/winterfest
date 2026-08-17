@@ -105,10 +105,11 @@ document.getElementById("app").classList.remove("hidden");
 document.getElementById("backLink").href=`index.html#${encodeURIComponent(EVENT_ID)}`;
 
 const app=initializeApp(firebaseConfig),db=getDatabase(app),dbPath=sub=>`events/${EVENT_ID}/${sub}`;
-const AREAS=["Zelt & Pavillon","Other Ages","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];
+const AREAS=["Zelt & Pavillon","Other Ages","Toilette","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];
 const TYPES=["Vorhanden","Kaufen","Mieten","DIY","Leihen","Beauftragen","Verbrauch","Entscheidung"];
 const STATUSES=["Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional"];
 const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Fallback","Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));
+const BUDGET_CAP=4000;
 let assets={},budget={},shopping={};
 const esc=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const fmt=n=>Number(n||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
@@ -717,6 +718,131 @@ async function migrateMissingEquipment(){
   }
 }
 
+// system_final_budget_plan_20260817_v2
+async function migrateFinalBudgetPlan(){
+  const version = "2026-08-17-final-budget-v2";
+  try {
+    const marker = await get(ref(db, dbPath("assetMeta/finalBudgetPlanVersion")));
+    if (marker.val() === version) return;
+
+    const current = (await get(ref(db, dbPath("assets")))).val() || {};
+    const patch = {};
+    const now = Date.now();
+
+    const appendNote = (oldNote, extra) => {
+      const base = String(oldNote || "").trim();
+      if (base.includes(extra)) return base;
+      return [base, extra].filter(Boolean).join(" ").slice(0, 700);
+    };
+
+    const put = (key, fields) => {
+      const row = current[key];
+      if (!row) return;
+
+      Object.entries(fields).forEach(([field, value]) => {
+        patch[`assets/${key}/${field}`] = value;
+      });
+
+      patch[`assets/${key}/updatedAt`] = now;
+      patch[`assets/${key}/updatedBy`] = "Finaler Kostenplan 17.08.2026";
+
+      if (row.budgetKey) {
+        if (Object.prototype.hasOwnProperty.call(fields, "planned")) {
+          patch[`budget/${row.budgetKey}/planned`] = fields.planned;
+        }
+        if (Object.prototype.hasOwnProperty.call(fields, "actual")) {
+          patch[`budget/${row.budgetKey}/actual`] = fields.actual;
+        }
+        patch[`budget/${row.budgetKey}/updatedAt`] = now;
+        patch[`budget/${row.budgetKey}/updatedBy`] = "Finaler Kostenplan 17.08.2026";
+      }
+    };
+
+    put("baldachin_kauf", {
+      planned: 1205.70,
+      note: appendNote(
+        current.baldachin_kauf?.note,
+        "Aktiver Planwert: 1.125,80 EUR Kaufpreis plus 79,90 EUR Versand = 1.205,70 EUR."
+      )
+    });
+
+    put("met", { planned: 100 });
+    put("wein", { planned: 30 });
+    put("soft", { planned: 60 });
+    put("spirit", { planned: 30 });
+
+    put("kuehlung", {
+      planned: 50,
+      note: appendNote(current.kuehlung?.note, "Separate Kühlreserve von 50 EUR zusätzlich zum Getränkedeckel.")
+    });
+
+    put("zauberflaschen", {
+      planned: 80,
+      note: appendNote(current.zauberflaschen?.note, "Bewusste Reserve: 80 EUR bleiben als Planwert bestehen.")
+    });
+
+    put("kruege", {
+      planned: 22,
+      actual: 22,
+      status: "Gekauft",
+      qty: "gekaufter Bestand",
+      note: appendNote(current.kruege?.note, "Kauf abgeschlossen; 22 EUR inklusive Versand.")
+    });
+
+    put("oa_feuerkoerbe", {
+      planned: 10,
+      status: "Später bestätigen",
+      next: "Mit den übrigen Other-Ages-Mietartikeln im Frühjahr 2027 final bestätigen",
+      note: appendNote(current.oa_feuerkoerbe?.note, "Fest eingeplant; nicht mehr optional.")
+    });
+
+    if (current.dixie_service) {
+      put("dixie_service", {
+        area: "Toilette",
+        item: "Dixie: Reinigung / Entleerung",
+        type: "Mieten",
+        status: "Später organisieren",
+        source: "noch offen",
+        qty: "1 vorhandenes Dixie",
+        planned: 430,
+        actual: Number(current.dixie_service.actual || 0),
+        next: "Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
+        note: appendNote(
+          current.dixie_service.note,
+          "Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies."
+        )
+      });
+    } else {
+      patch["assets/dixie_service"] = {
+        area: "Toilette",
+        item: "Dixie: Reinigung / Entleerung",
+        type: "Mieten",
+        status: "Später organisieren",
+        source: "noch offen",
+        qty: "1 vorhandenes Dixie",
+        planned: 430,
+        actual: 0,
+        due: "",
+        next: "Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
+        note: "Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies.",
+        seeded: true,
+        ts: now,
+        updatedAt: now,
+        updatedBy: "Finaler Kostenplan 17.08.2026"
+      };
+    }
+
+    patch["assetMeta/finalBudgetPlanVersion"] = version;
+    patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
+    patch["meta/budgetCap"] = 4000;
+    patch["meta/budgetPlanTarget"] = 3718.70;
+
+    await update(ref(db, dbPath("")), patch);
+  } catch (error) {
+    console.error("Finale Kostenplan-Migration fehlgeschlagen", error);
+  }
+}
+
 async function selfLink(){
   try{
     const p="documents/system_assets_overview",snap=await get(ref(db,dbPath(p)));
@@ -946,6 +1072,8 @@ function render(){
     0
   );
 
+  const budgetBuffer=BUDGET_CAP-planned;
+
   const remaining=activeRows.reduce(
     (sum,i)=>sum+Math.max(
       num(i.planned)-num(i.actual),
@@ -1004,6 +1132,16 @@ function render(){
     <div class="stat">
       <strong>${fmt(remaining)}</strong>
       <span>Rest geplant</span>
+    </div>
+
+    <div class="stat">
+      <strong>${fmt(BUDGET_CAP)}</strong>
+      <span>Obergrenze</span>
+    </div>
+
+    <div class="stat">
+      <strong>${fmt(budgetBuffer)}</strong>
+      <span>Puffer bis Obergrenze</span>
     </div>
 
     <div class="stat">
@@ -1215,6 +1353,7 @@ await seed();
 await migrateTentPlan();
 await migrateCostPlan();
 await migrateMissingEquipment();
+await migrateFinalBudgetPlan();
 await selfLink();
 </script>
 </body>
