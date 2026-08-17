@@ -1,0 +1,244 @@
+name: Fehlende Ausstattung ergänzen
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-missing-equipment.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  add-missing-equipment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fehlende Ausstattung ergänzen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('ausstattung.html')
+          text = path.read_text(encoding='utf-8')
+
+          # Einmalige feste Keys, damit keine Duplikate entstehen.
+          seed_marker = '    hygiene:r("Logistik","Handwasch- und Hygienelösung"'
+          if seed_marker not in text:
+              raise SystemExit('FEHLER: Seed-Anker hygiene nicht gefunden')
+
+          if 'brandschutz:r("Sicherheit","Brandschutz für Grill und Feuerschale"' not in text:
+              old = '''    hygiene:r("Logistik","Handwasch- und Hygienelösung","Kaufen","Offene Entscheidung","noch offen","1 Station",0,0,"Mit Toiletten- und Wasserplanung abstimmen","Seife, Wasser, Papier und ggf. Handdesinfektion einplanen.")'''
+
+              new = '''    brandschutz:r("Sicherheit","Brandschutz für Grill und Feuerschale","Kaufen","Zu kaufen","Baumarkt / Fachhandel","1 Set",70,0,"Geeigneten Feuerlöscher bzw. Löschmittel, Löschdecke sowie Löschwasser oder Sand fest einplanen","Unmittelbar bei Grill und Feuerschale verfügbar halten; Abstand zu Stroh, Jute und Holzdeko beachten."),
+    erstehilfe:r("Sicherheit","Erste-Hilfe-Set für das Event","Kaufen","Zu kaufen","Apotheke / Baumarkt","1 Set",30,0,"Vollständigen Verbandskasten plus Kühlpacks und kleine Wundversorgung zusammenstellen","Gut sichtbar und schnell erreichbar lagern; besonders wegen Wettkämpfen und Feuerstelle."),
+    grillwerkzeug:r("Essen & Feuer","Grill- und Küchenwerkzeug","Kaufen","Zu kaufen","Eigenbestand prüfen / Baumarkt","1 Set",50,0,"Eigenbestand prüfen und fehlende Teile ergänzen","Grillzangen, hitzefeste Handschuhe, Messer, Schneidebretter, Servierschüsseln, große Löffel und Küchenrolle einplanen."),
+    wasserlogistik:r("Logistik","Wasserkanister und Wasserlogistik","Kaufen","Offene Entscheidung","noch offen","1-2 große Kanister",40,0,"Kanistergröße und Wasserquelle mit Hygiene-, Küchen- und Brandschutzplanung abstimmen","Zusätzlich zum Trinkwasser Reserve für Händewaschen, Reinigung und bei Bedarf Löschen vorsehen."),
+    lagerboxen:r("Logistik","Wetterfeste Aufbewahrungsboxen","Kaufen","Zu kaufen","IKEA / Baumarkt","2-4 Boxen",50,0,"Vorhandene Boxen prüfen und fehlende Größen ergänzen","Für Lebensmittel, Werkzeug, Alchemie-Material und feuchtigkeitsempfindliche Ausstattung; Schutz vor Tau und Schmutz."),
+    reparaturkoffer:r("Logistik","Aufbau- und Reparaturkoffer","Kaufen","Zu kaufen","Baumarkt / Eigenbestand","1 Kiste",60,0,"Eigenbestand sammeln und fehlendes Verbrauchsmaterial ergänzen","Kabelbinder, Gewebeband, Schnur, Ersatzseil, Hammer bzw. Vorschlaghammer, Arbeitshandschuhe, Taschenlampe und Ersatzbatterien/Akkus."),
+    beschilderung:r("Gelände","Beschilderung für Gelände und Stationen","DIY","Zu basteln","Eigenbau","mehrere Schilder",25,0,"Schilderliste nach finalem Lageplan festlegen und gestalten","Mindestens Toilette, Getränke, Wettkampfbereiche und Eingang; Parkplatz nur falls vor Ort nötig."),
+    hygiene:r("Logistik","Handwasch- und Hygienelösung","Kaufen","Offene Entscheidung","noch offen","1 Station",0,0,"Mit Toiletten- und Wasserplanung abstimmen","Seife, Wasser, Papier und ggf. Handdesinfektion einplanen.")'''
+
+              if old not in text:
+                  raise SystemExit('FEHLER: exakter hygiene-Seed nicht gefunden')
+
+              text = text.replace(old, new, 1)
+              print('OK Seed-Einträge ergänzt')
+
+          else:
+              print('OK Seed-Einträge bereits vorhanden')
+
+          # Kostenmigration auf neue Version setzen.
+          old_version = 'const version="2026-08-17-cost-v2";'
+          new_version = 'const version="2026-08-17-cost-v3";'
+
+          if new_version not in text:
+              if old_version not in text:
+                  raise SystemExit('FEHLER: Kostenmigrations-Version nicht gefunden')
+
+              text = text.replace(old_version, new_version, 1)
+
+          migration_anchor = '''    patch[
+      "assetMeta/costPlanVersion"
+    ]=version;'''
+
+          if '"brandschutz",\n      {' not in text:
+
+              additions = '''    add(
+      "brandschutz",
+      {
+        area:"Sicherheit",
+        item:"Brandschutz für Grill und Feuerschale",
+        type:"Kaufen",
+        status:"Zu kaufen",
+        source:"Baumarkt / Fachhandel",
+        qty:"1 Set",
+        planned:70,
+        actual:0,
+        due:"",
+        next:"Geeigneten Feuerlöscher bzw. Löschmittel, Löschdecke sowie Löschwasser oder Sand fest einplanen",
+        note:"Unmittelbar bei Grill und Feuerschale verfügbar halten; Abstand zu Stroh, Jute und Holzdeko beachten."
+      }
+    );
+
+    add(
+      "erstehilfe",
+      {
+        area:"Sicherheit",
+        item:"Erste-Hilfe-Set für das Event",
+        type:"Kaufen",
+        status:"Zu kaufen",
+        source:"Apotheke / Baumarkt",
+        qty:"1 Set",
+        planned:30,
+        actual:0,
+        due:"",
+        next:"Vollständigen Verbandskasten plus Kühlpacks und kleine Wundversorgung zusammenstellen",
+        note:"Gut sichtbar und schnell erreichbar lagern; besonders wegen Wettkämpfen und Feuerstelle."
+      }
+    );
+
+    add(
+      "grillwerkzeug",
+      {
+        area:"Essen & Feuer",
+        item:"Grill- und Küchenwerkzeug",
+        type:"Kaufen",
+        status:"Zu kaufen",
+        source:"Eigenbestand prüfen / Baumarkt",
+        qty:"1 Set",
+        planned:50,
+        actual:0,
+        due:"",
+        next:"Eigenbestand prüfen und fehlende Teile ergänzen",
+        note:"Grillzangen, hitzefeste Handschuhe, Messer, Schneidebretter, Servierschüsseln, große Löffel und Küchenrolle einplanen."
+      }
+    );
+
+    add(
+      "wasserlogistik",
+      {
+        area:"Logistik",
+        item:"Wasserkanister und Wasserlogistik",
+        type:"Kaufen",
+        status:"Offene Entscheidung",
+        source:"noch offen",
+        qty:"1-2 große Kanister",
+        planned:40,
+        actual:0,
+        due:"",
+        next:"Kanistergröße und Wasserquelle mit Hygiene-, Küchen- und Brandschutzplanung abstimmen",
+        note:"Zusätzlich zum Trinkwasser Reserve für Händewaschen, Reinigung und bei Bedarf Löschen vorsehen."
+      }
+    );
+
+    add(
+      "lagerboxen",
+      {
+        area:"Logistik",
+        item:"Wetterfeste Aufbewahrungsboxen",
+        type:"Kaufen",
+        status:"Zu kaufen",
+        source:"IKEA / Baumarkt",
+        qty:"2-4 Boxen",
+        planned:50,
+        actual:0,
+        due:"",
+        next:"Vorhandene Boxen prüfen und fehlende Größen ergänzen",
+        note:"Für Lebensmittel, Werkzeug, Alchemie-Material und feuchtigkeitsempfindliche Ausstattung; Schutz vor Tau und Schmutz."
+      }
+    );
+
+    add(
+      "reparaturkoffer",
+      {
+        area:"Logistik",
+        item:"Aufbau- und Reparaturkoffer",
+        type:"Kaufen",
+        status:"Zu kaufen",
+        source:"Baumarkt / Eigenbestand",
+        qty:"1 Kiste",
+        planned:60,
+        actual:0,
+        due:"",
+        next:"Eigenbestand sammeln und fehlendes Verbrauchsmaterial ergänzen",
+        note:"Kabelbinder, Gewebeband, Schnur, Ersatzseil, Hammer bzw. Vorschlaghammer, Arbeitshandschuhe, Taschenlampe und Ersatzbatterien/Akkus."
+      }
+    );
+
+    add(
+      "beschilderung",
+      {
+        area:"Gelände",
+        item:"Beschilderung für Gelände und Stationen",
+        type:"DIY",
+        status:"Zu basteln",
+        source:"Eigenbau",
+        qty:"mehrere Schilder",
+        planned:25,
+        actual:0,
+        due:"",
+        next:"Schilderliste nach finalem Lageplan festlegen und gestalten",
+        note:"Mindestens Toilette, Getränke, Wettkampfbereiche und Eingang; Parkplatz nur falls vor Ort nötig."
+      }
+    );
+
+'''
+
+              if migration_anchor not in text:
+                  raise SystemExit('FEHLER: Migrationsanker nicht gefunden')
+
+              text = text.replace(
+                  migration_anchor,
+                  additions + migration_anchor,
+                  1
+              )
+
+              print('OK Firebase-Migration ergänzt')
+
+          else:
+              print('OK Firebase-Migration bereits vorhanden')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Änderungen prüfen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff --check
+
+          grep -q 'Brandschutz für Grill und Feuerschale' ausstattung.html
+          grep -q 'Erste-Hilfe-Set für das Event' ausstattung.html
+          grep -q 'Grill- und Küchenwerkzeug' ausstattung.html
+          grep -q 'Wasserkanister und Wasserlogistik' ausstattung.html
+          grep -q 'Wetterfeste Aufbewahrungsboxen' ausstattung.html
+          grep -q 'Aufbau- und Reparaturkoffer' ausstattung.html
+          grep -q 'Beschilderung für Gelände und Stationen' ausstattung.html
+          grep -q '2026-08-17-cost-v3' ausstattung.html
+
+      - name: Änderungen committen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- ausstattung.html; then
+            echo 'Keine Änderungen notwendig.'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git add ausstattung.html
+          git commit -m 'Add missing event equipment'
+          git push
