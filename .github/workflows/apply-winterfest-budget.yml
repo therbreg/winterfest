@@ -1,4 +1,4 @@
-name: Winterfest Kostenplan aktualisieren
+name: Winterfest Kostenplan aktualisieren v2
 
 on:
   workflow_dispatch:
@@ -30,9 +30,8 @@ jobs:
       - name: Kostenplan in Website einbauen
         shell: bash
         run: |
-          python <<'PY'
+          cat > /tmp/update_budget.py <<'PY'
           from pathlib import Path
-          import re
 
           AUS = Path("ausstattung.html")
           IDX = Path("index.html")
@@ -57,246 +56,20 @@ jobs:
                   raise RuntimeError(f"{label}: Marker nicht eindeutig, gefunden: {count}")
               return text.replace(marker, block + "\n\n" + marker, 1)
 
-          # AUSSTATTUNG: 4.000 EUR Obergrenze + neue Kostenmigration
+          def replace_inside_function(text, function_marker, start_marker, end_marker, replacement, label):
+              fn = text.find(function_marker)
+              if fn < 0:
+                  raise RuntimeError(f"{label}: Funktion nicht gefunden")
+              start = text.find(start_marker, fn)
+              if start < 0:
+                  raise RuntimeError(f"{label}: Startmarker nicht gefunden")
+              end = text.find(end_marker, start)
+              if end < 0:
+                  raise RuntimeError(f"{label}: Endmarker nicht gefunden")
+              return text[:start] + replacement + text[end:]
 
-          if 'const BUDGET_CAP=4000;' not in aus:
-              aus = replace_once(
-                  aus,
-                  'let assets={},budget={},shopping={};',
-                  'const BUDGET_CAP=4000;\nlet assets={},budget={},shopping={};',
-                  "Budgetobergrenze in ausstattung.html"
-              )
-
-          areas_match = re.search(r'const AREAS=\[[^\n]+\];', aus)
-          if not areas_match:
-              raise RuntimeError("AREAS-Konstante in ausstattung.html nicht gefunden.")
-          if '"Toilette"' not in areas_match.group(0):
-              aus = replace_once(
-                  aus,
-                  '"Other Ages","Gelände"',
-                  '"Other Ages","Toilette","Gelände"',
-                  "Toiletten-Bereich in ausstattung.html"
-              )
-
-          final_migration_aus = r'''
-          // system_final_budget_plan_20260817
-          async function migrateFinalBudgetPlan(){
-            const version="2026-08-17-final-budget-v1";
-
-            try{
-              const marker=await get(
-                ref(db,dbPath("assetMeta/finalBudgetPlanVersion"))
-              );
-              if(marker.val()===version)return;
-
-              const current=(
-                await get(ref(db,dbPath("assets")))
-              ).val()||{};
-
-              const patch={};
-              const now=Date.now();
-
-              const appendNote=(oldNote,extra)=>{
-                const base=String(oldNote||"").trim();
-                if(base.includes(extra))return base;
-                return [base,extra].filter(Boolean).join(" ").slice(0,700);
-              };
-
-              const put=(key,fields)=>{
-                const row=current[key];
-                if(!row)return;
-
-                Object.entries(fields).forEach(([field,value])=>{
-                  patch[`assets/${key}/${field}`]=value;
-                });
-
-                patch[`assets/${key}/updatedAt`]=now;
-                patch[`assets/${key}/updatedBy`]="Finaler Kostenplan 17.08.2026";
-
-                if(row.budgetKey){
-                  if(Object.prototype.hasOwnProperty.call(fields,"planned")){
-          patch[`budget/${row.budgetKey}/planned`]=fields.planned;
-                  }
-                  if(Object.prototype.hasOwnProperty.call(fields,"actual")){
-          patch[`budget/${row.budgetKey}/actual`]=fields.actual;
-                  }
-                  if(Object.prototype.hasOwnProperty.call(fields,"item")){
-          patch[`budget/${row.budgetKey}/title`]=fields.item;
-                  }
-                  if(Object.prototype.hasOwnProperty.call(fields,"area")){
-          patch[`budget/${row.budgetKey}/category`]=fields.area;
-                  }
-                  patch[`budget/${row.budgetKey}/updatedAt`]=now;
-                  patch[`budget/${row.budgetKey}/updatedBy`]="Finaler Kostenplan 17.08.2026";
-                }
-              };
-
-              const add=(key,row)=>{
-                if(current[key]){
-                  put(key,row);
-                  return;
-                }
-                patch[`assets/${key}`]={
-                  ...row,
-                  seeded:true,
-                  ts:now,
-                  updatedAt:now,
-                  updatedBy:"Finaler Kostenplan 17.08.2026"
-                };
-              };
-
-              put("baldachin_kauf",{
-                planned:1205.70,
-                note:appendNote(
-                  current.baldachin_kauf?.note,
-                  "Aktiver Planwert: 1.125,80 EUR Kaufpreis plus 79,90 EUR Versand = 1.205,70 EUR."
-                )
-              });
-
-              put("met",{
-                planned:100,
-                note:appendNote(current.met?.note,"Teil des festen Gesamtdeckels von 220 EUR für Getränke.")
-              });
-              put("wein",{
-                planned:30,
-                note:appendNote(current.wein?.note,"Teil des festen Gesamtdeckels von 220 EUR für Getränke.")
-              });
-              put("soft",{
-                planned:60,
-                note:appendNote(current.soft?.note,"Teil des festen Gesamtdeckels von 220 EUR für Getränke.")
-              });
-              put("spirit",{
-                planned:30,
-                note:appendNote(current.spirit?.note,"Teil des festen Gesamtdeckels von 220 EUR für Getränke.")
-              });
-
-              put("kuehlung",{
-                planned:50,
-                note:appendNote(current.kuehlung?.note,"Separate Kühlreserve von 50 EUR zusätzlich zum Getränkedeckel.")
-              });
-
-              put("zauberflaschen",{
-                planned:80,
-                note:appendNote(current.zauberflaschen?.note,"Bewusste Reserve: 80 EUR bleiben als Planwert bestehen.")
-              });
-
-              put("kruege",{
-                planned:22,
-                actual:22,
-                status:"Gekauft",
-                qty:"gekaufter Bestand",
-                note:appendNote(current.kruege?.note,"Kauf abgeschlossen; 22 EUR inklusive Versand.")
-              });
-
-              put("oa_feuerkoerbe",{
-                planned:10,
-                status:"Später bestätigen",
-                next:"Mit den übrigen Other-Ages-Mietartikeln im Frühjahr 2027 final bestätigen",
-                note:appendNote(current.oa_feuerkoerbe?.note,"Fest eingeplant; nicht mehr optional.")
-              });
-
-              add("dixie_service",{
-                area:"Toilette",
-                item:"Dixie: Reinigung / Entleerung",
-                type:"Mieten",
-                status:"Später organisieren",
-                source:"noch offen",
-                qty:"1 vorhandenes Dixie",
-                planned:430,
-                actual:0,
-                due:"",
-                next:"Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
-                note:"Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies."
-              });
-
-              patch["assetMeta/finalBudgetPlanVersion"]=version;
-              patch["assetMeta/finalBudgetPlanUpdatedAt"]=now;
-              patch["meta/budgetCap"]=4000;
-              patch["meta/budgetPlanTarget"]=3718.70;
-
-              await update(ref(db,dbPath("")),patch);
-
-            }catch(error){
-              console.error("Finale Kostenplan-Migration fehlgeschlagen",error);
-              sync("Kostenplan-Migration fehlgeschlagen","err");
-            }
-          }
-          '''.strip()
-
-          if "system_final_budget_plan_20260817" not in aus:
-              aus = insert_before_once(
-                  aus,
-                  "async function selfLink(){",
-                  final_migration_aus,
-                  "Finale Kostenmigration in ausstattung.html"
-              )
-
-          if "await migrateFinalBudgetPlan();" not in aus:
-              aus = replace_once(
-                  aus,
-                  "await migrateMissingEquipment();\nawait selfLink();",
-                  "await migrateMissingEquipment();\nawait migrateFinalBudgetPlan();\nawait selfLink();",
-                  "Aufruf finale Kostenmigration in ausstattung.html"
-              )
-
-          if "const budgetBuffer=BUDGET_CAP-planned;" not in aus:
-              aus = replace_once(
-                  aus,
-                  "  const waiting=rows.filter(",
-                  "  const budgetBuffer=BUDGET_CAP-planned;\n\n  const waiting=rows.filter(",
-                  "Budgetpuffer in ausstattung.html"
-              )
-
-          if "<span>Obergrenze</span>" not in aus:
-              old = '''    <div class="stat">
-                <strong>${fmt(remaining)}</strong>
-                <span>Rest geplant</span>
-              </div>
-
-              <div class="stat">
-                <strong>${unpriced}</strong>'''
-              new = '''    <div class="stat">
-                <strong>${fmt(remaining)}</strong>
-                <span>Rest geplant</span>
-              </div>
-
-              <div class="stat">
-                <strong>${fmt(BUDGET_CAP)}</strong>
-                <span>Obergrenze</span>
-              </div>
-
-              <div class="stat">
-                <strong>${fmt(budgetBuffer)}</strong>
-                <span>Puffer bis Obergrenze</span>
-              </div>
-
-              <div class="stat">
-                <strong>${unpriced}</strong>'''
-              aus = replace_once(aus, old, new, "Budgetkarten in ausstattung.html")
-
-          # ORGA-HUB: Ausstattung ist die maßgebliche Quelle der Summen
-
-          if "window._assets = {};" not in idx:
-              idx = replace_once(
-                  idx,
-                  "window._budget = {};\nwindow._shopping = {};",
-                  "window._budget = {};\nwindow._assets = {};\nwindow._shopping = {};",
-                  "Asset-State in index.html"
-              )
-
-          if "const BUDGET_CAP = 4000;" not in idx:
-              idx = replace_once(
-                  idx,
-                  "const parseMoney = v => {",
-                  "const BUDGET_CAP = 4000;\nconst parseMoney = v => {",
-                  "Budgetobergrenze in index.html"
-              )
-
-          final_migration_idx = r'''
-          // system_final_budget_plan_20260817
-          async function ensureFinalBudgetPlanData() {
-            const version = "2026-08-17-final-budget-v1";
-
+          migration_core = r'''
+            const version = "2026-08-17-final-budget-v2";
             try {
               const marker = await get(ref(db, dbPath("assetMeta/finalBudgetPlanVersion")));
               if (marker.val() === version) return;
@@ -324,28 +97,14 @@ jobs:
 
                 if (row.budgetKey) {
                   if (Object.prototype.hasOwnProperty.call(fields, "planned")) {
-          patch[`budget/${row.budgetKey}/planned`] = fields.planned;
+                    patch[`budget/${row.budgetKey}/planned`] = fields.planned;
                   }
                   if (Object.prototype.hasOwnProperty.call(fields, "actual")) {
-          patch[`budget/${row.budgetKey}/actual`] = fields.actual;
+                    patch[`budget/${row.budgetKey}/actual`] = fields.actual;
                   }
                   patch[`budget/${row.budgetKey}/updatedAt`] = now;
                   patch[`budget/${row.budgetKey}/updatedBy`] = "Finaler Kostenplan 17.08.2026";
                 }
-              };
-
-              const add = (key, row) => {
-                if (current[key]) {
-                  put(key, row);
-                  return;
-                }
-                patch[`assets/${key}`] = {
-                  ...row,
-                  seeded: true,
-                  ts: now,
-                  updatedAt: now,
-                  updatedBy: "Finaler Kostenplan 17.08.2026"
-                };
               };
 
               put("baldachin_kauf", {
@@ -360,37 +119,67 @@ jobs:
               put("wein", { planned: 30 });
               put("soft", { planned: 60 });
               put("spirit", { planned: 30 });
-              put("kuehlung", { planned: 50 });
-              put("zauberflaschen", { planned: 80 });
+
+              put("kuehlung", {
+                planned: 50,
+                note: appendNote(current.kuehlung?.note, "Separate Kühlreserve von 50 EUR zusätzlich zum Getränkedeckel.")
+              });
+
+              put("zauberflaschen", {
+                planned: 80,
+                note: appendNote(current.zauberflaschen?.note, "Bewusste Reserve: 80 EUR bleiben als Planwert bestehen.")
+              });
 
               put("kruege", {
                 planned: 22,
                 actual: 22,
                 status: "Gekauft",
                 qty: "gekaufter Bestand",
-                note: appendNote(current.kruege?.note,"Kauf abgeschlossen; 22 EUR inklusive Versand.")
+                note: appendNote(current.kruege?.note, "Kauf abgeschlossen; 22 EUR inklusive Versand.")
               });
 
               put("oa_feuerkoerbe", {
                 planned: 10,
                 status: "Später bestätigen",
                 next: "Mit den übrigen Other-Ages-Mietartikeln im Frühjahr 2027 final bestätigen",
-                note: appendNote(current.oa_feuerkoerbe?.note,"Fest eingeplant; nicht mehr optional.")
+                note: appendNote(current.oa_feuerkoerbe?.note, "Fest eingeplant; nicht mehr optional.")
               });
 
-              add("dixie_service", {
-                area: "Toilette",
-                item: "Dixie: Reinigung / Entleerung",
-                type: "Mieten",
-                status: "Später organisieren",
-                source: "noch offen",
-                qty: "1 vorhandenes Dixie",
-                planned: 430,
-                actual: 0,
-                due: "",
-                next: "Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
-                note: "Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies."
-              });
+              if (current.dixie_service) {
+                put("dixie_service", {
+                  area: "Toilette",
+                  item: "Dixie: Reinigung / Entleerung",
+                  type: "Mieten",
+                  status: "Später organisieren",
+                  source: "noch offen",
+                  qty: "1 vorhandenes Dixie",
+                  planned: 430,
+                  actual: Number(current.dixie_service.actual || 0),
+                  next: "Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
+                  note: appendNote(
+                    current.dixie_service.note,
+                    "Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies."
+                  )
+                });
+              } else {
+                patch["assets/dixie_service"] = {
+                  area: "Toilette",
+                  item: "Dixie: Reinigung / Entleerung",
+                  type: "Mieten",
+                  status: "Später organisieren",
+                  source: "noch offen",
+                  qty: "1 vorhandenes Dixie",
+                  planned: 430,
+                  actual: 0,
+                  due: "",
+                  next: "Konkretes Angebot für Reinigung bzw. Entleerung einholen und Planreserve anschließend ersetzen",
+                  note: "Konservative Planreserve von 430 EUR für Reinigung/Entleerung des vorhandenen Dixies.",
+                  seeded: true,
+                  ts: now,
+                  updatedAt: now,
+                  updatedBy: "Finaler Kostenplan 17.08.2026"
+                };
+              }
 
               patch["assetMeta/finalBudgetPlanVersion"] = version;
               patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
@@ -398,17 +187,112 @@ jobs:
               patch["meta/budgetPlanTarget"] = 3718.70;
 
               await update(ref(db, dbPath("")), patch);
-            } catch (err) {
-              console.error("Finale Kostenplan-Migration fehlgeschlagen", err);
+            } catch (error) {
+              console.error("Finale Kostenplan-Migration fehlgeschlagen", error);
             }
-          }
-          '''.strip()
+          '''.strip("\n")
 
-          if "async function ensureFinalBudgetPlanData()" not in idx:
+          # ausstattung.html
+          if 'const BUDGET_CAP=4000;' not in aus:
+              aus = replace_once(
+                  aus,
+                  'let assets={},budget={},shopping={};',
+                  'const BUDGET_CAP=4000;\nlet assets={},budget={},shopping={};',
+                  "Budgetobergrenze in ausstattung.html"
+              )
+
+          old_areas = 'const AREAS=["Zelt & Pavillon","Other Ages","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];'
+          new_areas = 'const AREAS=["Zelt & Pavillon","Other Ages","Toilette","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];'
+          if old_areas in aus:
+              aus = replace_once(aus, old_areas, new_areas, "Toilettenbereich in ausstattung.html")
+
+          aus_migration = (
+              "// system_final_budget_plan_20260817_v2\n"
+              "async function migrateFinalBudgetPlan(){\n"
+              + migration_core
+              + "\n}"
+          )
+
+          if "system_final_budget_plan_20260817_v2" not in aus:
+              aus = insert_before_once(
+                  aus,
+                  "async function selfLink(){",
+                  aus_migration,
+                  "Finale Kostenmigration in ausstattung.html"
+              )
+
+          if "await migrateFinalBudgetPlan();" not in aus:
+              aus = replace_once(
+                  aus,
+                  "await migrateMissingEquipment();\nawait selfLink();",
+                  "await migrateMissingEquipment();\nawait migrateFinalBudgetPlan();\nawait selfLink();",
+                  "Aufruf finale Kostenmigration in ausstattung.html"
+              )
+
+          if "const budgetBuffer=BUDGET_CAP-planned;" not in aus:
+              aus = replace_once(
+                  aus,
+                  "  const actual=activeRows.reduce(\n    (sum,i)=>sum+num(i.actual),\n    0\n  );",
+                  "  const actual=activeRows.reduce(\n    (sum,i)=>sum+num(i.actual),\n    0\n  );\n\n  const budgetBuffer=BUDGET_CAP-planned;",
+                  "Budgetpuffer in ausstattung.html"
+              )
+
+          if "<span>Obergrenze</span>" not in aus:
+              old_cards = '''    <div class="stat">
+                <strong>${fmt(remaining)}</strong>
+                <span>Rest geplant</span>
+              </div>
+
+              <div class="stat">
+                <strong>${unpriced}</strong>'''
+              new_cards = '''    <div class="stat">
+                <strong>${fmt(remaining)}</strong>
+                <span>Rest geplant</span>
+              </div>
+
+              <div class="stat">
+                <strong>${fmt(BUDGET_CAP)}</strong>
+                <span>Obergrenze</span>
+              </div>
+
+              <div class="stat">
+                <strong>${fmt(budgetBuffer)}</strong>
+                <span>Puffer bis Obergrenze</span>
+              </div>
+
+              <div class="stat">
+                <strong>${unpriced}</strong>'''
+              aus = replace_once(aus, old_cards, new_cards, "Budgetkarten in ausstattung.html")
+
+          # index.html
+          if "window._assets = {};" not in idx:
+              idx = replace_once(
+                  idx,
+                  "window._budget = {};\nwindow._shopping = {};",
+                  "window._budget = {};\nwindow._assets = {};\nwindow._shopping = {};",
+                  "Asset-State in index.html"
+              )
+
+          if "const BUDGET_CAP = 4000;" not in idx:
+              idx = replace_once(
+                  idx,
+                  'const statusLabel = s => ({open:"Offen", progress:"In Arbeit", blocked:"Blockiert", done:"Erledigt"})[validStatus(s)];',
+                  'const statusLabel = s => ({open:"Offen", progress:"In Arbeit", blocked:"Blockiert", done:"Erledigt"})[validStatus(s)];\nconst BUDGET_CAP = 4000;',
+                  "Budgetobergrenze in index.html"
+              )
+
+          idx_migration = (
+              "// system_final_budget_plan_20260817_v2\n"
+              "async function ensureFinalBudgetPlanData(){\n"
+              + migration_core
+              + "\n}"
+          )
+
+          if "system_final_budget_plan_20260817_v2" not in idx:
               idx = insert_before_once(
                   idx,
                   "function bindFirebase() {",
-                  final_migration_idx,
+                  idx_migration,
                   "Finale Kostenmigration in index.html"
               )
 
@@ -421,24 +305,18 @@ jobs:
                   "Asset-Binding in index.html"
               )
 
-          if ".then(() => ensureFinalBudgetPlanData())" not in idx:
+          if "ensureFinalBudgetPlanData();" not in idx:
               idx = replace_once(
                   idx,
                   "  ensureTentPlanData();\n  bindFirebase();",
-                  "  ensureTentPlanData()\n    .then(() => ensureFinalBudgetPlanData())\n    .catch(err => console.error(\"Planmigration fehlgeschlagen\", err));\n  bindFirebase();",
+                  "  ensureTentPlanData();\n  ensureFinalBudgetPlanData();\n  bindFirebase();",
                   "Aufruf finale Kostenmigration in index.html"
               )
 
-          calc_pattern = re.compile(
-              r'  const items = Object\.entries\(data \|\| \{\}\)\.map\(\(\[key,value\]\)=>\(\{key,\.\.\.value\}\)\)\.sort\(\(a,b\)=>\(b\.ts\|\|0\)-\(a\.ts\|\|0\)\);\n'
-              r'  const planned = items\.reduce\(.*?\n'
-              r'  const categoryRows = Object\.entries\(items\.reduce\(\(acc,i\)=>\{.*?\n'
-              r'  \}\)\)\.sort\(.*?\);\n',
-              re.S
-          )
-
           if "const assetItems = Object.entries(window._assets || {})" not in idx:
-              replacement = '''  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+              old_calc_start = '  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));\n'
+              stats_start = '  if (stats) stats.innerHTML = `\n'
+              new_calc = '''  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
             const assetItems = Object.entries(window._assets || {}).map(([key,value])=>({key,...value}));
             const activeAssets = assetItems.filter(i=>i.status!=="Fallback");
             const planned = activeAssets.reduce((s,i)=>s+Number(i.planned||0),0);
@@ -454,9 +332,14 @@ jobs:
               return acc;
             }, {})).sort((a,b)=>b[1].planned-a[1].planned).slice(0,6);
           '''
-              idx, n = calc_pattern.subn(replacement, idx, count=1)
-              if n != 1:
-                  raise RuntimeError(f"Budgetberechnung in index.html: erwartete 1 Fundstelle, gefunden {n}")
+              idx = replace_inside_function(
+                  idx,
+                  "function renderBudget(data) {",
+                  old_calc_start,
+                  stats_start,
+                  new_calc,
+                  "Budgetberechnung in index.html"
+              )
 
           if "Puffer bis 4.000" not in idx:
               idx = replace_once(
@@ -465,7 +348,7 @@ jobs:
                   '    <span>ohne Ist-Kosten: <strong>${withoutActual}</strong></span>\n'
                   '    <span>Obergrenze: <strong>${fmtMoney(BUDGET_CAP)}</strong></span>\n'
                   '    <span>Puffer bis 4.000: <strong>${fmtMoney(budgetBuffer)}</strong></span>\n'
-                  '    <span>Quelle: <strong>Ausstattung &amp; Beschaffung</strong></span>',
+                  '    <span>Summenquelle: <strong>Ausstattung &amp; Beschaffung</strong></span>',
                   "Budgetstatus im Orga-Hub"
               )
 
@@ -482,8 +365,9 @@ jobs:
           AUS.write_text(aus, encoding="utf-8")
           IDX.write_text(idx, encoding="utf-8")
 
-          print("Website-Dateien aktualisiert.")
+          print("Website-Dateien erfolgreich aktualisiert.")
           PY
+          python /tmp/update_budget.py
 
       - name: Änderungen prüfen
         shell: bash
@@ -491,31 +375,47 @@ jobs:
           set -euo pipefail
 
           grep -q 'const BUDGET_CAP=4000;' ausstattung.html
-          grep -q 'planned:1205.70' ausstattung.html
-          grep -q 'planned:430' ausstattung.html
-          grep -q 'actual:22' ausstattung.html
+          grep -q 'system_final_budget_plan_20260817_v2' ausstattung.html
+          grep -q 'planned: 1205.70' ausstattung.html
+          grep -q 'planned: 430' ausstattung.html
+          grep -q 'actual: 22' ausstattung.html
           grep -q 'Fest eingeplant; nicht mehr optional.' ausstattung.html
+
           grep -q 'const BUDGET_CAP = 4000;' index.html
           grep -q 'window._assets = {};' index.html
+          grep -q 'const assetItems = Object.entries(window._assets || {})' index.html
           grep -q 'Puffer bis 4.000' index.html
-          grep -q '.then(() => ensureFinalBudgetPlanData())' index.html
+          grep -q 'ensureFinalBudgetPlanData();' index.html
 
           python <<'PY'
           drink_budget = 100 + 30 + 60 + 30
           cooling = 50
           expected_total = 3718.70
-
+          budget_cap = 4000
           assert drink_budget == 220
           assert cooling == 50
-          assert expected_total < 4000
-          assert round(4000 - expected_total, 2) == 281.30
-
-          print("Prüfung erfolgreich:")
+          assert round(budget_cap - expected_total, 2) == 281.30
           print("Getränkedeckel:", drink_budget, "EUR")
           print("Kühlreserve:", cooling, "EUR")
           print("Planstand:", expected_total, "EUR")
-          print("Puffer:", round(4000 - expected_total, 2), "EUR")
+          print("Puffer:", round(budget_cap - expected_total, 2), "EUR")
           PY
+
+          python <<'PY'
+          import re
+          from pathlib import Path
+          for filename in ("index.html", "ausstattung.html"):
+              text = Path(filename).read_text(encoding="utf-8")
+              scripts = re.findall(r'<script type="module">(.*?)</script>', text, flags=re.S)
+              if not scripts:
+                  raise SystemExit(f"Kein module-script in {filename} gefunden")
+              for i, script in enumerate(scripts):
+                  Path(f"/tmp/{filename}-{i}.mjs").write_text(script, encoding="utf-8")
+          PY
+
+          for f in /tmp/index.html-*.mjs /tmp/ausstattung.html-*.mjs; do
+            node --check "$f"
+          done
 
           git diff --check
           git diff -- index.html ausstattung.html
