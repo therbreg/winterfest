@@ -1,0 +1,929 @@
+name: Zeltkonzept anwenden
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-tent-concept:
+    name: Baldachin, Pavillon und Beschaffung aktualisieren
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Zeltkonzept in Website einspielen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          INDEX = Path("index.html")
+          ASSETS = Path("ausstattung.html")
+
+          index = INDEX.read_text(encoding="utf-8")
+          assets = ASSETS.read_text(encoding="utf-8")
+
+          changed = []
+
+          def replace_once(text, old, new, label):
+              if new in text:
+                  print(f"OK {label}: bereits vorhanden")
+                  return text
+              count = text.count(old)
+              if count == 1:
+                  changed.append(label)
+                  print(f"OK {label}: geändert")
+                  return text.replace(old, new, 1)
+              if count == 0:
+                  raise SystemExit(
+                      f"FEHLER bei '{label}': erwarteter Ausgangstext nicht gefunden. "
+                      "Die Datei wurde vermutlich zwischenzeitlich verändert."
+                  )
+              raise SystemExit(
+                  f"FEHLER bei '{label}': Ausgangstext {count} mal gefunden. "
+                  "Aus Sicherheitsgründen wird abgebrochen."
+              )
+
+          # ==========================================================
+          # index.html
+          # ==========================================================
+
+          index = replace_once(
+              index,
+              'import { getDatabase, ref, onValue, update, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";',
+              'import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";',
+              "Firebase get importieren"
+          )
+
+          index = replace_once(
+              index,
+              'const COMMON_CATEGORIES = ["Toilette", "Essen", "Getränke", "Deko", "Technik", "Sicherheit", "Wettkampf", "Gelände", "Helfer", "Einkauf", "Budget", "Gästeliste", "Infrastruktur", "Musik", "Sonstiges"];',
+              'const COMMON_CATEGORIES = ["Toilette", "Essen", "Getränke", "Deko", "Technik", "Sicherheit", "Wettkampf", "Gelände", "Helfer", "Einkauf", "Budget", "Gästeliste", "Infrastruktur", "Zelt", "Musik", "Sonstiges"];',
+              "Kategorie Zelt ergänzen"
+          )
+
+          index = replace_once(
+              index,
+              'const DECISION_CATEGORIES = ["Datum", "Gelände", "Toilette", "Essen", "Budget", "Programm", "Helfer", "Einkauf", "Technik", "Sonstiges"];',
+              'const DECISION_CATEGORIES = ["Datum", "Gelände", "Toilette", "Essen", "Budget", "Programm", "Helfer", "Einkauf", "Technik", "Zelt", "Sonstiges"];',
+              "Beschlusskategorie Zelt ergänzen"
+          )
+
+          index = replace_once(
+              index,
+              'const TENT_STATUS = ["Idee", "Angefragt", "Nachfassen", "Zusage", "Absage", "Gebucht", "Unklar"];\n'
+              'const TENT_STATUS_ORDER = {"Gebucht":0,"Zusage":1,"Nachfassen":2,"Angefragt":3,"Idee":4,"Unklar":5,"Absage":6};',
+              'const TENT_STATUS = ["Gewählte Lösung", "Idee", "Angefragt", "Nachfassen", "Zusage", "Fallback", "Absage", "Gebucht", "Unklar"];\n'
+              'const TENT_STATUS_ORDER = {"Gewählte Lösung":0,"Gebucht":1,"Zusage":2,"Nachfassen":3,"Angefragt":4,"Fallback":5,"Idee":6,"Unklar":7,"Absage":8};',
+              "Zeltstatus Gewählte Lösung und Fallback"
+          )
+
+          index = replace_once(
+              index,
+              '<select id="tentStatus"><option>Idee</option><option>Angefragt</option><option>Nachfassen</option><option>Zusage</option><option>Absage</option><option>Gebucht</option><option>Unklar</option></select>',
+              '<select id="tentStatus"><option>Gewählte Lösung</option><option>Idee</option><option>Angefragt</option><option>Nachfassen</option><option>Zusage</option><option>Fallback</option><option>Absage</option><option>Gebucht</option><option>Unklar</option></select>',
+              "Zeltstatus im Formular"
+          )
+
+          index = replace_once(
+              index,
+              '<select id="decisionCategory"><option>Datum</option><option>Gelände</option><option>Toilette</option><option>Essen</option><option>Budget</option><option>Programm</option><option>Helfer</option><option>Sonstiges</option></select>',
+              '<select id="decisionCategory"><option>Datum</option><option>Gelände</option><option>Toilette</option><option>Essen</option><option>Budget</option><option>Programm</option><option>Helfer</option><option>Zelt</option><option>Sonstiges</option></select>',
+              "Zelt im Beschlussformular"
+          )
+
+          index = replace_once(
+              index,
+              '<select id="budgetCategory"><option>Toilette</option><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Musik</option><option>Sonstiges</option></select>',
+              '<select id="budgetCategory"><option>Toilette</option><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Zelt</option><option>Musik</option><option>Sonstiges</option></select>',
+              "Zelt im Budgetformular"
+          )
+
+          index = replace_once(
+              index,
+              '<select id="shoppingCategory"><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Toilette</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Musik</option><option>Sonstiges</option></select>',
+              '<select id="shoppingCategory"><option>Essen</option><option>Getränke</option><option>Deko</option><option>Technik</option><option>Sicherheit</option><option>Toilette</option><option>Wettkampf</option><option>Gelände</option><option>Infrastruktur</option><option>Zelt</option><option>Musik</option><option>Sonstiges</option></select>',
+              "Zelt im Einkaufsformular"
+          )
+
+          old_stats = '''  if (stats) stats.innerHTML = `
+              <span>${items.length} Optionen</span>
+              <span>${statusCounts["Angefragt"] || 0} angefragt</span>
+              <span>${statusCounts["Nachfassen"] || 0} nachfassen</span>
+              <span>${(statusCounts["Zusage"] || 0) + (statusCounts["Gebucht"] || 0)} positiv</span>
+              <span>${statusCounts["Absage"] || 0} Absagen</span>`;'''
+
+          new_stats = '''  if (stats) stats.innerHTML = `
+              <span>${items.length} Optionen</span>
+              <span>${statusCounts["Gewählte Lösung"] || 0} gewählt</span>
+              <span>${statusCounts["Angefragt"] || 0} angefragt</span>
+              <span>${statusCounts["Nachfassen"] || 0} nachfassen</span>
+              <span>${statusCounts["Fallback"] || 0} Fallback</span>
+              <span>${statusCounts["Absage"] || 0} Absagen</span>`;'''
+
+          index = replace_once(
+              index,
+              old_stats,
+              new_stats,
+              "Zeltstatistik im Tracker"
+          )
+
+          index = replace_once(
+              index,
+              'const tentActive = Object.values(window._tentLeads || {}).filter(i=>!["Absage","Gebucht"].includes(i.status)).length;',
+              'const tentActive = Object.values(window._tentLeads || {}).filter(i=>!["Absage","Gebucht","Fallback"].includes(i.status)).length;',
+              "Fallbacks aus offenen Zeltoptionen herausnehmen"
+          )
+
+          # ----------------------------------------------------------
+          # Phasenplan als JSON lesen und gezielt aktualisieren
+          # ----------------------------------------------------------
+
+          phase_match = re.search(
+              r'const PHASES_DATA = (\[.*?\]) ;\s*</script>',
+              index,
+              flags=re.S
+          )
+          if not phase_match:
+              raise SystemExit("FEHLER: PHASES_DATA konnte nicht gelesen werden.")
+
+          phases = json.loads(phase_match.group(1))
+
+          def phase(pid):
+              for p in phases:
+                  if p.get("id") == pid:
+                      return p
+              raise SystemExit(f"FEHLER: Phase {pid} nicht gefunden.")
+
+          def category(pid, *needles):
+              for c in phase(pid).get("categories", []):
+                  title = c.get("title", "")
+                  if any(needle in title for needle in needles):
+                      return c
+              raise SystemExit(f"FEHLER: Kategorie {needles} in {pid} nicht gefunden.")
+
+          c = category("phase1", "Wetterschutz", "Baldachin & Pavillon")
+          c["title"] = "⛺ Baldachin & Pavillon"
+          c["tasks"] = [
+              {
+                  "id": "plan2_wetterschutz_inventur",
+                  "prio": "prio-2",
+                  "text": "Vorhandenen 3x6-m-Pavillon, Heringe, Sisalseile und Befestigungsmaterial vollständig inventarisieren"
+              },
+              {
+                  "id": "now_pavillon_ausmessen",
+                  "prio": "prio-1",
+                  "text": "Vorhandenen 3x6-m-Pavillon exakt ausmessen: Kantenlängen, Höhe der Schabracken, sichtbare Beine und Befestigungspunkte dokumentieren"
+              },
+              {
+                  "id": "now_baldachin_lager_transport",
+                  "prio": "prio-1",
+                  "text": "Trockenen Lagerort und Transportmöglichkeit für einen 6x6-m-Baldachin inklusive etwa 2,1 m langer Seitenstangen verbindlich klären"
+              },
+              {
+                  "id": "now_schabracken_planen",
+                  "prio": "prio-2",
+                  "text": "Schabracken, Jute-Beinverkleidung und Banner für den vorhandenen Pavillon planen und benötigte Stoffmengen bestimmen"
+              },
+              {
+                  "id": "now_baldachin_preisbeobachtung",
+                  "prio": "prio-2",
+                  "text": "Neupreise für vollständige 6x6-m-Baldachine inklusive Holzgestänge beobachten; aktueller Referenzwert LARP-Zelte 1.125,80 EUR plus Versand"
+              }
+          ]
+
+          c = category("phase2", "Wetterschutz", "Baldachin - Gebrauchtmarkt")
+          c["title"] = "⛺ Baldachin - Gebrauchtmarkt"
+          c["tasks"] = [
+              {
+                  "id": "oct_suchagenten_start",
+                  "prio": "prio-2",
+                  "text": "Ab 28.09.2026 Suchagenten für 6x6-m-Baldachin, Mittelalterzelt und vollständiges Holzgestänge bei Kleinanzeigen, eBay sowie LARP- und Mittelaltergruppen aktivieren"
+              },
+              {
+                  "id": "oct_gebrauchtmarkt",
+                  "prio": "prio-1",
+                  "text": "Ab 02.11.2026 nach dem Ende der regulären Herbst-Marktsaison gezielt und intensiv nach gebrauchten 6x6-m-Baldachinen inklusive vollständigem Gestänge suchen"
+              },
+              {
+                  "id": "oct_angebote_vergleichen",
+                  "prio": "prio-1",
+                  "text": "Gebrauchtangebote nur vollständig vergleichen: Zelthaut, Mittelmast, 16 Seitenstangen, Seile, Heringe, Schimmel- und Stockfleckenfreiheit, Reparaturen, Alter, Lagerung, Transport und Gesamtpreis prüfen"
+              },
+              {
+                  "id": "oct_wetterschutzentscheidung",
+                  "prio": "prio-1",
+                  "text": "Gebrauchtmarkt bis Ende Januar 2027 beobachten; nur bei wirklich gutem Zustand und deutlichem Preisvorteil gebraucht kaufen"
+              },
+              {
+                  "id": "oct_lager_transport_bestaetigen",
+                  "prio": "prio-2",
+                  "text": "Vor jedem Gebrauchtkauf Lagerort, Transport der langen Stangen und Möglichkeit zum vollständigen Trocknen der Baumwollplane bestätigen"
+              }
+          ]
+
+          c = category("phase2", "Gelände")
+          for task in c.get("tasks", []):
+              if task.get("id") == "oct_aufstellflaechen":
+                  task["text"] = "Aufstellfläche für 6x6-m-Baldachin samt Abspannraum und den vorhandenen 3x6-m-Pavillon vor Ort nachmessen"
+              if task.get("id") == "oct_stangen_bewerten":
+                  task["text"] = "Baldachin- und Pavillonposition so festlegen, dass Abspannseile, Wege, Grill, Feuerstelle und Wettkampfbereiche sich nicht gegenseitig behindern"
+
+          c = category("phase3", "Hauptanschaffungen")
+          kept = []
+          for task in c.get("tasks", []):
+              if task.get("id") == "jan_stangenloesung":
+                  continue
+              if task.get("id") == "jan_wetterschutz_kaufen":
+                  task["text"] = "Bis 31.01.2027 Gebrauchtmarkt final auswerten; falls kein überzeugender kompletter 6x6-m-Baldachin gefunden wurde, Neubestellung inklusive Holzgestänge spätestens bis 15.02.2027 auslösen"
+                  task["prio"] = "prio-1"
+              kept.append(task)
+
+          if not any(t.get("id") == "jan_baldachin_neupreis" for t in kept):
+              insert_at = min(2, len(kept))
+              kept.insert(insert_at, {
+                  "id": "jan_baldachin_neupreis",
+                  "prio": "prio-2",
+                  "text": "Vor Neubestellung aktuelle Komplettpreise vergleichen; Ziel unter 1.100 EUR, bis etwa 1.150 EUR noch akzeptabel, Versand und Lieferzeit einrechnen"
+              })
+          c["tasks"] = kept
+
+          c = category("phase5", "Aufbauprobe")
+          for task in c.get("tasks", []):
+              if task.get("id") == "apr_planen_testaufbau":
+                  task["text"] = "Eigenen 6x6-m-Baldachin inklusive Holzgestänge sowie den vorhandenen 3x6-m-Pavillon einmal vollständig testweise aufbauen, abspannen und Standfestigkeit prüfen"
+              elif task.get("id") == "apr_transportprobe":
+                  task["text"] = "Transport- und Packlogik für Baldachin, lange Holzstangen, Pavillon und Dekostoffe testen"
+          if not any(t.get("id") == "apr_pavillon_dekotest" for t in c.get("tasks", [])):
+              c["tasks"].append({
+                  "id": "apr_pavillon_dekotest",
+                  "prio": "prio-2",
+                  "text": "Schabracken, Jute-Beinverkleidung, Sisalseile und Banner am Pavillon im Probeaufbau montieren und nötige Korrekturen festhalten"
+              })
+
+          for p in phases:
+              for cat in p.get("categories", []):
+                  for task in cat.get("tasks", []):
+                      if task.get("id") == "plan2_wetterschutz_aufbauen":
+                          task["text"] = "Eigenen 6x6-m-Baldachin und vorhandenen 3x6-m-Pavillon aufstellen und vollständig abspannen; Pavillon anschließend mit Schabracken, Jute und Bannern verkleiden"
+                      elif task.get("id") == "plan2_abbau_material":
+                          task["text"] = "Baldachin trocken und vollständig abbauen, Holzgestänge, Pavillon, Sitzmöbel und Equipment vollständig verstauen; feuchte Baumwollplane nicht einlagern"
+
+          phase_json = json.dumps(
+              phases,
+              ensure_ascii=False,
+              separators=(",", ":")
+          )
+          if phase_json != phase_match.group(1):
+              index = (
+                  index[:phase_match.start(1)]
+                  + phase_json
+                  + index[phase_match.end(1):]
+              )
+              changed.append("Phasenplan auf Baldachin-Lösung umgestellt")
+              print("OK Phasenplan auf Baldachin-Lösung umgestellt")
+          else:
+              print("OK Phasenplan: bereits aktuell")
+
+          migration_marker = "// system_tent_plan_migration_20260817"
+
+          if migration_marker not in index:
+              anchor = "function bindFirebase() {"
+
+              migration = r'''
+          // system_tent_plan_migration_20260817
+          async function ensureTentPlanData() {
+            const version = "2026-08-17-v1";
+            try {
+              const marker = await get(ref(db, dbPath("meta/tentPlanVersion")));
+              if (marker.val() === version) return;
+
+              const now = Date.now();
+              const patch = {};
+
+              const [decisionSnap, leadSnap, budgetSnap, shoppingSnap] = await Promise.all([
+                get(ref(db, dbPath("decisions"))),
+                get(ref(db, dbPath("tentLeads"))),
+                get(ref(db, dbPath("budget"))),
+                get(ref(db, dbPath("shopping")))
+              ]);
+
+              const decisions = decisionSnap.val() || {};
+              const leads = leadSnap.val() || {};
+              const budgets = budgetSnap.val() || {};
+              const shopping = shoppingSnap.val() || {};
+
+              const norm = value => String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+              const findKey = (obj, predicate) => {
+                const hit = Object.entries(obj).find(([, value]) => predicate(value || {}));
+                return hit ? hit[0] : "";
+              };
+              const appendNote = (oldNote, extra) => {
+                const base = String(oldNote || "").trim();
+                if (base.includes(extra)) return base;
+                return [base, extra].filter(Boolean).join(" | ").slice(0, 500);
+              };
+
+              if (!findKey(decisions, d => norm(d.title).includes("zeltkonzept"))) {
+                patch["decisions/system_zeltkonzept_20260817"] = {
+                  title: "Zeltkonzept final",
+                  category: "Zelt",
+                  text: "Gewählte Lösung: eigenen 6x6-m-Mittelalter-Baldachin inklusive vollständigem Holzgestänge kaufen und mit dem vorhandenen 3x6-m-Pavillon kombinieren. Pavillon mit Schabracken, Jute, Sisalseilen und DIY-Bannern verkleiden. Vendera und Mittelalter-Zelte24 bleiben nur Fallback. Bei ernsthaftem Regen wird das Event verschoben.",
+                  pinned: true,
+                  by: "System",
+                  ts: now
+                };
+              }
+
+              const upsertLead = (fixedKey, predicate, fields) => {
+                const key = findKey(leads, predicate) || fixedKey;
+                Object.entries(fields).forEach(([field, value]) => {
+                  patch[`tentLeads/${key}/${field}`] = value;
+                });
+                if (!leads[key] && key === fixedKey) {
+                  patch[`tentLeads/${key}/by`] = "System";
+                  patch[`tentLeads/${key}/ts`] = now;
+                } else {
+                  patch[`tentLeads/${key}/updatedBy`] = "System";
+                  patch[`tentLeads/${key}/updatedAt`] = now;
+                }
+              };
+
+              upsertLead(
+                "system_baldachin_kauf_20260817",
+                v => norm(v.name).includes("eigener 6x6") || (norm(v.name).includes("baldachin") && norm(v.status).includes("gewählte")),
+                {
+                  name: "Eigener 6x6-m-Baldachin inkl. Holzgestänge",
+                  type: "Shop",
+                  status: "Gewählte Lösung",
+                  contact: "Gebrauchtmarkt / LARP-Zelte als Neupreis-Referenz",
+                  link: "https://www.larp-zelte.com/produkte/baldachin-6x6-32080",
+                  price: 1125.80,
+                  followUp: "2026-11-02",
+                  pinned: true,
+                  note: "Primärlösung. Erst nach Saisonende gezielt gebraucht suchen. Referenz neu: 1.125,80 EUR plus Versand. Wenn bis Ende Januar kein guter Gebrauchter gefunden wird, Neubestellung spätestens 15.02.2027."
+                }
+              );
+
+              const vdKey = findKey(leads, v => norm(v.name).includes("vendera") && norm(v.name).includes("doppel"));
+              if (vdKey) {
+                patch[`tentLeads/${vdKey}/status`] = "Fallback";
+                patch[`tentLeads/${vdKey}/price`] = 900;
+                patch[`tentLeads/${vdKey}/note`] = appendNote(
+                  leads[vdKey].note,
+                  "Nur noch Fallback: 8x6-m-Doppelmaster 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug."
+                );
+              } else {
+                upsertLead(
+                  "system_vendera_doppelmaster_20260817",
+                  () => false,
+                  {
+                    name: "Vendera Doppelmaster 8x6 m",
+                    type: "Verein",
+                    status: "Fallback",
+                    price: 900,
+                    followUp: "",
+                    pinned: false,
+                    note: "Fallback zur Kaufstrategie. 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug."
+                  }
+                );
+              }
+
+              const vbKey = findKey(leads, v => norm(v.name).includes("vendera") && norm(v.name).includes("baldachin"));
+              if (vbKey) {
+                patch[`tentLeads/${vbKey}/status`] = "Fallback";
+                patch[`tentLeads/${vbKey}/price`] = 750;
+                patch[`tentLeads/${vbKey}/note`] = appendNote(
+                  leads[vbKey].note,
+                  "Nur noch Fallback: 6x6-m-Baldachin 750 EUR inklusive Vendera-Service."
+                );
+              } else {
+                upsertLead(
+                  "system_vendera_baldachin_20260817",
+                  () => false,
+                  {
+                    name: "Vendera Baldachin 6x6 m",
+                    type: "Verein",
+                    status: "Fallback",
+                    price: 750,
+                    followUp: "",
+                    pinned: false,
+                    note: "Fallback zur Kaufstrategie. 750 EUR inklusive Lieferung, Abholung und angebotener Aufbau-Begleitung."
+                  }
+                );
+              }
+
+              const mzKey = findKey(leads, v => norm(v.name).includes("mittelalter-zelt") || norm(v.name).includes("mittelalter zelt"));
+              if (mzKey) {
+                patch[`tentLeads/${mzKey}/status`] = "Fallback";
+                patch[`tentLeads/${mzKey}/price`] = 624.97;
+                patch[`tentLeads/${mzKey}/note`] = appendNote(
+                  leads[mzKey].note,
+                  "Nur noch Fallback: frühere 6x6-m-Mietrechnung ca. 624,97 EUR für drei Tage inklusive 370 EUR Hin- und Rücktransport."
+                );
+              } else {
+                upsertLead(
+                  "system_mz24_baldachin_miete_20260817",
+                  () => false,
+                  {
+                    name: "Mittelalter-Zelte24 Baldachin 6x6 m Miete",
+                    type: "Zeltverleih",
+                    status: "Fallback",
+                    price: 624.97,
+                    followUp: "",
+                    pinned: false,
+                    note: "Fallback. Frühere Rechnung: drei Tage Miete zu 84,99 EUR plus 370 EUR Hin- und Rücktransport."
+                  }
+                );
+              }
+
+              const baldBudgetKey = findKey(
+                budgets,
+                b => norm(b.title).includes("baldachin") && (norm(b.title).includes("eigen") || norm(b.note).includes("eigentum"))
+              );
+
+              if (!baldBudgetKey) {
+                patch["budget/system_baldachin_kauf_20260817"] = {
+                  title: "Eigener 6x6-m-Baldachin inkl. Gestänge",
+                  category: "Zelt",
+                  planned: 1125.80,
+                  actual: 0,
+                  paidBy: "",
+                  reimbursed: false,
+                  note: "Aktuelle Neupreis-Referenz LARP-Zelte: 1.125,80 EUR plus Versand. Gebrauchtkauf wird vorher bis Ende Januar geprüft.",
+                  by: "System",
+                  ts: now
+                };
+              }
+
+              Object.entries(budgets).forEach(([key, b]) => {
+                const title = norm(b.title);
+                if (
+                  Number(b.actual || 0) === 0
+                  && !b.reimbursed
+                  && (
+                    title.includes("vendera")
+                    || (title.includes("mittelalter") && title.includes("zelt") && title.includes("miet"))
+                  )
+                ) {
+                  patch[`budget/${key}/planned`] = 0;
+                  patch[`budget/${key}/note`] = appendNote(
+                    b.note,
+                    "Nicht mehr im aktiven Planbudget: nur noch Fallback zur gewählten Baldachin-Kauflösung."
+                  ).slice(0, 300);
+                  patch[`budget/${key}/updatedBy`] = "System";
+                  patch[`budget/${key}/updatedAt`] = now;
+                }
+              });
+
+              const ensureShopping = (fixedKey, needles, entry) => {
+                const exists = findKey(
+                  shopping,
+                  s => needles.every(n => norm(s.item).includes(n))
+                );
+                if (!exists) patch[`shopping/${fixedKey}`] = entry;
+              };
+
+              ensureShopping(
+                "system_baldachin_purchase_20260817",
+                ["baldachin"],
+                {
+                  item: "6x6-m-Baldachin inkl. Holzgestänge",
+                  qty: "1 komplett",
+                  category: "Zelt",
+                  responsible: "",
+                  note: "Primär gebraucht suchen; falls bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen.",
+                  bought: false,
+                  by: "System",
+                  ts: now
+                }
+              );
+
+              ensureShopping(
+                "system_schabracken_stoff_20260817",
+                ["schabrack"],
+                {
+                  item: "Stoff für Pavillon-Schabracken",
+                  qty: "nach Aufmaß",
+                  category: "Deko",
+                  responsible: "",
+                  note: "Für vorhandenen 3x6-m-Pavillon; Nähen ggf. beauftragen.",
+                  bought: false,
+                  by: "System",
+                  ts: now
+                }
+              );
+
+              ensureShopping(
+                "system_jute_pavillon_20260817",
+                ["jute", "pavillon"],
+                {
+                  item: "Jutestoff für Pavillonbeine",
+                  qty: "nach Aufmaß",
+                  category: "Deko",
+                  responsible: "",
+                  note: "Mit vorhandenen Sisalseilen befestigen.",
+                  bought: false,
+                  by: "System",
+                  ts: now
+                }
+              );
+
+              ensureShopping(
+                "system_banner_material_20260817",
+                ["banner"],
+                {
+                  item: "Stoff und Acrylfarbe für DIY-Banner",
+                  qty: "für ca. 4-6 Banner",
+                  category: "Deko",
+                  responsible: "",
+                  note: "Günstiger Stoff, z.B. IKEA, plus Acrylfarbe aus dem Baumarkt.",
+                  bought: false,
+                  by: "System",
+                  ts: now
+                }
+              );
+
+              ensureShopping(
+                "system_wimpel_20260817",
+                ["wimpel"],
+                {
+                  item: "Wimpelketten",
+                  qty: "ca. 30-40 m",
+                  category: "Gelände",
+                  responsible: "",
+                  note: "Für Eingang, Zonentrennung und optische Abgrenzung.",
+                  bought: false,
+                  by: "System",
+                  ts: now
+                }
+              );
+
+              ensureShopping(
+                "system_fichtenlatten_20260817",
+                ["fichten"],
+                {
+                  item: "Fichtenlatten als Gelände-Pfähle",
+                  qty: "ca. 15-25",
+                  category: "Gelände",
+                  responsible: "",
+                  note: "Stückzahl nach finalem Lageplan festlegen.",
+                  bought: false,
+                  by: "System",
+                  ts: now
+                }
+              );
+
+              ensureShopping(
+                "system_strohballen_20260817",
+                ["stroh"],
+                {
+                  item: "Strohballen",
+                  qty: "ca. 4-8",
+                  category: "Gelände",
+                  responsible: "",
+                  note: "Erst kurz vor dem Event lokal beschaffen; Abstand zu Grill, Feuer und Jute halten.",
+                  bought: false,
+                  by: "System",
+                  ts: now
+                }
+              );
+
+              patch["tasks/oct_suchagenten_start/due"] = "2026-09-28";
+              patch["tasks/oct_gebrauchtmarkt/due"] = "2026-11-02";
+              patch["tasks/oct_wetterschutzentscheidung/due"] = "2027-01-31";
+              patch["tasks/jan_wetterschutz_kaufen/due"] = "2027-02-15";
+              patch["tasks/apr_planen_testaufbau/due"] = "2027-04-30";
+
+              patch["meta/tentPlanVersion"] = version;
+              patch["meta/tentPlanUpdatedAt"] = now;
+
+              await update(ref(db, dbPath("")), patch);
+              console.info("Zeltplan-Migration angewendet:", version);
+            } catch (err) {
+              console.error("Zeltplan-Migration fehlgeschlagen", err);
+            }
+          }
+
+          '''
+
+              if anchor not in index:
+                  raise SystemExit("FEHLER: Einfügepunkt für Firebase-Migration fehlt.")
+              index = index.replace(anchor, migration + anchor, 1)
+              changed.append("Firebase-Migration für Zeltplan")
+              print("OK Firebase-Migration für Zeltplan: hinzugefügt")
+          else:
+              print("OK Firebase-Migration für Zeltplan: bereits vorhanden")
+
+          index = replace_once(
+              index,
+              '  bindFirebase();\n});',
+              '  ensureTentPlanData();\n  bindFirebase();\n});',
+              "Zeltplan-Migration beim Start ausführen"
+          )
+
+          # ==========================================================
+          # ausstattung.html
+          # ==========================================================
+
+          assets = replace_once(
+              assets,
+              'const STATUSES=["Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Optional"];\n'
+              'const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));',
+              'const STATUSES=["Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional"];\n'
+              'const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Fallback","Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));',
+              "Ausstattung: Status Gewählte Lösung und Fallback"
+          )
+
+          assets = replace_once(
+              assets,
+              'const planned=rows.reduce((s,i)=>s+num(i.planned),0),actual=rows.reduce((s,i)=>s+num(i.actual),0);',
+              'const planned=rows.filter(i=>i.status!=="Fallback").reduce((s,i)=>s+num(i.planned),0),actual=rows.reduce((s,i)=>s+num(i.actual),0);',
+              "Ausstattung: Fallbacks nicht ins aktive Planbudget rechnen"
+          )
+
+          def replace_asset_line_impl(text, key, new_line, label):
+              pattern = re.compile(rf'^\s*{re.escape(key)}:r\(.*\),\s*$', re.M)
+              matches = list(pattern.finditer(text))
+              if len(matches) != 1:
+                  raise SystemExit(
+                      f"FEHLER bei '{label}': Asset-Zeile {key} wurde {len(matches)} mal gefunden."
+                  )
+              old_line = matches[0].group(0)
+              if old_line.strip() == new_line.strip():
+                  print(f"OK {label}: bereits vorhanden")
+                  return text
+              changed.append(label)
+              print(f"OK {label}: geändert")
+              return text[:matches[0].start()] + "    " + new_line.strip() + text[matches[0].end():]
+
+          assets = replace_asset_line_impl(
+              assets,
+              "vendera_doppelmaster",
+              'vendera_doppelmaster:r("Zelt & Pavillon","Vendera Doppelmaster 8x6 m","Mieten","Fallback","Vendera","1",900,0,"Nur nutzen, falls Kauf des eigenen Baldachins scheitert","Einzelpreis 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug. Nicht mehr Teil des aktiven Planbudgets."),',
+              "Ausstattung: Vendera Doppelmaster als Fallback"
+          )
+
+          assets = replace_asset_line_impl(
+              assets,
+              "vendera_baldachin",
+              'vendera_baldachin:r("Zelt & Pavillon","Vendera Baldachin 6x6 m","Mieten","Fallback","Vendera","1",750,0,"Nur nutzen, falls Kauf des eigenen Baldachins scheitert","Einzelpreis 750 EUR inklusive Vendera-Service. Nicht mehr Teil des aktiven Planbudgets."),',
+              "Ausstattung: Vendera Baldachin als Fallback"
+          )
+
+          assets = replace_asset_line_impl(
+              assets,
+              "pavillon",
+              'pavillon:r("Zelt & Pavillon","Vorhandener Pavillon 3x6 m","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Mit Schabracken, Stoff/Jute, Sisalseil und Bannern verkleiden","Bleibt als zweiter überdachter Bereich neben dem eigenen 6x6-m-Baldachin."),',
+              "Ausstattung: Pavillon-Notiz"
+          )
+
+          assets = replace_asset_line_impl(
+              assets,
+              "schabracken",
+              'schabracken:r("Zelt & Pavillon","Schabracken für den vorhandenen Pavillon","Beauftragen","Zu beauftragen","Schneiderei","für 3x6 m Pavillon",0,0,"Maße und Höhe festlegen, Stoff auswählen, Schneiderei anfragen","Saubere lange Nähte; Bestandteil der endgültigen Lösung aus eigenem Baldachin plus vorhandenem Pavillon."),',
+              "Ausstattung: Schabracken auf Finalplan"
+          )
+
+          if "baldachin_kauf:r(" not in assets:
+              anchor = '    vendera_doppelmaster:r('
+              pos = assets.find(anchor)
+              if pos < 0:
+                  raise SystemExit("FEHLER: Einfügepunkt für Baldachin-Kauf fehlt.")
+              block = (
+                  '    baldachin_kauf:r("Zelt & Pavillon","Eigener Baldachin 6x6 m inkl. Holzgestänge","Kaufen","Gewählte Lösung","Gebrauchtmarkt / LARP-Zelte","1 komplett",1125.80,0,"Ab 02.11.2026 intensiv gebraucht suchen; wenn bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen","Primärlösung. MPS endet am 27.09.2026; die breitere Herbst-Marktsaison reicht bis Anfang November. Referenz neu: LARP-Zelte 1.125,80 EUR plus Versand."),\n'
+                  '    mz24_baldachin_miete:r("Zelt & Pavillon","Mittelalter-Zelte24 Baldachin 6x6 m mieten","Mieten","Fallback","Mittelalter-Zelte24","1",624.97,0,"Nur als Rückfalllösung behalten","Frühere Rechnung: 3 Tage Miete zu 84,99 EUR plus 370 EUR Hin- und Rücktransport = ca. 624,97 EUR."),\n'
+              )
+              assets = assets[:pos] + block + assets[pos:]
+              changed.append("Ausstattung: eigener Baldachin und MZ24-Fallback")
+              print("OK Ausstattung: eigener Baldachin und MZ24-Fallback: hinzugefügt")
+          else:
+              print("OK Ausstattung: eigener Baldachin: bereits vorhanden")
+
+          asset_migration_marker = "// system_asset_tent_plan_migration_20260817"
+
+          if asset_migration_marker not in assets:
+              anchor = "async function selfLink(){"
+
+              migration = r'''
+          // system_asset_tent_plan_migration_20260817
+          async function migrateTentPlan(){
+            const version="2026-08-17-v1";
+            try{
+              const marker=await get(ref(db,dbPath("assetMeta/tentPlanVersion")));
+              if(marker.val()===version)return;
+
+              const current=(await get(ref(db,dbPath("assets")))).val()||{};
+              const now=Date.now(),patch={};
+
+              const put=(key,fields)=>{
+                Object.entries(fields).forEach(([field,value])=>{
+                  patch[`assets/${key}/${field}`]=value;
+                });
+                patch[`assets/${key}/updatedAt`]=now;
+                patch[`assets/${key}/updatedBy`]="Planstand 17.08.2026";
+              };
+
+              if(!current.baldachin_kauf){
+                patch["assets/baldachin_kauf"]={
+                  area:"Zelt & Pavillon",
+                  item:"Eigener Baldachin 6x6 m inkl. Holzgestänge",
+                  type:"Kaufen",
+                  status:"Gewählte Lösung",
+                  source:"Gebrauchtmarkt / LARP-Zelte",
+                  qty:"1 komplett",
+                  planned:1125.80,
+                  actual:0,
+                  due:"2027-02-15",
+                  next:"Ab 02.11.2026 intensiv gebraucht suchen; wenn bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen",
+                  note:"Primärlösung. MPS endet am 27.09.2026; die breitere Herbst-Marktsaison reicht bis Anfang November. Referenz neu: LARP-Zelte 1.125,80 EUR plus Versand.",
+                  seeded:true,
+                  ts:now,
+                  updatedAt:now,
+                  updatedBy:"Planstand 17.08.2026"
+                };
+              }else{
+                put("baldachin_kauf",{
+                  status:"Gewählte Lösung",
+                  planned:1125.80,
+                  due:"2027-02-15",
+                  next:"Ab 02.11.2026 intensiv gebraucht suchen; wenn bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen"
+                });
+              }
+
+              if(!current.mz24_baldachin_miete){
+                patch["assets/mz24_baldachin_miete"]={
+                  area:"Zelt & Pavillon",
+                  item:"Mittelalter-Zelte24 Baldachin 6x6 m mieten",
+                  type:"Mieten",
+                  status:"Fallback",
+                  source:"Mittelalter-Zelte24",
+                  qty:"1",
+                  planned:624.97,
+                  actual:0,
+                  due:"",
+                  next:"Nur als Rückfalllösung behalten",
+                  note:"Frühere Rechnung: 3 Tage Miete zu 84,99 EUR plus 370 EUR Hin- und Rücktransport = ca. 624,97 EUR.",
+                  seeded:true,
+                  ts:now,
+                  updatedAt:now,
+                  updatedBy:"Planstand 17.08.2026"
+                };
+              }else{
+                put("mz24_baldachin_miete",{status:"Fallback",planned:624.97});
+              }
+
+              put("vendera_doppelmaster",{
+                status:"Fallback",
+                planned:900,
+                next:"Nur nutzen, falls Kauf des eigenen Baldachins scheitert",
+                note:"Einzelpreis 900 EUR inklusive Lieferung, Abholung, Aufbau-Begleitung und Werkzeug. Nicht mehr Teil des aktiven Planbudgets."
+              });
+
+              put("vendera_baldachin",{
+                status:"Fallback",
+                planned:750,
+                next:"Nur nutzen, falls Kauf des eigenen Baldachins scheitert",
+                note:"Einzelpreis 750 EUR inklusive Vendera-Service. Nicht mehr Teil des aktiven Planbudgets."
+              });
+
+              put("pavillon",{
+                next:"Mit Schabracken, Stoff/Jute, Sisalseil und Bannern verkleiden",
+                note:"Bleibt als zweiter überdachter Bereich neben dem eigenen 6x6-m-Baldachin."
+              });
+
+              put("schabracken",{
+                next:"Maße und Höhe festlegen, Stoff auswählen, Schneiderei anfragen",
+                note:"Saubere lange Nähte; Bestandteil der endgültigen Lösung aus eigenem Baldachin plus vorhandenem Pavillon."
+              });
+
+              patch["assetMeta/tentPlanVersion"]=version;
+              patch["assetMeta/tentPlanUpdatedAt"]=now;
+              await update(ref(db,dbPath("")),patch);
+            }catch(e){
+              console.error("Zeltplan-Migration Ausstattung fehlgeschlagen",e);
+              sync("Zeltplan-Migration fehlgeschlagen","err");
+            }
+          }
+
+          '''
+              if anchor not in assets:
+                  raise SystemExit("FEHLER: Einfügepunkt für Ausstattung-Migration fehlt.")
+              assets = assets.replace(anchor, migration + anchor, 1)
+              changed.append("Ausstattung: Firebase-Migration")
+              print("OK Ausstattung: Firebase-Migration hinzugefügt")
+          else:
+              print("OK Ausstattung: Firebase-Migration bereits vorhanden")
+
+          assets = replace_once(
+              assets,
+              "await seed();\nawait selfLink();",
+              "await seed();\nawait migrateTentPlan();\nawait selfLink();",
+              "Ausstattung-Migration beim Start ausführen"
+          )
+
+          old_footnote = '<p class="footnote">Other Ages ist als "Später bestätigen" eingeordnet: Umfang und Selbstabholung sind weitgehend geklärt, das Angebot ist aber freibleibend und noch nicht final beauftragt.</p>'
+          new_footnote = '<p class="footnote"><strong>Zeltkonzept:</strong> Eigener 6x6-m-Baldachin inklusive Holzgestänge + vorhandener 3x6-m-Pavillon. Ab 28.09. Suchagenten aktivieren, ab 02.11.2026 intensiv gebraucht suchen. Falls bis Ende Januar kein überzeugender Gebrauchter gefunden wird, neu spätestens bis 15.02.2027 bestellen. Vendera und Mittelalter-Zelte24 bleiben Fallback. Other Ages bleibt auf "Später bestätigen" für Frühjahr 2027.</p>'
+          assets = replace_once(
+              assets,
+              old_footnote,
+              new_footnote,
+              "Ausstattung: Planhinweis"
+          )
+
+          INDEX.write_text(index, encoding="utf-8")
+          ASSETS.write_text(assets, encoding="utf-8")
+
+          print()
+          print("Änderungen:")
+          for label in changed:
+              print(" -", label)
+          PY
+
+      - name: Ergebnis validieren
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff --check
+
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          index = Path("index.html").read_text(encoding="utf-8")
+          assets = Path("ausstattung.html").read_text(encoding="utf-8")
+
+          m = re.search(r'const PHASES_DATA = (\[.*?\]) ;\s*</script>', index, flags=re.S)
+          if not m:
+              raise SystemExit("PHASES_DATA fehlt.")
+          json.loads(m.group(1))
+
+          required_index = [
+              "Gewählte Lösung",
+              "Fallback",
+              "system_tent_plan_migration_20260817",
+              "Ab 02.11.2026 nach dem Ende der regulären Herbst-Marktsaison",
+              "spätestens bis 15.02.2027",
+              "Eigener 6x6-m-Baldachin inkl. Holzgestänge",
+              "Vendera Doppelmaster 8x6 m",
+              "Mittelalter-Zelte24",
+              "apr_pavillon_dekotest",
+          ]
+
+          required_assets = [
+              "baldachin_kauf:r(",
+              "mz24_baldachin_miete:r(",
+              "system_asset_tent_plan_migration_20260817",
+              "Gewählte Lösung",
+              "Fallback",
+              "1.125,80 EUR plus Versand",
+              "15.02.2027",
+          ]
+
+          for needle in required_index:
+              if needle not in index:
+                  raise SystemExit(f"index.html: erwarteter Inhalt fehlt: {needle}")
+
+          for needle in required_assets:
+              if needle not in assets:
+                  raise SystemExit(f"ausstattung.html: erwarteter Inhalt fehlt: {needle}")
+
+          print("Validierung erfolgreich.")
+          PY
+
+          echo
+          git diff --stat -- index.html ausstattung.html
+
+      - name: Änderungen committen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- index.html ausstattung.html; then
+            echo "Keine Änderungen vorhanden. Workflow wurde bereits ausgeführt."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add index.html ausstattung.html
+          git diff --cached --check
+
+          git commit -m "Finalize tent concept and baldachin purchase plan"
+          git push
+
+          echo
+          echo "Zeltkonzept erfolgreich eingespielt."
