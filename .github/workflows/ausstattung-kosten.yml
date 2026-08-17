@@ -20,6 +20,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           python - <<'PY'
           from pathlib import Path
           import re
@@ -27,319 +28,744 @@ jobs:
           path = Path("ausstattung.html")
           text = path.read_text(encoding="utf-8")
 
-          def must_replace(old, new, label):
+          def replace_once(old, new, label):
               global text
+
               if new in text:
                   print(f"OK {label}: bereits vorhanden")
                   return
-              if text.count(old) != 1:
-                  raise SystemExit(f"FEHLER {label}: Ausgangstext nicht eindeutig gefunden")
+
+              count = text.count(old)
+
+              if count != 1:
+                  raise SystemExit(
+                      f"FEHLER {label}: Ausgangstext {count} mal gefunden"
+                  )
+
               text = text.replace(old, new, 1)
               print(f"OK {label}")
 
-          must_replace(
+          # --------------------------------------------------
+          # KPI-Leiste flexibler machen
+          # --------------------------------------------------
+
+          replace_once(
               ".stats{display:grid;grid-template-columns:repeat(6,1fr);gap:.5rem;margin:1rem 0}",
               ".stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:.5rem;margin:1rem 0}",
               "flexible KPI-Leiste"
           )
 
-          must_replace(
+          # --------------------------------------------------
+          # Spalte für Restkosten ergänzen
+          # --------------------------------------------------
+
+          replace_once(
               ".head{display:grid;grid-template-columns:minmax(230px,1.55fr) minmax(100px,.5fr) minmax(110px,.5fr) minmax(110px,.5fr) minmax(110px,.5fr) auto;gap:.5rem;align-items:center}",
               ".head{display:grid;grid-template-columns:minmax(230px,1.55fr) minmax(90px,.45fr) minmax(95px,.5fr) minmax(95px,.5fr) minmax(95px,.5fr) minmax(100px,.5fr) auto;gap:.5rem;align-items:center}",
               "Restkosten-Spalte"
           )
 
+          # --------------------------------------------------
+          # Kartenansicht
+          # --------------------------------------------------
+
           new_card = r'''function card(i){
-            const p=num(i.planned),a=num(i.actual),r=Math.max(p-a,0);
+            const p=num(i.planned);
+            const a=num(i.actual);
+            const remaining=Math.max(p-a,0);
+
             return `<article class="asset ${klass(i.status)}">
               <div class="head">
-                <div><div class="title">${esc(i.item||"Ohne Titel")}</div><div class="badges"><span class="badge status">${esc(i.status||"Offen")}</span><span class="badge">${esc(i.type||"Sonstiges")}</span>${i.source?`<span class="badge">${esc(i.source)}</span>`:""}</div></div>
-                <div class="cell"><span class="label">Menge</span>${esc(i.qty||"offen")}</div>
-                <div class="cell money"><span class="label">Plan</span>${p?fmt(p):"offen"}</div>
-                <div class="cell money"><span class="label">Ist</span>${a?fmt(a):"-"}</div>
-                <div class="cell money"><span class="label">Rest</span>${p?fmt(r):"-"}</div>
-                <div class="cell"><span class="label">Frist</span>${i.due?new Date(i.due+"T12:00:00").toLocaleDateString("de-DE"):"-"}</div>
+
+                <div>
+                  <div class="title">${esc(i.item||"Ohne Titel")}</div>
+
+                  <div class="badges">
+                    <span class="badge status">${esc(i.status||"Offen")}</span>
+                    <span class="badge">${esc(i.type||"Sonstiges")}</span>
+                    ${i.source?`<span class="badge">${esc(i.source)}</span>`:""}
+                  </div>
+                </div>
+
+                <div class="cell">
+                  <span class="label">Menge</span>
+                  ${esc(i.qty||"offen")}
+                </div>
+
+                <div class="cell money">
+                  <span class="label">Plan</span>
+                  ${p?fmt(p):"offen"}
+                </div>
+
+                <div class="cell money">
+                  <span class="label">Ist</span>
+                  ${a?fmt(a):"-"}
+                </div>
+
+                <div class="cell money">
+                  <span class="label">Rest</span>
+                  ${p?fmt(remaining):"-"}
+                </div>
+
+                <div class="cell">
+                  <span class="label">Frist</span>
+                  ${i.due
+                    ?new Date(i.due+"T12:00:00").toLocaleDateString("de-DE")
+                    :"-"
+                  }
+                </div>
+
                 <div class="cardactions">
-                  <button class="btn secondary" type="button" onclick='AS.copyShopping(${JSON.stringify(i.key)})' ${i.shoppingKey?"disabled":""}>${i.shoppingKey?"Im Einkauf":"In Einkauf"}</button>
-                  <button class="btn secondary" type="button" onclick='AS.copyBudget(${JSON.stringify(i.key)})' ${i.budgetKey?"disabled":""}>${i.budgetKey?"Im Budget":"Ins Budget"}</button>
+
+                  <button
+                    class="btn secondary"
+                    type="button"
+                    onclick='AS.copyShopping(${JSON.stringify(i.key)})'
+                    ${i.shoppingKey?"disabled":""}>
+                    ${i.shoppingKey?"Im Einkauf":"In Einkauf"}
+                  </button>
+
+                  <button
+                    class="btn secondary"
+                    type="button"
+                    onclick='AS.copyBudget(${JSON.stringify(i.key)})'
+                    ${i.budgetKey?"disabled":""}>
+                    ${i.budgetKey?"Im Budget":"Ins Budget"}
+                  </button>
+
                 </div>
               </div>
-              ${i.next?`<p class="next"><strong>Nächster Schritt:</strong> ${esc(i.next)}</p>`:""}
-              ${i.note?`<p class="note">${esc(i.note)}</p>`:""}
-              <details class="details"><summary>Bearbeiten</summary><div class="editgrid">
-                <label class="span2">Gegenstand<input value="${esc(i.item||"")}" maxlength="100" onchange='AS.field(${JSON.stringify(i.key)},"item",this.value)'></label>
-                <label>Bereich<select onchange='AS.field(${JSON.stringify(i.key)},"area",this.value)'>${opts(AREAS,i.area||"Sonstiges")}</select></label>
-                <label>Typ<select onchange='AS.field(${JSON.stringify(i.key)},"type",this.value)'>${opts(TYPES,i.type||"Kaufen")}</select></label>
-                <label>Status<select onchange='AS.field(${JSON.stringify(i.key)},"status",this.value)'>${opts(STATUSES,i.status||"Offene Entscheidung")}</select></label>
-                <label>Quelle<input value="${esc(i.source||"")}" maxlength="100" onchange='AS.field(${JSON.stringify(i.key)},"source",this.value)'></label>
-                <label>Menge<input value="${esc(i.qty||"")}" maxlength="60" onchange='AS.field(${JSON.stringify(i.key)},"qty",this.value)'></label>
-                <label>Plan EUR<input type="number" min="0" step="0.01" value="${p||""}" onchange='AS.field(${JSON.stringify(i.key)},"planned",this.value)'></label>
-                <label>Ist EUR<input type="number" min="0" step="0.01" value="${a||""}" onchange='AS.field(${JSON.stringify(i.key)},"actual",this.value)'></label>
-                <label>Frist<input type="date" value="${esc(i.due||"")}" onchange='AS.field(${JSON.stringify(i.key)},"due",this.value)'></label>
-                <label class="span2">Nächster Schritt<input value="${esc(i.next||"")}" maxlength="180" onchange='AS.field(${JSON.stringify(i.key)},"next",this.value)'></label>
-                <label class="span4">Notiz<textarea maxlength="700" onchange='AS.field(${JSON.stringify(i.key)},"note",this.value)'>${esc(i.note||"")}</textarea></label>
-                <div class="actions-row"><button class="btn danger" type="button" onclick='AS.del(${JSON.stringify(i.key)})'>Löschen</button></div>
-              </div></details>
+
+              ${i.next
+                ?`<p class="next"><strong>Nächster Schritt:</strong> ${esc(i.next)}</p>`
+                :""
+              }
+
+              ${i.note
+                ?`<p class="note">${esc(i.note)}</p>`
+                :""
+              }
+
+              <details class="details">
+                <summary>Bearbeiten</summary>
+
+                <div class="editgrid">
+
+                  <label class="span2">
+                    Gegenstand
+                    <input
+                      value="${esc(i.item||"")}"
+                      maxlength="100"
+                      onchange='AS.field(${JSON.stringify(i.key)},"item",this.value)'>
+                  </label>
+
+                  <label>
+                    Bereich
+                    <select onchange='AS.field(${JSON.stringify(i.key)},"area",this.value)'>
+                      ${opts(AREAS,i.area||"Sonstiges")}
+                    </select>
+                  </label>
+
+                  <label>
+                    Typ
+                    <select onchange='AS.field(${JSON.stringify(i.key)},"type",this.value)'>
+                      ${opts(TYPES,i.type||"Kaufen")}
+                    </select>
+                  </label>
+
+                  <label>
+                    Status
+                    <select onchange='AS.field(${JSON.stringify(i.key)},"status",this.value)'>
+                      ${opts(STATUSES,i.status||"Offene Entscheidung")}
+                    </select>
+                  </label>
+
+                  <label>
+                    Quelle
+                    <input
+                      value="${esc(i.source||"")}"
+                      maxlength="100"
+                      onchange='AS.field(${JSON.stringify(i.key)},"source",this.value)'>
+                  </label>
+
+                  <label>
+                    Menge
+                    <input
+                      value="${esc(i.qty||"")}"
+                      maxlength="60"
+                      onchange='AS.field(${JSON.stringify(i.key)},"qty",this.value)'>
+                  </label>
+
+                  <label>
+                    Plan EUR
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value="${p||""}"
+                      onchange='AS.field(${JSON.stringify(i.key)},"planned",this.value)'>
+                  </label>
+
+                  <label>
+                    Ist EUR
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value="${a||""}"
+                      onchange='AS.field(${JSON.stringify(i.key)},"actual",this.value)'>
+                  </label>
+
+                  <label>
+                    Frist
+                    <input
+                      type="date"
+                      value="${esc(i.due||"")}"
+                      onchange='AS.field(${JSON.stringify(i.key)},"due",this.value)'>
+                  </label>
+
+                  <label class="span2">
+                    Nächster Schritt
+                    <input
+                      value="${esc(i.next||"")}"
+                      maxlength="180"
+                      onchange='AS.field(${JSON.stringify(i.key)},"next",this.value)'>
+                  </label>
+
+                  <label class="span4">
+                    Notiz
+                    <textarea
+                      maxlength="700"
+                      onchange='AS.field(${JSON.stringify(i.key)},"note",this.value)'>${esc(i.note||"")}</textarea>
+                  </label>
+
+                  <div class="actions-row">
+                    <button
+                      class="btn danger"
+                      type="button"
+                      onclick='AS.del(${JSON.stringify(i.key)})'>
+                      Löschen
+                    </button>
+                  </div>
+
+                </div>
+              </details>
+
             </article>`;
           }'''
 
-          if 'Rest</span>${p?fmt(r)' not in text:
-              text,n = re.subn(
+          if 'span class="label">Rest</span>' not in text:
+
+              text, count = re.subn(
                   r'function card\(i\)\{.*?\n\}\n\nfunction render\(\)\{',
-                  new_card + "\n\nfunction render(){",
+                  lambda m: new_card + "\n\nfunction render(){",
                   text,
                   count=1,
                   flags=re.S
               )
-              if n != 1:
-                  raise SystemExit("FEHLER card(): nicht gefunden")
+
+              if count != 1:
+                  raise SystemExit("FEHLER: function card() nicht gefunden")
+
+              print("OK Kartenansicht mit Restkosten")
+
+          else:
+              print("OK Kartenansicht bereits aktuell")
+
+          # --------------------------------------------------
+          # Gesamt- und Bereichskosten
+          # --------------------------------------------------
 
           new_render = r'''function render(){
-            const rows=Object.entries(assets).map(([key,v])=>({key,...v}));
-            const activeRows=rows.filter(i=>i.status!=="Fallback");
-            const planned=activeRows.reduce((s,i)=>s+num(i.planned),0);
-            const actual=activeRows.reduce((s,i)=>s+num(i.actual),0);
-            const remaining=activeRows.reduce((s,i)=>s+Math.max(num(i.planned)-num(i.actual),0),0);
-            const waiting=rows.filter(i=>WAIT.has(i.status)).length;
-            const open=rows.filter(i=>!COMPLETE.has(i.status)&&!OPTIONAL.has(i.status)).length;
-            const unpriced=activeRows.filter(i=>!COMPLETE.has(i.status)&&!OPTIONAL.has(i.status)&&num(i.planned)===0&&!['Entscheidung','DIY'].includes(i.type)).length;
-            const fallbacks=rows.filter(i=>i.status==="Fallback").length;
+            const rows=Object.entries(assets).map(([key,v])=>({
+              key,
+              ...v
+            }));
+
+            const activeRows=rows.filter(
+              i=>i.status!=="Fallback"
+            );
+
+            const planned=activeRows.reduce(
+              (sum,i)=>sum+num(i.planned),
+              0
+            );
+
+            const actual=activeRows.reduce(
+              (sum,i)=>sum+num(i.actual),
+              0
+            );
+
+            const remaining=activeRows.reduce(
+              (sum,i)=>sum+Math.max(
+                num(i.planned)-num(i.actual),
+                0
+              ),
+              0
+            );
+
+            const waiting=rows.filter(
+              i=>WAIT.has(i.status)
+            ).length;
+
+            const open=rows.filter(
+              i=>!COMPLETE.has(i.status)&&!OPTIONAL.has(i.status)
+            ).length;
+
+            const unpriced=activeRows.filter(
+              i=>
+                !COMPLETE.has(i.status) &&
+                !OPTIONAL.has(i.status) &&
+                num(i.planned)===0 &&
+                !["Entscheidung","DIY"].includes(i.type)
+            ).length;
+
+            const fallbacks=rows.filter(
+              i=>i.status==="Fallback"
+            ).length;
 
             document.getElementById("stats").innerHTML=`
-              <div class="stat"><strong>${rows.length}</strong><span>Posten gesamt</span></div>
-              <div class="stat"><strong>${open}</strong><span>aktiv offen</span></div>
-              <div class="stat"><strong>${waiting}</strong><span>angefragt / später</span></div>
-              <div class="stat"><strong>${fmt(planned)}</strong><span>Plan aktiv</span></div>
-              <div class="stat"><strong>${fmt(actual)}</strong><span>Ist aktiv</span></div>
-              <div class="stat"><strong>${fmt(remaining)}</strong><span>Rest geplant</span></div>
-              <div class="stat"><strong>${unpriced}</strong><span>Kosten noch offen</span></div>
-              <div class="stat"><strong>${fallbacks}</strong><span>Fallbacks</span></div>`;
 
-            const q=document.getElementById("search").value.trim().toLowerCase(),fa=document.getElementById("filterArea").value,fs=document.getElementById("filterStatus").value,ft=document.getElementById("filterType").value;
+              <div class="stat">
+                <strong>${rows.length}</strong>
+                <span>Posten gesamt</span>
+              </div>
+
+              <div class="stat">
+                <strong>${open}</strong>
+                <span>aktiv offen</span>
+              </div>
+
+              <div class="stat">
+                <strong>${waiting}</strong>
+                <span>angefragt / später</span>
+              </div>
+
+              <div class="stat">
+                <strong>${fmt(planned)}</strong>
+                <span>Plan aktiv</span>
+              </div>
+
+              <div class="stat">
+                <strong>${fmt(actual)}</strong>
+                <span>Ist aktiv</span>
+              </div>
+
+              <div class="stat">
+                <strong>${fmt(remaining)}</strong>
+                <span>Rest geplant</span>
+              </div>
+
+              <div class="stat">
+                <strong>${unpriced}</strong>
+                <span>Kosten noch offen</span>
+              </div>
+
+              <div class="stat">
+                <strong>${fallbacks}</strong>
+                <span>Fallbacks</span>
+              </div>`;
+
+            const q=document
+              .getElementById("search")
+              .value
+              .trim()
+              .toLowerCase();
+
+            const fa=document.getElementById("filterArea").value;
+            const fs=document.getElementById("filterStatus").value;
+            const ft=document.getElementById("filterType").value;
 
             const filtered=rows.filter(i=>
-              (!fa||i.area===fa)&&
-              (!fs||i.status===fs)&&
-              (!ft||i.type===ft)&&
-              (!q||[i.item,i.area,i.status,i.type,i.source,i.next,i.note].join(" ").toLowerCase().includes(q))
+              (!fa||i.area===fa) &&
+              (!fs||i.status===fs) &&
+              (!ft||i.type===ft) &&
+              (
+                !q ||
+                [
+                  i.item,
+                  i.area,
+                  i.status,
+                  i.type,
+                  i.source,
+                  i.next,
+                  i.note
+                ]
+                .join(" ")
+                .toLowerCase()
+                .includes(q)
+              )
             );
 
             filtered.sort((a,b)=>
-              AREAS.indexOf(a.area)-AREAS.indexOf(b.area)||
-              (ORDER[a.status]??99)-(ORDER[b.status]??99)||
-              String(a.item).localeCompare(String(b.item),"de")
+              AREAS.indexOf(a.area)-AREAS.indexOf(b.area) ||
+              (ORDER[a.status]??99)-(ORDER[b.status]??99) ||
+              String(a.item).localeCompare(
+                String(b.item),
+                "de"
+              )
             );
 
-            const groups=filtered.reduce((o,i)=>{
-              (o[i.area||"Sonstiges"]??=[]).push(i);
-              return o;
+            const groups=filtered.reduce((result,item)=>{
+              (
+                result[item.area||"Sonstiges"]??=[]
+              ).push(item);
+
+              return result;
             },{});
 
-            document.getElementById("groups").innerHTML=filtered.length
-              ?Object.entries(groups).map(([g,rs])=>{
-                const active=rs.filter(i=>i.status!=="Fallback");
-                const gp=active.reduce((s,i)=>s+num(i.planned),0);
-                const ga=active.reduce((s,i)=>s+num(i.actual),0);
-                const gr=active.reduce((s,i)=>s+Math.max(num(i.planned)-num(i.actual),0),0);
+            document.getElementById("groups").innerHTML=
+              filtered.length
 
-                return `<section class="group">
-                  <div class="group-title">
-                    ${esc(g)}
-                    <small>${rs.length} Posten | Plan ${fmt(gp)} | Ist ${fmt(ga)} | Rest ${fmt(gr)}</small>
-                  </div>
-                  <div class="list">${rs.map(card).join("")}</div>
-                </section>`;
+              ?Object.entries(groups).map(([group,items])=>{
+
+                const active=items.filter(
+                  i=>i.status!=="Fallback"
+                );
+
+                const groupPlanned=active.reduce(
+                  (sum,i)=>sum+num(i.planned),
+                  0
+                );
+
+                const groupActual=active.reduce(
+                  (sum,i)=>sum+num(i.actual),
+                  0
+                );
+
+                const groupRemaining=active.reduce(
+                  (sum,i)=>sum+Math.max(
+                    num(i.planned)-num(i.actual),
+                    0
+                  ),
+                  0
+                );
+
+                return `
+                  <section class="group">
+
+                    <div class="group-title">
+
+                      ${esc(group)}
+
+                      <small>
+                        ${items.length} Posten
+                        | Plan ${fmt(groupPlanned)}
+                        | Ist ${fmt(groupActual)}
+                        | Rest ${fmt(groupRemaining)}
+                      </small>
+
+                    </div>
+
+                    <div class="list">
+                      ${items.map(card).join("")}
+                    </div>
+
+                  </section>`;
               }).join("")
+
               :'<div class="empty">Keine Posten für diesen Filter.</div>';
           }'''
 
           if "Rest geplant" not in text:
-              text,n = re.subn(
+
+              text, count = re.subn(
                   r'function render\(\)\{.*?\n\}\n\nwindow\.AS=',
-                  new_render + "\n\nwindow.AS=",
+                  lambda m: new_render + "\n\nwindow.AS=",
                   text,
                   count=1,
                   flags=re.S
               )
-              if n != 1:
-                  raise SystemExit("FEHLER render(): nicht gefunden")
 
-          marker="// system_asset_cost_plan_migration_20260817"
+              if count != 1:
+                  raise SystemExit("FEHLER: function render() nicht gefunden")
 
-          if marker not in text:
-              migration = r'''
+              print("OK Kosten-Dashboard")
+
+          else:
+              print("OK Kosten-Dashboard bereits aktuell")
+
+          # --------------------------------------------------
+          # Planwerte in Firebase einspielen
+          # --------------------------------------------------
+
+          migration_marker="// system_asset_cost_plan_migration_20260817"
+
+          if migration_marker not in text:
+
+              migration=r'''
           // system_asset_cost_plan_migration_20260817
           async function migrateCostPlan(){
-            const version="2026-08-17-cost-v1";
+
+            const version="2026-08-17-cost-v2";
 
             try{
-              const marker=await get(ref(db,dbPath("assetMeta/costPlanVersion")));
+
+              const marker=await get(
+                ref(
+                  db,
+                  dbPath("assetMeta/costPlanVersion")
+                )
+              );
+
               if(marker.val()===version)return;
 
-              const current=(await get(ref(db,dbPath("assets")))).val()||{};
+              const current=(
+                await get(
+                  ref(
+                    db,
+                    dbPath("assets")
+                  )
+                )
+              ).val()||{};
+
               const patch={};
               const now=Date.now();
 
               const estimates={
+
                 schabracken:[
                   180,
                   "Planwert ca. 120-250 EUR; 180 EUR als Arbeitswert."
                 ],
+
                 schabracken_stoff:[
                   80,
                   "Planwert ca. 65-95 EUR."
                 ],
+
                 beinverkleidung:[
                   45,
                   "Planwert ca. 30-60 EUR."
                 ],
+
                 bannermaterial:[
                   50,
                   "Planwert ca. 35-70 EUR."
                 ],
+
                 pfosten:[
                   45,
                   "Planwert ca. 30-55 EUR."
                 ],
+
                 wimpel:[
                   80,
                   "Planwert ca. 60-100 EUR."
                 ],
+
                 stroh:[
                   30,
                   "Planwert ca. 15-40 EUR."
                 ],
+
                 funktionslicht:[
                   60,
                   "Planwert ca. 40-80 EUR."
                 ],
+
                 oa_transport:[
                   40,
                   "Planwert 40 EUR Reserve für Selbstabholung."
                 ],
+
                 alchemie:[
                   40,
                   "Planwert 40 EUR für Beschriftung, Deko und Kleinteile."
                 ],
+
                 met:[
                   120,
                   "Vorläufiger Planwert für ca. 30 Gäste."
                 ],
+
                 wein:[
                   40,
                   "Vorläufiger Planwert für 1-2 Sorten."
                 ],
+
                 soft:[
                   70,
                   "Vorläufiger Planwert für Wasser und Softdrinks."
                 ],
+
                 spirit:[
                   50,
                   "Vorläufiger Planwert für Spirituosen."
                 ],
+
                 kuehlung:[
                   50,
                   "Vorläufige Reserve für Eis oder Kühlung."
                 ],
+
                 wettkampf:[
                   75,
                   "Vorläufige Reserve für Ziele und Ergänzungsmaterial."
                 ],
+
                 muell:[
                   20,
                   "Vorläufiger Planwert."
                 ],
+
                 hygiene:[
                   30,
                   "Vorläufiger Planwert."
                 ]
               };
 
-              const appendNote=(a,b)=>{
-                const x=String(a||"").trim();
-                return x.includes(b)
-                  ?x
-                  :[x,b].filter(Boolean).join(" ").slice(0,700);
+              const appendNote=(existing,extra)=>{
+
+                const base=String(
+                  existing||""
+                ).trim();
+
+                if(base.includes(extra)){
+                  return base;
+                }
+
+                return [
+                  base,
+                  extra
+                ]
+                .filter(Boolean)
+                .join(" ")
+                .slice(0,700);
               };
 
-              for(const [key,[planned,note]] of Object.entries(estimates)){
+              for(
+                const [key,[planned,note]]
+                of Object.entries(estimates)
+              ){
+
                 const row=current[key];
+
                 if(!row)continue;
 
+                // Manuell vorhandene Planwerte nicht überschreiben
                 if(Number(row.planned||0)===0){
-                  patch[`assets/${key}/planned`]=planned;
-                  patch[`assets/${key}/note`]=appendNote(row.note,note);
-                  patch[`assets/${key}/updatedAt`]=now;
-                  patch[`assets/${key}/updatedBy`]="Kostenplan 17.08.2026";
 
+                  patch[
+                    `assets/${key}/planned`
+                  ]=planned;
+
+                  patch[
+                    `assets/${key}/note`
+                  ]=appendNote(
+                    row.note,
+                    note
+                  );
+
+                  patch[
+                    `assets/${key}/updatedAt`
+                  ]=now;
+
+                  patch[
+                    `assets/${key}/updatedBy`
+                  ]="Kostenplan 17.08.2026";
+
+                  // Bereits verknüpftes Budget mitnehmen
                   if(row.budgetKey){
-                    patch[`budget/${row.budgetKey}/planned`]=planned;
+
+                    patch[
+                      `budget/${row.budgetKey}/planned`
+                    ]=planned;
                   }
                 }
               }
 
               const add=(key,row)=>{
-                if(!current[key]){
-                  patch[`assets/${key}`]={
-                    ...row,
-                    seeded:true,
-                    ts:now,
-                    updatedAt:now,
-                    updatedBy:"Kostenplan 17.08.2026"
-                  };
-                }
+
+                if(current[key])return;
+
+                patch[`assets/${key}`]={
+                  ...row,
+                  seeded:true,
+                  ts:now,
+                  updatedAt:now,
+                  updatedBy:"Kostenplan 17.08.2026"
+                };
               };
 
-              add("zauberflaschen",{
-                area:"Alchemistenstation",
-                item:"Glasflaschen für Trink- und Deko-Tränke",
-                type:"Kaufen",
-                status:"Zu kaufen",
-                source:"noch offen",
-                qty:"Mischung aus Trink- und Dekoflaschen",
-                planned:80,
-                actual:0,
-                due:"",
-                next:"Geeignete lebensmittelechte Flaschen auswählen und bestellen",
-                note:"Vorläufiger Planwert 80 EUR."
-              });
+              add(
+                "zauberflaschen",
+                {
+                  area:"Alchemistenstation",
+                  item:"Glasflaschen für Trink- und Deko-Tränke",
+                  type:"Kaufen",
+                  status:"Zu kaufen",
+                  source:"noch offen",
+                  qty:"Mischung aus Trink- und Dekoflaschen",
+                  planned:80,
+                  actual:0,
+                  due:"",
+                  next:"Geeignete lebensmittelechte Flaschen auswählen und bestellen",
+                  note:"Vorläufiger Planwert 80 EUR."
+                }
+              );
 
-              add("grillgut",{
-                area:"Essen & Feuer",
-                item:"Grillgut, Beilagen und Essen für ca. 30 Gäste",
-                type:"Verbrauch",
-                status:"Zu kaufen",
-                source:"noch offen",
-                qty:"für ca. 30 Gäste",
-                planned:300,
-                actual:0,
-                due:"",
-                next:"Menü und Mengen später konkretisieren",
-                note:"Grober Budget-Platzhalter 300 EUR."
-              });
+              add(
+                "grillgut",
+                {
+                  area:"Essen & Feuer",
+                  item:"Grillgut, Beilagen und Essen für ca. 30 Gäste",
+                  type:"Verbrauch",
+                  status:"Zu kaufen",
+                  source:"noch offen",
+                  qty:"für ca. 30 Gäste",
+                  planned:300,
+                  actual:0,
+                  due:"",
+                  next:"Menü und Mengen später konkretisieren",
+                  note:"Grober Budget-Platzhalter 300 EUR."
+                }
+              );
 
-              add("brennstoff",{
-                area:"Essen & Feuer",
-                item:"Grillkohle / Brennholz / Anzünder",
-                type:"Verbrauch",
-                status:"Später organisieren",
-                source:"lokal / Baumarkt",
-                qty:"nach Grill- und Feuerplan",
-                planned:50,
-                actual:0,
-                due:"",
-                next:"Bedarf kurz vor dem Event festlegen",
-                note:"Vorläufiger Planwert 50 EUR."
-              });
+              add(
+                "brennstoff",
+                {
+                  area:"Essen & Feuer",
+                  item:"Grillkohle / Brennholz / Anzünder",
+                  type:"Verbrauch",
+                  status:"Später organisieren",
+                  source:"lokal / Baumarkt",
+                  qty:"nach Grill- und Feuerplan",
+                  planned:50,
+                  actual:0,
+                  due:"",
+                  next:"Bedarf kurz vor dem Event festlegen",
+                  note:"Vorläufiger Planwert 50 EUR."
+                }
+              );
 
-              patch["assetMeta/costPlanVersion"]=version;
-              patch["assetMeta/costPlanUpdatedAt"]=now;
+              patch[
+                "assetMeta/costPlanVersion"
+              ]=version;
 
-              await update(ref(db,dbPath("")),patch);
+              patch[
+                "assetMeta/costPlanUpdatedAt"
+              ]=now;
 
-            }catch(e){
-              console.error(e);
-              sync("Kostenplan-Migration fehlgeschlagen","err");
+              await update(
+                ref(
+                  db,
+                  dbPath("")
+                ),
+                patch
+              );
+
+            }catch(error){
+
+              console.error(
+                "Kostenplan-Migration fehlgeschlagen",
+                error
+              );
+
+              sync(
+                "Kostenplan-Migration fehlgeschlagen",
+                "err"
+              );
             }
           }
 
@@ -348,7 +774,9 @@ jobs:
               anchor="async function selfLink(){"
 
               if anchor not in text:
-                  raise SystemExit("FEHLER: selfLink() nicht gefunden")
+                  raise SystemExit(
+                      "FEHLER: selfLink() nicht gefunden"
+                  )
 
               text=text.replace(
                   anchor,
@@ -356,65 +784,163 @@ jobs:
                   1
               )
 
-          must_replace(
-              "await migrateTentPlan();\nawait selfLink();",
-              "await migrateTentPlan();\nawait migrateCostPlan();\nawait selfLink();",
-              "Kostenmigration beim Start"
-          )
+              print("OK Kostenmigration ergänzt")
 
-          old_field = r'''  field(k,f,v){
-            if(!["item","area","type","status","source","qty","planned","actual","due","next","note"].includes(f))return;
-            const val=["planned","actual"].includes(f)?num(v):String(v||"").trim();
-            update(ref(db,dbPath(`assets/${k}`)),{[f]:val,updatedAt:Date.now(),updatedBy:user()}).catch(e=>alert(e.message));
-          },'''
+          else:
+              print("OK Kostenmigration bereits vorhanden")
 
-          new_field = r'''  async field(k,f,v){
-            if(!["item","area","type","status","source","qty","planned","actual","due","next","note"].includes(f))return;
+          # --------------------------------------------------
+          # Migration beim Laden starten
+          # --------------------------------------------------
 
-            const val=["planned","actual"].includes(f)
-              ?num(v)
-              :String(v||"").trim();
+          old_start="""await migrateTentPlan();
+          await selfLink();"""
 
-            try{
-              await update(
-                ref(db,dbPath(`assets/${k}`)),
-                {
-                  [f]:val,
-                  updatedAt:Date.now(),
-                  updatedBy:user()
-                }
-              );
+          new_start="""await migrateTentPlan();
+          await migrateCostPlan();
+          await selfLink();"""
 
-              const row=assets[k];
+          if "await migrateCostPlan();" not in text:
 
-              if(
-                row?.budgetKey &&
-                ["planned","actual"].includes(f)
-              ){
-                await update(
-                  ref(db,dbPath(`budget/${row.budgetKey}`)),
-                  {
-                    [f]:val,
-                    updatedAt:Date.now(),
-                    updatedBy:user()
+              if old_start not in text:
+                  raise SystemExit(
+                      "FEHLER: Startpunkt für Kostenmigration nicht gefunden"
+                  )
+
+              text=text.replace(
+                  old_start,
+                  new_start,
+                  1
+              )
+
+              print("OK Kostenmigration beim Start aktiviert")
+
+          else:
+              print("OK Kostenmigration beim Start bereits aktiv")
+
+          # --------------------------------------------------
+          # Plan- und Ist-Werte automatisch ins verknüpfte
+          # Hauptbudget synchronisieren.
+          #
+          # KORREKTUR:
+          # Nicht mehr exakte Einrückung suchen.
+          # --------------------------------------------------
+
+          if "async field(k,f,v)" not in text:
+
+              pattern=re.compile(
+                  r'''
+                  (window\.AS=\{\s*)
+                  field\(k,f,v\)\{
+                  .*?
+                  \n\s*\},
+                  (\s*del\(k\)\{)
+                  ''',
+                  re.S|re.X
+              )
+
+              new_field=r'''async field(k,f,v){
+
+                if(
+                  ![
+                    "item",
+                    "area",
+                    "type",
+                    "status",
+                    "source",
+                    "qty",
+                    "planned",
+                    "actual",
+                    "due",
+                    "next",
+                    "note"
+                  ].includes(f)
+                )return;
+
+                const val=
+                  ["planned","actual"].includes(f)
+                  ?num(v)
+                  :String(v||"").trim();
+
+                try{
+
+                  await update(
+                    ref(
+                      db,
+                      dbPath(`assets/${k}`)
+                    ),
+                    {
+                      [f]:val,
+                      updatedAt:Date.now(),
+                      updatedBy:user()
+                    }
+                  );
+
+                  const row=assets[k];
+
+                  if(
+                    row?.budgetKey &&
+                    ["planned","actual"].includes(f)
+                  ){
+
+                    await update(
+                      ref(
+                        db,
+                        dbPath(
+                          `budget/${row.budgetKey}`
+                        )
+                      ),
+                      {
+                        [f]:val,
+                        updatedAt:Date.now(),
+                        updatedBy:user()
+                      }
+                    );
                   }
-                );
-              }
 
-            }catch(e){
-              alert(e.message);
-            }
-          },'''
+                }catch(error){
 
-          must_replace(
-              old_field,
-              new_field,
-              "Plan/Ist mit Budget synchronisieren"
-          )
+                  console.error(error);
+                  alert(error.message);
+                }
+              },'''
+
+              def repl(match):
+
+                  return (
+                      match.group(1)
+                      + new_field
+                      + match.group(2)
+                  )
+
+              text,count=pattern.subn(
+                  repl,
+                  text,
+                  count=1
+              )
+
+              if count != 1:
+
+                  raise SystemExit(
+                      "FEHLER: AS.field()-Block nicht gefunden"
+                  )
+
+              print(
+                  "OK Plan/Ist-Synchronisierung mit Budget"
+              )
+
+          else:
+              print(
+                  "OK Plan/Ist-Synchronisierung bereits vorhanden"
+              )
 
           path.write_text(
               text,
               encoding="utf-8"
+          )
+
+          print(
+              "Ausstattungs-Kostenplanung erfolgreich vorbereitet."
           )
           PY
 
@@ -428,9 +954,15 @@ jobs:
           grep -q 'Rest geplant' ausstattung.html
           grep -q 'Kosten noch offen' ausstattung.html
           grep -q 'system_asset_cost_plan_migration_20260817' ausstattung.html
+          grep -q 'async field(k,f,v)' ausstattung.html
+          grep -q 'Glasflaschen für Trink- und Deko-Tränke' ausstattung.html
+          grep -q 'Grillgut, Beilagen und Essen' ausstattung.html
 
+          echo
           echo "Validierung erfolgreich."
-          git diff --stat
+          echo
+
+          git diff --stat -- ausstattung.html
 
       - name: Änderungen committen
         shell: bash
@@ -447,6 +979,11 @@ jobs:
 
           git add ausstattung.html
 
+          git diff --cached --check
+
           git commit -m "Add detailed cost planning to equipment overview"
 
           git push
+
+          echo
+          echo "Kostenplanung erfolgreich eingespielt."
