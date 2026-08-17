@@ -552,6 +552,171 @@ async function migrateCostPlan(){
   }
 }
 
+// system_missing_equipment_migration_20260817
+async function migrateMissingEquipment(){
+  const version="2026-08-17-missing-v1";
+
+  try{
+    const markerSnap=await get(
+      ref(
+        db,
+        dbPath("assetMeta/missingEquipmentVersion")
+      )
+    );
+
+    if(markerSnap.val()===version)return;
+
+    const current=(
+      await get(
+        ref(
+          db,
+          dbPath("assets")
+        )
+      )
+    ).val()||{};
+
+    const patch={};
+    const now=Date.now();
+
+    const add=(key,row)=>{
+      if(current[key])return;
+
+      patch[`assets/${key}`]={
+        ...row,
+        seeded:true,
+        ts:now,
+        updatedAt:now,
+        updatedBy:"Ausstattungsplan 17.08.2026"
+      };
+    };
+
+    add("brandschutz",{
+      area:"Sicherheit",
+      item:"Brandschutz für Grill und Feuerschale",
+      type:"Kaufen",
+      status:"Zu kaufen",
+      source:"Baumarkt / Fachhandel",
+      qty:"1 Set",
+      planned:70,
+      actual:0,
+      due:"",
+      next:"Geeigneten Feuerlöscher bzw. Löschmittel, Löschdecke sowie Löschwasser oder Sand fest einplanen",
+      note:"Unmittelbar bei Grill und Feuerschale verfügbar halten; Abstand zu Stroh, Jute und Holzdeko beachten."
+    });
+
+    add("erstehilfe",{
+      area:"Sicherheit",
+      item:"Erste-Hilfe-Set für das Event",
+      type:"Kaufen",
+      status:"Zu kaufen",
+      source:"Apotheke / Baumarkt",
+      qty:"1 Set",
+      planned:30,
+      actual:0,
+      due:"",
+      next:"Vollständigen Verbandskasten plus Kühlpacks und kleine Wundversorgung zusammenstellen",
+      note:"Gut sichtbar und schnell erreichbar lagern; besonders wegen Wettkämpfen und Feuerstelle."
+    });
+
+    add("grillwerkzeug",{
+      area:"Essen & Feuer",
+      item:"Grill- und Küchenwerkzeug",
+      type:"Kaufen",
+      status:"Zu kaufen",
+      source:"Eigenbestand prüfen / Baumarkt",
+      qty:"1 Set",
+      planned:50,
+      actual:0,
+      due:"",
+      next:"Eigenbestand prüfen und fehlende Teile ergänzen",
+      note:"Grillzangen, hitzefeste Handschuhe, Messer, Schneidebretter, Servierschüsseln, große Löffel und Küchenrolle einplanen."
+    });
+
+    add("wasserlogistik",{
+      area:"Logistik",
+      item:"Wasserkanister und Wasserlogistik",
+      type:"Kaufen",
+      status:"Offene Entscheidung",
+      source:"noch offen",
+      qty:"1-2 große Kanister",
+      planned:40,
+      actual:0,
+      due:"",
+      next:"Kanistergröße und Wasserquelle mit Hygiene-, Küchen- und Brandschutzplanung abstimmen",
+      note:"Zusätzlich zum Trinkwasser Reserve für Händewaschen, Reinigung und bei Bedarf Löschen vorsehen."
+    });
+
+    add("lagerboxen",{
+      area:"Logistik",
+      item:"Wetterfeste Aufbewahrungsboxen",
+      type:"Kaufen",
+      status:"Zu kaufen",
+      source:"IKEA / Baumarkt",
+      qty:"2-4 Boxen",
+      planned:50,
+      actual:0,
+      due:"",
+      next:"Vorhandene Boxen prüfen und fehlende Größen ergänzen",
+      note:"Für Lebensmittel, Werkzeug, Alchemie-Material und feuchtigkeitsempfindliche Ausstattung; Schutz vor Tau und Schmutz."
+    });
+
+    add("reparaturkoffer",{
+      area:"Logistik",
+      item:"Aufbau- und Reparaturkoffer",
+      type:"Kaufen",
+      status:"Zu kaufen",
+      source:"Baumarkt / Eigenbestand",
+      qty:"1 Kiste",
+      planned:60,
+      actual:0,
+      due:"",
+      next:"Eigenbestand sammeln und fehlendes Verbrauchsmaterial ergänzen",
+      note:"Kabelbinder, Gewebeband, Schnur, Ersatzseil, Hammer bzw. Vorschlaghammer, Arbeitshandschuhe, Taschenlampe und Ersatzbatterien/Akkus."
+    });
+
+    add("beschilderung",{
+      area:"Gelände",
+      item:"Beschilderung für Gelände und Stationen",
+      type:"DIY",
+      status:"Zu basteln",
+      source:"Eigenbau",
+      qty:"mehrere Schilder",
+      planned:25,
+      actual:0,
+      due:"",
+      next:"Schilderliste nach finalem Lageplan festlegen und gestalten",
+      note:"Mindestens Toilette, Getränke, Wettkampfbereiche und Eingang; Parkplatz nur falls vor Ort nötig."
+    });
+
+    patch[
+      "assetMeta/missingEquipmentVersion"
+    ]=version;
+
+    patch[
+      "assetMeta/missingEquipmentUpdatedAt"
+    ]=now;
+
+    await update(
+      ref(
+        db,
+        dbPath("")
+      ),
+      patch
+    );
+
+  }catch(error){
+    console.error(
+      "Migration fehlender Ausstattung fehlgeschlagen",
+      error
+    );
+
+    sync(
+      "Ausstattungs-Migration fehlgeschlagen",
+      "err"
+    );
+  }
+}
+
 async function selfLink(){
   try{
     const p="documents/system_assets_overview",snap=await get(ref(db,dbPath(p)));
@@ -1049,6 +1214,7 @@ onValue(ref(db,dbPath("shopping")),s=>{shopping=s.val()||{};render();});
 await seed();
 await migrateTentPlan();
 await migrateCostPlan();
+await migrateMissingEquipment();
 await selfLink();
 </script>
 </body>
