@@ -1,0 +1,245 @@
+name: Tonkrug-Bestand aktualisieren
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: winterfest-tonkruege-update
+  cancel-in-progress: false
+
+jobs:
+  update-tonkruege:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Python bereitstellen
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tonkrug-Bestand und Kosten aktualisieren
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          INDEX = Path("index.html")
+          ASSETS = Path("ausstattung.html")
+          BUDGET_WORKFLOW = Path(".github/workflows/apply-winterfest-budget.yml")
+
+          for path in (INDEX, ASSETS, BUDGET_WORKFLOW):
+              if not path.exists():
+                  raise SystemExit(f"FEHLER: {path} fehlt.")
+
+          OLD_VERSION = "2026-08-17-final-budget-v2"
+          NEW_VERSION = "2026-08-19-final-budget-v3"
+
+          OLD_MARKER = "system_final_budget_plan_20260817_v2"
+          NEW_MARKER = "system_final_budget_plan_20260819_v3"
+
+          OLD_TARGET = 'patch["meta/budgetPlanTarget"] = 3718.70;'
+          NEW_TARGET = 'patch["meta/budgetPlanTarget"] = 3739.70;'
+
+          new_krug_block = '''put("kruege", {
+              planned: 43,
+              actual: 43,
+              status: "Gekauft",
+              qty: "4 eigene Tonkrüge (3 kleinere + 1 großer)",
+              next: "Eigenbestand abgeschlossen; weiteren Krugbedarf im Frühjahr 2027 über Other Ages decken",
+              note: "Eigenbestand abgeschlossen: 3 Tonkrüge zusammen 21 EUR + 1 großer Tonkrug 22 EUR = 43 EUR gesamt. Weitere benötigte Krüge werden über Other Ages gemietet."
+            });'''
+
+          krug_pattern = re.compile(
+              r'''put\("kruege",\s*\{\s*
+                  planned:\s*22,\s*
+                  actual:\s*22,\s*
+                  status:\s*"Gekauft",\s*
+                  qty:\s*"gekaufter Bestand",\s*
+                  note:\s*appendNote\(
+                      current\.kruege\?\.note,\s*
+                      "Kauf abgeschlossen;\s*22 EUR inklusive Versand\."
+                  \)\s*
+              \}\);''',
+              re.VERBOSE | re.DOTALL
+          )
+
+          old_seed = (
+              'kruege:r("Deko","Gekaufte Tonkrüge","Vorhanden","Gekauft",'
+              '"Gebrauchtkauf","Bestand noch zählen",0,0,'
+              '"Bestand, Größen und Kaufpreise bei Gelegenheit ergänzen",'
+              '"Für Ausschank, Trinkgefäße und Dekoration."),'
+          )
+
+          new_seed = (
+              'kruege:r("Deko","Gekaufte Tonkrüge","Vorhanden","Gekauft",'
+              '"Gebrauchtkauf","4 eigene Tonkrüge (3 kleinere + 1 großer)",43,43,'
+              '"Eigenbestand abgeschlossen; weiteren Bedarf über Other Ages mieten",'
+              '"3 Tonkrüge zusammen 21 EUR + 1 großer Tonkrug 22 EUR = 43 EUR. '
+              'Für Ausschank, Trinkgefäße, Dekoration und Metkrughalten."),'
+          )
+
+          def replace_version_and_marker(text, path):
+              if OLD_VERSION in text:
+                  text = text.replace(OLD_VERSION, NEW_VERSION)
+                  print(f"{path}: Migrationsversion aktualisiert")
+              elif NEW_VERSION not in text:
+                  raise SystemExit(
+                      f"FEHLER: Budget-Migrationsversion in {path} nicht gefunden."
+                  )
+
+              if OLD_MARKER in text:
+                  text = text.replace(OLD_MARKER, NEW_MARKER)
+                  print(f"{path}: Migrationsmarker aktualisiert")
+              elif NEW_MARKER not in text:
+                  raise SystemExit(
+                      f"FEHLER: Budget-Migrationsmarker in {path} nicht gefunden."
+                  )
+
+              return text
+
+          def replace_krug_block(text, path):
+              if (
+                  'planned: 43,' in text
+                  and 'actual: 43,' in text
+                  and '4 eigene Tonkrüge' in text
+              ):
+                  print(f"{path}: Tonkrug-Migration bereits aktuell")
+                  return text
+
+              text, count = krug_pattern.subn(new_krug_block, text, count=1)
+
+              if count != 1:
+                  raise SystemExit(
+                      f"FEHLER: bisherigen 22-EUR-Tonkrug-Block in {path} "
+                      f"nicht eindeutig gefunden. Treffer: {count}"
+                  )
+
+              print(f"{path}: Tonkrug-Migration 22 EUR -> 43 EUR")
+              return text
+
+          def replace_target(text, path):
+              if OLD_TARGET in text:
+                  text = text.replace(OLD_TARGET, NEW_TARGET, 1)
+                  print(f"{path}: Gesamtplan 3.718,70 -> 3.739,70 EUR")
+              elif NEW_TARGET not in text:
+                  raise SystemExit(
+                      f"FEHLER: Budget-Zielwert in {path} nicht gefunden."
+                  )
+
+              return text
+
+          # --------------------------------------------------
+          # index.html
+          # --------------------------------------------------
+
+          text = INDEX.read_text(encoding="utf-8")
+          text = replace_version_and_marker(text, INDEX)
+          text = replace_krug_block(text, INDEX)
+          text = replace_target(text, INDEX)
+          INDEX.write_text(text, encoding="utf-8")
+
+          # --------------------------------------------------
+          # ausstattung.html
+          # --------------------------------------------------
+
+          text = ASSETS.read_text(encoding="utf-8")
+          text = replace_version_and_marker(text, ASSETS)
+          text = replace_krug_block(text, ASSETS)
+          text = replace_target(text, ASSETS)
+
+          if old_seed in text:
+              text = text.replace(old_seed, new_seed, 1)
+              print(
+                  "ausstattung.html: Grundbestand auf 4 Tonkrüge / 43 EUR aktualisiert"
+              )
+          elif new_seed in text:
+              print("ausstattung.html: Grundbestand bereits aktuell")
+          else:
+              raise SystemExit(
+                  "FEHLER: Tonkrug-Grunddatensatz in ausstattung.html nicht gefunden."
+              )
+
+          ASSETS.write_text(text, encoding="utf-8")
+
+          # --------------------------------------------------
+          # Alten Budget-Workflow ebenfalls korrigieren
+          # --------------------------------------------------
+
+          text = BUDGET_WORKFLOW.read_text(encoding="utf-8")
+          text = replace_version_and_marker(text, BUDGET_WORKFLOW)
+          text = replace_krug_block(text, BUDGET_WORKFLOW)
+          text = replace_target(text, BUDGET_WORKFLOW)
+          BUDGET_WORKFLOW.write_text(text, encoding="utf-8")
+
+          # --------------------------------------------------
+          # Sicherheitskontrollen
+          # --------------------------------------------------
+
+          assets_check = ASSETS.read_text(encoding="utf-8")
+
+          if 'oa_weinkruege:r(' not in assets_check:
+              raise SystemExit(
+                  "FEHLER: Other-Ages-Weinkrug-Posten fehlt unerwartet."
+              )
+
+          if '"Other Ages","4",16,0' not in assets_check:
+              raise SystemExit(
+                  "FEHLER: Other-Ages-Weinkrüge wurden unerwartet verändert."
+              )
+
+          if 'planned: 22,' in INDEX.read_text(encoding="utf-8") and \
+             'put("kruege"' in INDEX.read_text(encoding="utf-8"):
+              raise SystemExit(
+                  "FEHLER: alter 22-EUR-Krugwert möglicherweise noch vorhanden."
+              )
+
+          print("")
+          print("Ergebnis:")
+          print("Eigene Tonkrüge: 4 Stück")
+          print("Ist-Kosten eigene Tonkrüge: 43 EUR")
+          print("Plan eigene Tonkrüge: 43 EUR")
+          print("Other Ages Weinkrüge: unverändert 4 Stück / 16 EUR")
+          print("Gesamtplan: 3.739,70 EUR")
+          print("Nettoänderung gegenüber vorher: +21 EUR")
+          PY
+
+      - name: Änderungen prüfen
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff -- index.html ausstattung.html .github/workflows/apply-winterfest-budget.yml
+
+      - name: Änderungen auf main veröffentlichen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "Keine Änderungen notwendig."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            index.html \
+            ausstattung.html \
+            .github/workflows/apply-winterfest-budget.yml
+
+          git commit -m "Tonkrug-Bestand auf 4 Stück und 43 EUR aktualisieren"
+          git push origin main
