@@ -480,7 +480,7 @@ async function ensureTentPlanData() {
 
 // system_final_budget_plan_20260817_v2
 async function ensureFinalBudgetPlanData(){
-  const version = "2026-08-17-final-budget-v2";
+  const version = "2026-08-19-final-budget-v3";
   try {
     const marker = await get(ref(db, dbPath("assetMeta/finalBudgetPlanVersion")));
     if (marker.val() === version) return;
@@ -542,13 +542,13 @@ async function ensureFinalBudgetPlanData(){
     });
 
     put("kruege", {
-      planned: 22,
-      actual: 22,
+      planned: 43,
+      actual: 43,
       status: "Gekauft",
-      qty: "gekaufter Bestand",
-      note: appendNote(current.kruege?.note, "Kauf abgeschlossen; 22 EUR inklusive Versand.")
+      qty: "4 eigene Tonkrüge (3 kleinere + 1 großer)",
+      next: "Eigenbestand abgeschlossen; weiteren Krugbedarf im Frühjahr 2027 über Other Ages decken",
+      note: "Eigenbestand abgeschlossen: 3 Tonkrüge zusammen 21 EUR + 1 großer Tonkrug 22 EUR = 43 EUR gesamt. Weitere benötigte Krüge werden über Other Ages gemietet. Für Ausschank, Dekoration und Metkrughalten."
     });
-
     put("oa_feuerkoerbe", {
       planned: 10,
       status: "Später bestätigen",
@@ -595,7 +595,7 @@ async function ensureFinalBudgetPlanData(){
     patch["assetMeta/finalBudgetPlanVersion"] = version;
     patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
     patch["meta/budgetCap"] = 4000;
-    patch["meta/budgetPlanTarget"] = 3718.70;
+    patch["meta/budgetPlanTarget"] = 3739.70;
 
     await update(ref(db, dbPath("")), patch);
   } catch (error) {

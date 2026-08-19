@@ -140,7 +140,7 @@ function seedRows(){
     laternen:r("Beleuchtung","LED-Laternen","Vorhanden","Vorhanden","Eigenbestand","8",0,0,"Positionen im Lageplan festlegen","Für Atmosphäre und Tischbereiche."),
     ledkerzen:r("Beleuchtung","LED-Kerzen","Vorhanden","Vorhanden","Eigenbestand","8",0,0,"Je eine pro Laterne vorsehen","Bereits vorhanden."),
     funktionslicht:r("Beleuchtung","Funktionale Beleuchtung für Wege, Grill und Toilette","Kaufen","Offene Entscheidung","noch offen","wenige Leuchten",0,0,"Nach Lageplan und Stromplanung Bedarf bestimmen","Die acht Laternen sind Stimmungslicht, nicht die alleinige Sicherheits- und Arbeitsbeleuchtung."),
-    kruege:r("Deko","Gekaufte Tonkrüge","Vorhanden","Gekauft","Gebrauchtkauf","Bestand noch zählen",0,0,"Bestand, Größen und Kaufpreise bei Gelegenheit ergänzen","Für Ausschank, Trinkgefäße und Dekoration."),
+    kruege:r("Deko","Gekaufte Tonkrüge","Vorhanden","Gekauft","Gebrauchtkauf","4 eigene Tonkrüge (3 kleinere + 1 großer)",43,43,"Eigenbestand abgeschlossen; weiteren Bedarf über Other Ages mieten","3 Tonkrüge zusammen 21 EUR + 1 großer Tonkrug 22 EUR = 43 EUR. Für Ausschank, Trinkgefäße, Dekoration und Metkrughalten."),
     feuerschale:r("Essen & Feuer","Feuerschale","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Sicheren Standort festlegen","Bereits vorhanden."),
     grillrost:r("Essen & Feuer","Grillrost","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Grillaufbau später testen","Bereits vorhanden."),
     oa_bankett:r("Other Ages","Bankettsets","Mieten","Später bestätigen","Other Ages","5 Sets / 30 Personen",125,0,"Frühjahr 2027 final bestätigen und beauftragen","Angebot vom 08.08.2026: 125 EUR. Transportkoffer laut Mail nicht im Anhänger transportieren."),
@@ -720,7 +720,7 @@ async function migrateMissingEquipment(){
 
 // system_final_budget_plan_20260817_v2
 async function migrateFinalBudgetPlan(){
-  const version = "2026-08-17-final-budget-v2";
+  const version = "2026-08-19-final-budget-v3";
   try {
     const marker = await get(ref(db, dbPath("assetMeta/finalBudgetPlanVersion")));
     if (marker.val() === version) return;
@@ -782,13 +782,13 @@ async function migrateFinalBudgetPlan(){
     });
 
     put("kruege", {
-      planned: 22,
-      actual: 22,
+      planned: 43,
+      actual: 43,
       status: "Gekauft",
-      qty: "gekaufter Bestand",
-      note: appendNote(current.kruege?.note, "Kauf abgeschlossen; 22 EUR inklusive Versand.")
+      qty: "4 eigene Tonkrüge (3 kleinere + 1 großer)",
+      next: "Eigenbestand abgeschlossen; weiteren Krugbedarf im Frühjahr 2027 über Other Ages decken",
+      note: "Eigenbestand abgeschlossen: 3 Tonkrüge zusammen 21 EUR + 1 großer Tonkrug 22 EUR = 43 EUR gesamt. Weitere benötigte Krüge werden über Other Ages gemietet. Für Ausschank, Dekoration und Metkrughalten."
     });
-
     put("oa_feuerkoerbe", {
       planned: 10,
       status: "Später bestätigen",
@@ -835,7 +835,7 @@ async function migrateFinalBudgetPlan(){
     patch["assetMeta/finalBudgetPlanVersion"] = version;
     patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
     patch["meta/budgetCap"] = 4000;
-    patch["meta/budgetPlanTarget"] = 3718.70;
+    patch["meta/budgetPlanTarget"] = 3739.70;
 
     await update(ref(db, dbPath("")), patch);
   } catch (error) {
