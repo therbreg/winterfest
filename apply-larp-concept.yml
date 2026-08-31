@@ -1,0 +1,132 @@
+name: Hybrid-LARP-Konzept verlinken
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  add-larp-concept:
+    name: Hybrid-LARP-Konzept auf Winterfest-Seite verlinken
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: LARP-Konzept verlinken
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("index.html")
+          text = path.read_text(encoding="utf-8")
+
+          marker = "<!-- system_larp_konzept -->"
+
+          if marker in text:
+              print("✓ Hybrid-LARP-Konzept ist bereits verlinkt.")
+              raise SystemExit(0)
+
+          anchor = '    <div class="documents-list" id="documentsList"></div>'
+
+          if text.count(anchor) != 1:
+              raise SystemExit(
+                  "FEHLER: Der Zielbereich für die Dokumentliste wurde nicht eindeutig gefunden. "
+                  f"Fundstellen: {text.count(anchor)}. Es wurde nichts verändert."
+              )
+
+          block = '''    <!-- system_larp_konzept -->
+              <div class="documents-list system-documents-list">
+                <article class="doc-card pinned">
+                  <div class="doc-main">
+                    <div class="doc-topline">
+                      <span class="doc-cat">Programm</span>
+                      <span class="doc-pin">Wichtig</span>
+                    </div>
+
+                    <h3>Die Schicksale des Dreißigsten Winters - Hybrid-LARP-Konzept</h3>
+
+                    <p class="doc-note">
+                      Masterkonzept für Schicksalskarten, Side Quests,
+                      Silberlinge, Hauptquest, Questmeister und Abendauktion.
+                    </p>
+
+                    <p class="doc-meta">
+                      Word-Dokument in Google Drive · fest verknüpft
+                    </p>
+                  </div>
+
+                  <div class="doc-actions">
+                    <a
+                      class="doc-open"
+                      href="https://docs.google.com/document/d/1fYa4uyMxxRcFRQEAI_DMvqv-GeX0y5tV/edit?usp=drivesdk"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >Konzept öffnen</a>
+                  </div>
+                </article>
+              </div>
+
+          ''' + anchor
+
+          text = text.replace(anchor, block, 1)
+          path.write_text(text, encoding="utf-8")
+
+          print("✓ Hybrid-LARP-Konzept wurde unter Dokumente & Unterlagen ergänzt.")
+          PY
+
+      - name: Ergebnis validieren
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff --check
+
+          grep -Fq             '<!-- system_larp_konzept -->'             index.html
+
+          grep -Fq             'Die Schicksale des Dreißigsten Winters - Hybrid-LARP-Konzept'             index.html
+
+          grep -Fq             '1fYa4uyMxxRcFRQEAI_DMvqv-GeX0y5tV'             index.html
+
+          grep -Fq             '>Konzept öffnen</a>'             index.html
+
+          echo
+          echo "Validierung erfolgreich."
+
+          if git diff --quiet -- index.html; then
+            echo "Keine neuen Änderungen. Der Link war bereits vorhanden."
+          else
+            echo
+            echo "Änderungen an index.html:"
+            git diff --stat -- index.html
+          fi
+
+      - name: Änderungen committen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- index.html; then
+            echo "Keine Änderungen vorhanden. Nichts zu committen."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email             "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add index.html
+          git diff --cached --check
+
+          git commit             -m "Link Hybrid-LARP concept on Winterfest site"
+
+          git push
+
+          echo
+          echo "Hybrid-LARP-Konzept erfolgreich auf der Winterfest-Seite verlinkt."
