@@ -1,0 +1,350 @@
+name: Veganes Ganztages-Essenskonzept anwenden
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-food-plan:
+    name: Verpflegung, Einkauf und Ablauf aktualisieren
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Änderungen anwenden
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("index.html")
+          text = path.read_text(encoding="utf-8")
+          changes = []
+
+          def replace_idempotent(old, new, label):
+              global text
+
+              if new in text:
+                  print(f"✓ {label}: bereits vorhanden")
+                  return
+
+              count = text.count(old)
+
+              if count == 1:
+                  text = text.replace(old, new, 1)
+                  changes.append(label)
+                  print(f"✓ {label}: geändert")
+                  return
+
+              if count == 0:
+                  raise SystemExit(
+                      f"FEHLER bei '{label}': Ausgangstext nicht gefunden."
+                  )
+
+              raise SystemExit(
+                  f"FEHLER bei '{label}': Ausgangstext {count} mal gefunden."
+              )
+
+          # ==========================================================
+          # 1. Sichtbarer Verpflegungsblock im Dokumente-Bereich
+          # ==========================================================
+
+          marker = "<!-- system_vegan_food_plan_20260831 -->"
+
+          if marker not in text:
+              anchor = '    <div class="documents-list" id="documentsList"></div>'
+
+              if text.count(anchor) != 1:
+                  raise SystemExit(
+                      f"FEHLER: Dokumente-Anker {text.count(anchor)} mal gefunden."
+                  )
+
+              block = '''    <!-- system_vegan_food_plan_20260831 -->
+              <div class="documents-list system-documents-list">
+                <article class="doc-card pinned">
+                  <div class="doc-main">
+
+                    <div class="doc-topline">
+                      <span class="doc-cat">Essen</span>
+                      <span class="doc-pin">Ganztagesversorgung</span>
+                    </div>
+
+                    <h3>Veganes Festessen · Einkauf & Mengen</h3>
+
+                    <p class="doc-note">
+                      Planungsbasis: ca. 25 Personen, 12:00 Uhr bis spät abends,
+                      drei Essensfenster. Festes Lebensmittelbudget:
+                      250 EUR inklusive Reserve.
+                      Optional Hypocras: +25 bis 35 EUR.
+                    </p>
+
+                    <details>
+                      <summary>
+                        <strong>Menü und Essensfenster anzeigen</strong>
+                      </summary>
+
+                      <p>
+                        <strong>12:00-14:00:</strong>
+                        Seitan-Pilz-Pies, Brot, eingelegtes Gemüse,
+                        Saucen, Obst und Nüsse.
+                      </p>
+
+                      <p>
+                        <strong>16:00-17:30:</strong>
+                        Veganer Stewed Capon als Hauptgericht,
+                        dazu Brot, Pickles und vier historische Saucen.
+                      </p>
+
+                      <p>
+                        <strong>Ab 20:00:</strong>
+                        zurückgehaltene Portionen Stewed Capon,
+                        Brot, restliche Pies, Pickles,
+                        Gyngerbrede, Obst und Nüsse.
+                      </p>
+                    </details>
+
+                    <details>
+                      <summary>
+                        <strong>Einkaufsliste für ca. 25 Personen anzeigen</strong>
+                      </summary>
+
+                      <p>
+                        3 kg Vitalweizengluten;
+                        3 kg Weizenmehl;
+                        1,5 kg Pflanzenmargarine;
+                        ca. 8 kg rustikales Brot;
+                        1,5 kg Semmelbrösel;
+                        5 kg Zwiebeln;
+                        2 kg Champignons;
+                        3 kg Möhren;
+                        2,5 kg Weißkohl;
+                        1,5 kg Pastinaken/Rüben;
+                        4 kg Äpfel;
+                        3 kg weiteres Obst;
+                        1 kg Rosinen;
+                        1,5 kg Trockenpflaumen;
+                        1,5 kg Datteln;
+                        1,5 kg Nüsse;
+                        1,5 kg Zuckerrübensirup;
+                        4 l Essig;
+                        1 kg Senf;
+                        vegane Brühe für ca. 10 l;
+                        1,5 l Öl;
+                        750 ml Sojasauce;
+                        1,5 kg Zitronen;
+                        1 kg Zucker;
+                        mehrere Bund Kräuter sowie
+                        Pfeffer, Zimt, Nelke, Ingwer,
+                        Thymian, Muskat/Macis und Senfkörner.
+                      </p>
+
+                      <p>
+                        <strong>Zielmenge:</strong>
+                        ca. 40-45 kleine Pies,
+                        60-80 Stück Gyngerbrede
+                        und ca. 15-20 % Reserve.
+                      </p>
+                    </details>
+
+                    <p class="doc-meta">
+                      Stand 31.08.2026 · möglichst vegan · historisch inspiriert
+                    </p>
+
+                  </div>
+                </article>
+              </div>
+
+          ''' + anchor
+
+              text = text.replace(anchor, block, 1)
+              changes.append("Verpflegungsblock")
+
+          else:
+              print("✓ Verpflegungsblock: bereits vorhanden")
+
+          # ==========================================================
+          # 2. Aufgaben und Ablauf aktualisieren
+          # ==========================================================
+
+          replacements = [
+
+              (
+                  '"id":"plan2_essenskonzept","prio":"prio-1","text":"Finales Essenskonzept auf wenige verlässliche Komponenten begrenzen"',
+                  '"id":"plan2_essenskonzept","prio":"prio-1","text":"Veganes Ganztages-Essenskonzept verbindlich festhalten: Stewed Capon mit Seitan, Seitan-Pilz-Pies, rustikales Brot, eingelegtes Gemüse, vier historische Saucen, Gyngerbrede, Obst und Nüsse; keine zusätzliche Grill- oder Bratwurstlinie"',
+                  "Finales Essenskonzept"
+              ),
+
+              (
+                  '"id":"jan_testkochen_planen","prio":"prio-2","text":"Testkochen für Grillkomponenten und Kesselgericht terminieren"',
+                  '"id":"jan_testkochen_planen","prio":"prio-2","text":"Testkochen für veganen Stewed Capon, Seitan-Pilz-Pies, historische Saucen und Gyngerbrede terminieren; Geschmack, Haltbarkeit, Portionsgröße und Arbeitsaufwand dokumentieren"',
+                  "Testkochen planen"
+              ),
+
+              (
+                  '"id":"jan_mengenlogik","prio":"prio-2","text":"Grundannahmen für Portionen und Reservemenge pro Person festlegen"',
+                  '"id":"jan_mengenlogik","prio":"prio-2","text":"Ganztages-Mengenlogik festhalten: Versorgung ab 12:00 Uhr bis spät, drei Essensfenster und ca. 15 bis 20 Prozent Reserve; finale Mengen nach bestätigter Gästezahl korrigieren"',
+                  "Mengenlogik"
+              ),
+
+              (
+                  '"id":"plan2_test_grillfleisch","prio":"prio-2","text":"Veganes Grillfleisch testen und Menge pro Person dokumentieren"',
+                  '"id":"plan2_test_grillfleisch","prio":"prio-2","text":"Seitan für den Stewed Capon testen: Konsistenz, Würzung, Anbraten, Warmhalten und geeignete Menge pro Person dokumentieren"',
+                  "Seitan-Test"
+              ),
+
+              (
+                  '"id":"plan2_test_bratwurst","prio":"prio-2","text":"Vegane Bratwürste testen und Grillbarkeit beurteilen"',
+                  '"id":"plan2_test_bratwurst","prio":"prio-2","text":"Seitan-Pilz-Pies testen: Teig, Füllung, Größe, Stückzahl, Vorbacken und Eignung für die Ankunftsphase beurteilen"',
+                  "Pies-Test"
+              ),
+
+              (
+                  '"id":"plan2_test_kesselgericht","prio":"prio-2","text":"Kesselgericht im vorhandenen Kessel testen: Kochzeit, Menge und Wärmehaltung dokumentieren"',
+                  '"id":"plan2_test_kesselgericht","prio":"prio-2","text":"Veganen Stewed Capon im vorhandenen Kessel testen: Kochzeit, Kesselvolumen, Seitanmenge, Bindung, Portionierung und Wärmehaltung dokumentieren"',
+                  "Kesselgericht-Test"
+              ),
+
+              (
+                  '"id":"plan2_beilagen_final","prio":"prio-2","text":"Beilagen und Dips final festlegen: selbst vorbereiten oder fertig kaufen"',
+                  '"id":"plan2_beilagen_final","prio":"prio-2","text":"Eingelegtes Gemüse und vier historische Saucen final festlegen; Mengen, Gefäße, Beschriftung und Vorbereitung am Vortag definieren"',
+                  "Beilagen final"
+              ),
+
+              (
+                  '"id":"plan2_finale_einkaufsliste","prio":"prio-1","text":"Finale Einkaufsliste nach Supermarkt, Großhandel und Online aufteilen"',
+                  '"id":"plan2_finale_einkaufsliste","prio":"prio-1","text":"Finale Einkaufsliste nach Supermarkt, Großhandel und Online aufteilen; Basis für 25 Personen: 3 kg Gluten, 8 kg Brot, 40 bis 45 Pies, ca. 7 kg Pickle-Gemüse, Obst, Nüsse, Trockenfrüchte, Gyngerbrede-Zutaten und vier Saucen; Zielbudget Lebensmittel 250 EUR"',
+                  "Finale Einkaufsliste"
+              ),
+
+              (
+                  '"id":"plan2_lebensmittel_einkauf","prio":"prio-1","text":"Lebensmittel gestaffelt einkaufen: haltbare Ware früh, frische Ware ein bis zwei Tage vorher"',
+                  '"id":"plan2_lebensmittel_einkauf","prio":"prio-1","text":"Lebensmittel gestaffelt einkaufen: Gluten, Trockenfrüchte, Nüsse, Sirup, Essig, Senf und Gewürze früh; Brot, Pilze, Kräuter, Obst und frisches Gemüse ein bis zwei Tage vorher; 15 bis 20 Prozent Reserve einhalten"',
+                  "Lebensmitteleinkauf"
+              ),
+
+              (
+                  '"id":"plan2_grill_marinieren","prio":"prio-1","text":"Grillkomponenten marinieren und sicher kühlen"',
+                  '"id":"plan2_grill_marinieren","prio":"prio-1","text":"Seitan für Stewed Capon und Pies vollständig vorbereiten, würzen, portionieren und sicher kühlen; Seitan für den Eintopf möglichst separat anbraten"',
+                  "Vorabend Seitan"
+              ),
+
+              (
+                  '"id":"plan2_kessel_vorbereiten","prio":"prio-1","text":"Gemüse und Zutaten für das Kesselgericht vorbereiten und gekühlt lagern"',
+                  '"id":"plan2_kessel_vorbereiten","prio":"prio-1","text":"Zwiebeln, Trockenfrüchte, Brühe, Bindung und Gewürze für den veganen Stewed Capon vorbereiten; Mengen für Hauptausgabe und Abendreserve getrennt kennzeichnen"',
+                  "Vorabend Kessel"
+              ),
+
+              (
+                  '"id":"plan2_beilagen_vorbereiten","prio":"prio-2","text":"Beilagen und Dips vorbereiten"',
+                  '"id":"plan2_beilagen_vorbereiten","prio":"prio-2","text":"Pies, eingelegtes Gemüse, vier historische Saucen und Gyngerbrede vorbereiten; Obst, Nüsse und Brot für die drei Essensfenster portionieren"',
+                  "Vorabend Beilagen"
+              ),
+
+              (
+                  '"time":"07:00 – 08:00","text":"Frühaufbau-Helfer: Letzte Checks, Kesselgericht ansetzen, Grill vorbereiten, Stromanschlüsse kontrollieren"',
+                  '"time":"07:00 – 08:00","text":"Frühaufbau-Helfer: Letzte Checks, veganen Stewed Capon ansetzen, Seitan separat anbraten, Ankunftssnacks bereitstellen und Stromanschlüsse kontrollieren"',
+                  "Timeline 07 Uhr"
+              ),
+
+              (
+                  '"time":"08:00 – 10:00","text":"Küche startet: Kesselgericht auf dem Dreibein, Bratwürste vorbereiten, Saucen und Beilagen anrichten"',
+                  '"time":"08:00 – 10:00","text":"Küche startet: Stewed Capon auf dem Dreibein fertigstellen, Pies bereitstellen, vier Saucen und Pickles anrichten, Brot und Obst für die Ankunft portionieren"',
+                  "Timeline Küche"
+              ),
+
+              (
+                  '"time":"12:00 – 14:00","text":"Ankunftsphase: Freies Erkunden, Begrüßung, Getränke, Bogenbaukurs mit Freund (optional), Teamlisten aushängen"',
+                  '"time":"12:00 – 14:00","text":"Ankunftsphase: Freies Erkunden und Begrüßung; Pies, Brot, Pickles, Saucen, Obst und Nüsse stehen bereit, damit niemand hungrig in die Wettkämpfe startet"',
+                  "Timeline Ankunft"
+              ),
+
+              (
+                  '"time":"16:00 – 17:30","text":"Festessen: Grillstation läuft, Kesselgericht ausgeben, Brot, Beilagen, Saucen. Kein Stress, kein Buffet-Chaos – strukturierte Ausgabe"',
+                  '"time":"16:00 – 17:30","text":"Festessen: veganen Stewed Capon strukturiert ausgeben, dazu Brot, eingelegtes Gemüse und vier historische Saucen; einen Teil des Eintopfs bewusst für den Tavernenabend zurückhalten"',
+                  "Timeline Festessen"
+              ),
+
+              (
+                  '"time":"20:00 – open end","text":"Tavernenabend: Kesselgericht für Spätkommer, Getränke, Musik, Lichtinszenierung, Lagerfeuer (falls erlaubt), Chillbereiche"',
+                  '"time":"20:00 – open end","text":"Tavernenabend: zurückgehaltenen Stewed Capon und sichere Reste erneut ausgeben; Brot, Pies, Pickles, Gyngerbrede, Obst und Nüsse verfügbar halten; Getränke, Musik, Licht und Chillbereiche"',
+                  "Timeline Tavernenabend"
+              )
+          ]
+
+          for old, new, label in replacements:
+              replace_idempotent(old, new, label)
+
+          path.write_text(text, encoding="utf-8")
+
+          print()
+          print(f"✓ Fertig. {len(changes)} Änderungen angewendet.")
+          PY
+
+      - name: Ergebnis validieren
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff --check
+
+          grep -Fq \
+            '<!-- system_vegan_food_plan_20260831 -->' \
+            index.html
+
+          grep -Fq \
+            'Festes Lebensmittelbudget:' \
+            index.html
+
+          grep -Fq \
+            '250 EUR' \
+            index.html
+
+          grep -Fq \
+            'Stewed Capon' \
+            index.html
+
+          grep -Fq \
+            '40 bis 45 Pies' \
+            index.html
+
+          echo
+          echo "Validierung erfolgreich."
+
+          if git diff --quiet -- index.html; then
+            echo "Keine neuen Änderungen."
+          else
+            git diff --stat -- index.html
+          fi
+
+      - name: Änderungen committen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- index.html; then
+            echo "Keine Änderungen vorhanden. Nichts zu committen."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add index.html
+          git diff --cached --check
+
+          git commit \
+            -m "Apply vegan full-day food plan"
+
+          git push
+
+          echo
+          echo "Veganes Ganztages-Essenskonzept erfolgreich angewendet."
