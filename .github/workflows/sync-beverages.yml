@@ -1,0 +1,40 @@
+name: Getränke mit Firebase synchronisieren
+on:
+  push:
+    branches: [main]
+    paths: [data/beverages.json, .github/workflows/sync-beverages.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validieren und feldweise mergen
+        env:
+          EVENT_ID: ${{ secrets.WINTERFEST_EVENT_ID }}
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.request
+          from pathlib import Path
+          c=json.loads(Path("data/beverages.json").read_text())
+          eid=os.environ.get("EVENT_ID","").strip()
+          if not eid: raise SystemExit("WINTERFEST_EVENT_ID fehlt oder ist leer.")
+          if c["recipeStatus"]!="Rezepttest ausstehend" or not c["alchemyStation"]["alcoholFree"] or not c["alchemyStation"]["vegan"]: raise SystemExit("Ungültige Konfiguration.")
+          root="https://winterfest30-default-rtdb.europe-west1.firebasedatabase.app/events/"+eid
+          with urllib.request.urlopen(root+"/shopping.json",timeout=30) as r: old=json.load(r) or {}
+          now=int(time.time()*1000);patch={};fields=("item","qty","category","note")
+          for key,plan in c["shopping"].items():
+            if isinstance(old.get(key),dict):
+              for f in fields: patch[f"shopping/{key}/{f}"]=plan[f]
+              patch[f"shopping/{key}/planningUpdatedAt"]=now
+            else: patch[f"shopping/{key}"]={**plan,"responsible":"","bought":False,"by":"GitHub Actions","ts":now}
+          for key in c["legacyShoppingKeys"]:
+            if not isinstance(old.get(key),dict): continue
+            archive=dict(old[key]);archive.update({"sourceKey":key,"archivedAt":now,"archivedReason":"Durch finales Getränkekonzept ersetzt"})
+            patch[f"shoppingArchive/beverageConcept/{key}"]=archive;patch[f"shopping/{key}"]=None
+          patch["meta/beveragePlanVersion"]=c["schemaVersion"];patch["meta/beveragePlanUpdatedAt"]=now
+          req=urllib.request.Request(root+".json",data=json.dumps(patch,ensure_ascii=False).encode(),method="PATCH",headers={"Content-Type":"application/json"})
+          with urllib.request.urlopen(req,timeout=30) as r:r.read();print("Firebase:",r.status)
+          PY
