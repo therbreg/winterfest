@@ -1,0 +1,38 @@
+name: Beschaffungsplan mit Firebase synchronisieren
+on:
+  push:
+    branches: [main]
+    paths: [ausstattung.html, index.html, .github/workflows/sync-procurement.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --disable-pip-version-check --quiet google-auth
+      - name: Firebase aktualisieren
+        env:
+          EVENT_ID: ${{ secrets.WINTERFEST_EVENT_ID }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.request
+          from google.oauth2 import service_account
+          from google.auth.transport.requests import Request
+          eid=os.environ.get('EVENT_ID','').strip(); raw=os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON','').strip()
+          if not eid or not raw: raise SystemExit('Firebase-Secrets fehlen.')
+          c=service_account.Credentials.from_service_account_info(json.loads(raw),scopes=['https://www.googleapis.com/auth/userinfo.email','https://www.googleapis.com/auth/firebase.database']);c.refresh(Request());h={'Authorization':'Bearer '+c.token}
+          root='https://winterfest30-default-rtdb.europe-west1.firebasedatabase.app/events/'+eid; now=int(time.time()*1000)
+          with urllib.request.urlopen(urllib.request.Request(root+'.json',headers=h),timeout=30) as r:d=json.load(r) or {}
+          a=d.get('assets') or {}; b=d.get('budget') or {}; p={}; old=a.get('baldachin_kauf') or {}; bought=float(old.get('actual') or 0)>0 or old.get('status') in ('Gekauft','Erledigt')
+          fields={'area':'Zelt & Pavillon','item':'Eigener Baldachin 6x6 m inkl. Holzgestänge','type':'Kaufen','status':old.get('status') if bought else 'Gewählte Lösung','source':'Privatkontakt / Abholung','qty':'1 vollständiges Set','planned':650,'next':'Abholtermin bestätigen; Vollständigkeit und Zustand prüfen; Setumfang dokumentieren; danach 600 EUR Kaufpreis und 50 EUR Spritgeld als Ist-Kosten erfassen','note':'Planwert: 600 EUR Kaufpreis plus 50 EUR Spritgeld.'}
+          for k,v in fields.items():p['assets/baldachin_kauf/'+k]=v
+          for k,v in a.items():
+            text=' '.join(str(v.get(x,'')) for x in ('item','source')).lower() if isinstance(v,dict) else ''
+            if 'vendera' in text or ('mittelalter-zelt' in text and 'baldachin' in text):p['procurementArchive/2026-09-03/assets/'+k]={**v,'archivedAt':now};p['assets/'+k]=None
+          bk=old.get('budgetKey') or next((k for k,v in b.items() if 'baldachin' in str(v.get('title','')).lower() and 'eigen' in str(v.get('title','')).lower()),'system_baldachin_kauf_20260817'); ob=b.get(bk) or {}
+          p['budget/'+bk]={**ob,'title':'Eigener 6x6-m-Baldachin inkl. Holzgestänge','category':'Zelt','planned':650,'actual':float(ob.get('actual') or old.get('actual') or 0),'note':'600 EUR Kaufpreis plus 50 EUR Spritgeld.','by':ob.get('by','GitHub Actions'),'ts':ob.get('ts',now)};p['assets/baldachin_kauf/budgetKey']=bk;p['assetMeta/currentProcurementPlanVersion']='2026-09-03-procurement-v3';p['meta/procurementPlanUpdatedAt']=now
+          q=urllib.request.Request(root+'.json',data=json.dumps(p,ensure_ascii=False).encode(),method='PATCH',headers={**h,'Content-Type':'application/json'});urllib.request.urlopen(q,timeout=30).read();print('Firebase synchronisiert')
+          PY

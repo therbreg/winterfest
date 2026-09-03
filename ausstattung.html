@@ -848,7 +848,7 @@ async function migrateFinalBudgetPlan(){
 
 // system_current_procurement_plan_migration_20260903
 async function migrateCurrentProcurementPlan(){
-  const version="2026-09-03-procurement-v2";
+  const version="2026-09-03-procurement-v3";
   try{
     const marker=await get(ref(db,dbPath("assetMeta/currentProcurementPlanVersion")));
     if(marker.val()===version)return;
@@ -882,19 +882,13 @@ async function migrateCurrentProcurementPlan(){
       if(!current[key]){
         patch[`assets/${key}/updatedAt`]=now;
         patch[`assets/${key}/updatedBy`]="Planstand 03.09.2026";
-      }else{
-        patch[`assets/${key}/migratedAt`]=now;
-        patch[`assets/${key}/migrationVersion`]=version;
       }
       return row;
     };
     const findKey=(obj,predicate)=>Object.entries(obj).find(([,value])=>predicate(value||{}))?.[0]||"";
-    const archive=(collection,key,value,reason="Ersetzte Zeltalternative")=>{
-      patch[`${collection}/${key}/archived`]=true;
-      patch[`${collection}/${key}/archivedAt`]=now;
-      patch[`${collection}/${key}/archivedBy`]="Planstand 03.09.2026";
-      patch[`${collection}/${key}/archiveReason`]=reason;
+    const archive=(collection,key,value)=>{
       if(Object.prototype.hasOwnProperty.call(value||{},"planned"))patch[`${collection}/${key}/planned`]=0;
+      if(collection==="assets"||collection==="tentLeads")patch[`${collection}/${key}/status`]="Fallback";
       if(collection==="tentLeads")patch[`${collection}/${key}/pinned`]=false;
     };
 
@@ -932,14 +926,12 @@ async function migrateCurrentProcurementPlan(){
       setAsset(key,{area:"Getränke",type:"Verbrauch",source:old.source&&norm(old.source)!=="ritterladen"?old.source:"noch offen",planned,...row,note:joinedNote(old.note,row.note)});
       if(old.budgetKey&&budgets[old.budgetKey]&&legacy.includes(Number(old.planned||0))){
         patch[`budget/${old.budgetKey}/planned`]=0;
-        patch[`budget/${old.budgetKey}/migratedAt`]=now;
-        patch[`budget/${old.budgetKey}/migrationVersion`]=version;
         patch[`budget/${old.budgetKey}/note`]=joinedNote(budgets[old.budgetKey].note,"Preis für den fachlich getrennten Getränkeposten noch zu ermitteln.").slice(0,300);
       }
     });
     if(current.spirit){
       const row=current.spirit;
-      archive("assets","spirit",row,"In Jopen Koyt und Tafelbier getrennt");
+      archive("assets","spirit",row);
       if(row.budgetKey&&budgets[row.budgetKey])archive("budget",row.budgetKey,budgets[row.budgetKey]);
       if(row.shoppingKey&&shopping[row.shoppingKey])archive("shopping",row.shoppingKey,shopping[row.shoppingKey]);
     }
@@ -982,17 +974,16 @@ async function migrateCurrentProcurementPlan(){
 
     const baldBudgetKey=bald.budgetKey||findKey(budgets,row=>norm(row.title).includes("baldachin")&&norm(row.title).includes("eigen"))||"system_baldachin_kauf_20260817";
     const oldBudget=budgets[baldBudgetKey]||{};
-    patch[`budget/${baldBudgetKey}`]={...oldBudget,title:"Eigener 6x6-m-Baldachin inkl. Holzgestänge",category:"Zelt",planned:650,actual:Number(oldBudget.actual||bald.actual||0),paidBy:oldBudget.paidBy||"",reimbursed:Boolean(oldBudget.reimbursed),note:joinedNote(oldBudget.note,"600 EUR Kaufpreis plus 50 EUR Spritgeld; Ist erst nach Bezahlung und Übergabe erfassen."),by:oldBudget.by||"System",ts:oldBudget.ts||now,migratedAt:now,migrationVersion:version};
+    patch[`budget/${baldBudgetKey}`]={...oldBudget,title:"Eigener 6x6-m-Baldachin inkl. Holzgestänge",category:"Zelt",planned:650,actual:Number(oldBudget.actual||bald.actual||0),paidBy:oldBudget.paidBy||"",reimbursed:Boolean(oldBudget.reimbursed),note:joinedNote(oldBudget.note,"600 EUR Kaufpreis plus 50 EUR Spritgeld; Ist erst nach Bezahlung und Übergabe erfassen."),by:oldBudget.by||"System",ts:oldBudget.ts||now};
     patch["assets/baldachin_kauf/budgetKey"]=baldBudgetKey;
     const baldShoppingKey=bald.shoppingKey||findKey(shopping,row=>norm(row.item).includes("baldachin"))||"system_baldachin_purchase_20260817";
     const oldShop=shopping[baldShoppingKey]||{};
-    patch[`shopping/${baldShoppingKey}`]={...oldShop,item:"6x6-m-Baldachin inkl. Holzgestänge",qty:"1 vollständiges Set",category:"Zelt",responsible:oldShop.responsible||"",note:joinedNote(oldShop.note,"Abholtermin bestätigen; Vollständigkeit, Zustand und Setumfang vor Übernahme prüfen. 600 EUR Kaufpreis plus 50 EUR Spritgeld."),bought:Boolean(oldShop.bought||baldBought),by:oldShop.by||"System",ts:oldShop.ts||now,migratedAt:now,migrationVersion:version};
+    patch[`shopping/${baldShoppingKey}`]={...oldShop,item:"6x6-m-Baldachin inkl. Holzgestänge",qty:"1 vollständiges Set",category:"Zelt",responsible:oldShop.responsible||"",note:joinedNote(oldShop.note,"Abholtermin bestätigen; Vollständigkeit, Zustand und Setumfang vor Übernahme prüfen. 600 EUR Kaufpreis plus 50 EUR Spritgeld."),bought:Boolean(oldShop.bought||baldBought),by:oldShop.by||"System",ts:oldShop.ts||now};
     patch["assets/baldachin_kauf/shoppingKey"]=baldShoppingKey;
 
     const decisionKey=findKey(decisions,row=>norm(row.title).includes("zeltkonzept"))||"system_zeltkonzept_20260817";
     patch[`decisions/${decisionKey}/title`]="Zeltkonzept final";
     patch[`decisions/${decisionKey}/text`]="Gewählte Lösung: eigener 6x6-m-Baldachin inklusive Holzgestänge für 600 EUR plus 50 EUR Spritgeld, kombiniert mit dem vorhandenen 3x6-m-Pavillon. Vor Übernahme Termin, Vollständigkeit, Zustand und Setumfang prüfen. Pavillon mit Schabracken, Jute, Sisalseilen und DIY-Bannern verkleiden. Other Ages bleibt unabhängig davon erhalten.";
-    patch[`decisions/${decisionKey}/migratedAt`]=now;patch[`decisions/${decisionKey}/migrationVersion`]=version;
     patch["meta/budgetCap"]=4000;
     patch["assetMeta/currentProcurementPlanVersion"]=version;
     patch["assetMeta/currentProcurementPlanUpdatedAt"]=now;
@@ -1213,7 +1204,10 @@ function card(i){
 }
 
 function render(){
-  const rows=Object.entries(assets).filter(([,v])=>!v?.archived).map(([key,v])=>({
+  const rows=Object.entries(assets).filter(([key,v])=>{
+    const text=[v?.item,v?.source].join(" ").toLowerCase();
+    return !v?.archived&&key!=="spirit"&&!text.includes("vendera")&&!(text.includes("mittelalter-zelt")&&text.includes("baldachin"));
+  }).map(([key,v])=>({
     key,
     ...v
   }));
@@ -1514,7 +1508,6 @@ await migrateTentPlan();
 await migrateCostPlan();
 await migrateMissingEquipment();
 await migrateFinalBudgetPlan();
-await migrateCurrentProcurementPlan();
 await selfLink();
 </script>
 </body>
