@@ -604,9 +604,9 @@ async function ensureFinalBudgetPlanData(){
 }
 
 
-+// system_current_procurement_plan_migration_20260903
+// system_current_procurement_plan_migration_20260903
 async function migrateCurrentProcurementPlan(){
-  const version="2026-09-03-procurement-v1";
+  const version="2026-09-03-procurement-v2";
   try{
     const marker=await get(ref(db,dbPath("assetMeta/currentProcurementPlanVersion")));
     if(marker.val()===version)return;
@@ -647,9 +647,13 @@ async function migrateCurrentProcurementPlan(){
       return row;
     };
     const findKey=(obj,predicate)=>Object.entries(obj).find(([,value])=>predicate(value||{}))?.[0]||"";
-    const archive=(collection,key,value)=>{
-      patch[`migrationArchive/${version}/${collection}/${key}`]={...value,archivedAt:now,archivedBy:"Planstand 03.09.2026",reason:"Ersetzte Zeltalternative"};
-      patch[`${collection}/${key}`]=null;
+    const archive=(collection,key,value,reason="Ersetzte Zeltalternative")=>{
+      patch[`${collection}/${key}/archived`]=true;
+      patch[`${collection}/${key}/archivedAt`]=now;
+      patch[`${collection}/${key}/archivedBy`]="Planstand 03.09.2026";
+      patch[`${collection}/${key}/archiveReason`]=reason;
+      if(Object.prototype.hasOwnProperty.call(value||{},"planned"))patch[`${collection}/${key}/planned`]=0;
+      if(collection==="tentLeads")patch[`${collection}/${key}/pinned`]=false;
     };
 
     Object.entries(current).filter(([,row])=>isRetiredTent(row)).forEach(([key,row])=>{
@@ -693,8 +697,7 @@ async function migrateCurrentProcurementPlan(){
     });
     if(current.spirit){
       const row=current.spirit;
-      patch[`migrationArchive/${version}/assets/spirit`]={...row,archivedAt:now,archivedBy:"Planstand 03.09.2026",reason:"In Jopen Koyt und Tafelbier getrennt"};
-      patch["assets/spirit"]=null;
+      archive("assets","spirit",row,"In Jopen Koyt und Tafelbier getrennt");
       if(row.budgetKey&&budgets[row.budgetKey])archive("budget",row.budgetKey,budgets[row.budgetKey]);
       if(row.shoppingKey&&shopping[row.shoppingKey])archive("shopping",row.shoppingKey,shopping[row.shoppingKey]);
     }
@@ -755,7 +758,7 @@ async function migrateCurrentProcurementPlan(){
     const migratedAssets=(await get(ref(db,dbPath("assets")))).val()||{};
     const activePlan=Object.values(migratedAssets).filter(row=>row?.status!=="Fallback").reduce((sum,row)=>sum+Number(row?.planned||0),0);
     await update(ref(db,dbPath("meta")),{budgetCap:4000,budgetPlanTarget:Math.round(activePlan*100)/100,budgetPlanCalculatedAt:Date.now()});
-  }catch(error){console.error("Aktuelle Beschaffungsplan-Migration fehlgeschlagen",error);setSyncBar("✕ Beschaffungsplan-Migration fehlgeschlagen: "+error.message,"err");}
+  }catch(error){const detail=error?.code||error?.message||String(error);console.error("Aktuelle Beschaffungsplan-Migration fehlgeschlagen",error);setSyncBar("✕ Beschaffungsplan-Migration fehlgeschlagen: "+detail,"err");}
 }
 
 // system_decoration_plan_migration_20260831
@@ -1168,8 +1171,8 @@ function renderBudget(data) {
   const list = document.getElementById("budgetList");
   const stats = document.getElementById("budgetStats");
   if (!list) return;
-  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
-  const assetItems = Object.entries(window._assets || {}).map(([key,value])=>({key,...value}));
+  const items = Object.entries(data || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const assetItems = Object.entries(window._assets || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value}));
   const activeAssets = assetItems.filter(i=>i.status!=="Fallback");
   const planned = activeAssets.reduce((s,i)=>s+Number(i.planned||0),0);
   const actual = activeAssets.reduce((s,i)=>s+Number(i.actual||0),0);
@@ -1231,7 +1234,7 @@ function renderShopping(data) {
   const list = document.getElementById("shoppingList");
   const stats = document.getElementById("shoppingStats");
   if (!list) return;
-  const items = Object.entries(data || {}).map(([key,value])=>({key,...value})).sort((a,b)=>(a.bought===true)-(b.bought===true)||(b.ts||0)-(a.ts||0));
+  const items = Object.entries(data || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value})).sort((a,b)=>(a.bought===true)-(b.bought===true)||(b.ts||0)-(a.ts||0));
   const bought = items.filter(i=>i.bought).length;
   if (stats) stats.innerHTML = `<span>${bought} / ${items.length} gekauft</span>`;
   list.innerHTML = items.length ? items.map(i=>`<article class="mini-card ${i.bought?"done-card":""}">
@@ -1296,7 +1299,7 @@ function renderTentLeads(data) {
   const list = document.getElementById("tentLeadsList");
   const stats = document.getElementById("tentLeadsStats");
   if (!list) return;
-  const items = Object.entries(data || {}).map(([key,value])=>({key,...value}))
+  const items = Object.entries(data || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value}))
     .sort((a,b)=>(b.pinned===true)-(a.pinned===true) || (TENT_STATUS_ORDER[a.status] ?? 99) - (TENT_STATUS_ORDER[b.status] ?? 99) || String(a.followUp || "9999-12-31").localeCompare(String(b.followUp || "9999-12-31")) || (b.ts || 0)-(a.ts || 0));
   const statusCounts = items.reduce((acc,i)=>{ const s=i.status||"Unklar"; acc[s]=(acc[s]||0)+1; return acc; },{});
   if (stats) stats.innerHTML = `
