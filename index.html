@@ -231,10 +231,10 @@ async function ensureTentPlanData() {
         status: "Gewählte Lösung",
         contact: "Gebrauchtmarkt / LARP-Zelte als Neupreis-Referenz",
         link: "https://www.larp-zelte.com/produkte/baldachin-6x6-32080",
-        price: 1125.80,
+        price: 650,
         followUp: "2026-11-02",
         pinned: true,
-        note: "Primärlösung. Erst nach Saisonende gezielt gebraucht suchen. Referenz neu: 1.125,80 EUR plus Versand. Wenn bis Ende Januar kein guter Gebrauchter gefunden wird, Neubestellung spätestens 15.02.2027."
+        note: "Planwert: 600 EUR Kaufpreis plus 50 EUR Spritgeld. Vor Übernahme Vollständigkeit und Zustand prüfen."
       }
     );
 
@@ -319,11 +319,11 @@ async function ensureTentPlanData() {
       patch["budget/system_baldachin_kauf_20260817"] = {
         title: "Eigener 6x6-m-Baldachin inkl. Gestänge",
         category: "Zelt",
-        planned: 1125.80,
+        planned: 650,
         actual: 0,
         paidBy: "",
         reimbursed: false,
-        note: "Aktuelle Neupreis-Referenz LARP-Zelte: 1.125,80 EUR plus Versand. Gebrauchtkauf wird vorher bis Ende Januar geprüft.",
+        note: "600 EUR Kaufpreis plus 50 EUR Spritgeld; Ist erst nach Bezahlung und Übergabe erfassen.",
         by: "System",
         ts: now
       };
@@ -365,7 +365,7 @@ async function ensureTentPlanData() {
         qty: "1 komplett",
         category: "Zelt",
         responsible: "",
-        note: "Primär gebraucht suchen; falls bis Ende Januar nichts Gutes gefunden wird, neu spätestens 15.02.2027 bestellen.",
+        note: "Abholtermin bestätigen; Vollständigkeit, Zustand und Setumfang vor Übernahme prüfen.",
         bought: false,
         by: "System",
         ts: now
@@ -519,17 +519,17 @@ async function ensureFinalBudgetPlanData(){
     };
 
     put("baldachin_kauf", {
-      planned: 1205.70,
+      planned: 650,
       note: appendNote(
         current.baldachin_kauf?.note,
-        "Aktiver Planwert: 1.125,80 EUR Kaufpreis plus 79,90 EUR Versand = 1.205,70 EUR."
+        "Aktiver Planwert: 600 EUR Kaufpreis plus 50 EUR Spritgeld = 650 EUR."
       )
     });
 
-    put("met", { planned: 100 });
-    put("wein", { planned: 30 });
-    put("soft", { planned: 60 });
-    put("spirit", { planned: 30 });
+    put("met", { planned: 0 });
+    put("wein", { planned: 0 });
+    put("soft", { planned: 0 });
+    put("spirit", { planned: 0 });
 
     put("kuehlung", {
       planned: 50,
@@ -595,7 +595,7 @@ async function ensureFinalBudgetPlanData(){
     patch["assetMeta/finalBudgetPlanVersion"] = version;
     patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
     patch["meta/budgetCap"] = 4000;
-    patch["meta/budgetPlanTarget"] = 3739.70;
+    patch["meta/budgetPlanTarget"] = 2964;
 
     await update(ref(db, dbPath("")), patch);
   } catch (error) {
@@ -603,6 +603,160 @@ async function ensureFinalBudgetPlanData(){
   }
 }
 
+
++// system_current_procurement_plan_migration_20260903
+async function migrateCurrentProcurementPlan(){
+  const version="2026-09-03-procurement-v1";
+  try{
+    const marker=await get(ref(db,dbPath("assetMeta/currentProcurementPlanVersion")));
+    if(marker.val()===version)return;
+
+    const [assetSnap,budgetSnap,shoppingSnap,leadSnap,decisionSnap]=await Promise.all([
+      get(ref(db,dbPath("assets"))),get(ref(db,dbPath("budget"))),
+      get(ref(db,dbPath("shopping"))),get(ref(db,dbPath("tentLeads"))),
+      get(ref(db,dbPath("decisions")))
+    ]);
+    const current=assetSnap.val()||{},budgets=budgetSnap.val()||{},shopping=shoppingSnap.val()||{};
+    const leads=leadSnap.val()||{},decisions=decisionSnap.val()||{},patch={},now=Date.now();
+    const norm=value=>String(value||"").toLowerCase().replace(/\s+/g," ").trim();
+    const isRetiredTent=value=>{
+      const text=norm([value?.item,value?.name,value?.title,value?.source].join(" "));
+      return text.includes("vendera")||(text.includes("mittelalter-zelt")&&text.includes("baldachin"))||(text.includes("mittelalter zelt")&&text.includes("baldachin"));
+    };
+    const cleanNote=value=>String(value||"").split(/(?<=[.!?])\s+/).filter(part=>
+      !/(1[.]125,80|1[.]205,70|gebrauchtmarkt|ende januar|15[.]02[.]2027|larp-zelte|neupreis|spirituosen|softdrinks|ca[.] 30 gäste)/i.test(part)
+    ).join(" ").trim();
+    const joinedNote=(oldNote,newNote)=>[cleanNote(oldNote),newNote].filter(Boolean).join(" ").slice(0,700);
+    const setAsset=(key,fields)=>{
+      const row=current[key]||{};
+      const keepPurchasedStatus=Number(row.actual||0)>0||["Gekauft","Erledigt"].includes(row.status);
+      Object.entries(fields).forEach(([field,value])=>{
+        if(field!=="status"||!keepPurchasedStatus)patch[`assets/${key}/${field}`]=value;
+      });
+      if(!current[key]){
+        patch[`assets/${key}/actual`]=0;patch[`assets/${key}/due`]="";
+        patch[`assets/${key}/seeded`]=true;patch[`assets/${key}/ts`]=now;
+      }
+      if(!current[key]){
+        patch[`assets/${key}/updatedAt`]=now;
+        patch[`assets/${key}/updatedBy`]="Planstand 03.09.2026";
+      }else{
+        patch[`assets/${key}/migratedAt`]=now;
+        patch[`assets/${key}/migrationVersion`]=version;
+      }
+      return row;
+    };
+    const findKey=(obj,predicate)=>Object.entries(obj).find(([,value])=>predicate(value||{}))?.[0]||"";
+    const archive=(collection,key,value)=>{
+      patch[`migrationArchive/${version}/${collection}/${key}`]={...value,archivedAt:now,archivedBy:"Planstand 03.09.2026",reason:"Ersetzte Zeltalternative"};
+      patch[`${collection}/${key}`]=null;
+    };
+
+    Object.entries(current).filter(([,row])=>isRetiredTent(row)).forEach(([key,row])=>{
+      archive("assets",key,row);
+      if(row.budgetKey&&budgets[row.budgetKey])archive("budget",row.budgetKey,budgets[row.budgetKey]);
+      if(row.shoppingKey&&shopping[row.shoppingKey])archive("shopping",row.shoppingKey,shopping[row.shoppingKey]);
+    });
+    Object.entries(leads).filter(([,row])=>isRetiredTent(row)).forEach(([key,row])=>archive("tentLeads",key,row));
+    Object.entries(budgets).filter(([,row])=>isRetiredTent(row)).forEach(([key,row])=>archive("budget",key,row));
+    Object.entries(shopping).filter(([,row])=>isRetiredTent(row)).forEach(([key,row])=>archive("shopping",key,row));
+
+    const bald=current.baldachin_kauf||{};
+    const baldBought=Number(bald.actual||0)>0||["Gekauft","Erledigt"].includes(bald.status);
+    setAsset("baldachin_kauf",{
+      area:"Zelt & Pavillon",item:"Eigener Baldachin 6x6 m inkl. Holzgestänge",type:"Kaufen",
+      status:baldBought?(bald.status||"Gekauft"):"Gewählte Lösung",source:"Privatkontakt / Abholung",
+      qty:"1 vollständiges Set",planned:650,
+      next:"Abholtermin verbindlich bestätigen; vor Übernahme Vollständigkeit und Zustand prüfen und Setumfang dokumentieren; danach 600 EUR Kaufpreis und 50 EUR Spritgeld als Ist-Kosten erfassen",
+      note:joinedNote(bald.note,"Nahezu abschließend gewählte Lösung. Planwert: 600 EUR Kaufpreis plus 50 EUR Spritgeld. Bis Bezahlung und Übergabe erfolgt sind, bleibt der Status 'Gewählte Lösung' und Ist 0 EUR.")
+    });
+
+    const tavernRule="Taverne erst nach Ende der Waffenwettkämpfe und nach dem Wegschließen von Bögen und Äxten öffnen.";
+    const drinkRows={
+      met:{item:"Veganer Met (optional)",status:"Optional",qty:"1–2 Flaschen",next:"Nach RSVP entscheiden und Einzelpreis ermitteln",note:`Nur optional; ${tavernRule} Preis noch zu ermitteln.`},
+      wein:{item:"Hypocras",status:"Zu kaufen",qty:"ca. 4 l",next:"Bezugsquelle und Preis ermitteln, dann rechtzeitig beschaffen",note:`Preis noch zu ermitteln. ${tavernRule}`},
+      soft:{item:"Quellwasser",status:"Zu kaufen",qty:"mindestens ca. 20–30 l",next:"Menge an Gästezahl, Wetter und Dauer anpassen; Preis ermitteln",note:"Jederzeit frei zugänglich; keine pauschale Softdrinkplanung. Preis noch zu ermitteln."},
+      koyt:{item:"Jopen Koyt",status:"Zu kaufen",qty:"12 Flaschen à 0,33 l",next:"Bezugsquelle und Preis ermitteln, dann rechtzeitig beschaffen",note:`Eigener Beschaffungsposten. ${tavernRule} Preis noch zu ermitteln.`},
+      tafelbier:{item:"Tafelbier",status:"Zu kaufen",qty:"Menge nach RSVP",next:"Menge nach RSVP festlegen und Preis ermitteln; in der Eventwoche beschaffen",note:`Eigener Beschaffungsposten; kein Spirituosenposten. ${tavernRule} Preis noch zu ermitteln.`}
+    };
+    Object.entries(drinkRows).forEach(([key,row])=>{
+      const old=current[key]||{};
+      const legacy={met:[100,120],wein:[30,40],soft:[60,70],koyt:[],tafelbier:[]}[key];
+      const planned=!current[key]||legacy.includes(Number(old.planned||0))?0:Number(old.planned||0);
+      setAsset(key,{area:"Getränke",type:"Verbrauch",source:old.source&&norm(old.source)!=="ritterladen"?old.source:"noch offen",planned,...row,note:joinedNote(old.note,row.note)});
+      if(old.budgetKey&&budgets[old.budgetKey]&&legacy.includes(Number(old.planned||0))){
+        patch[`budget/${old.budgetKey}/planned`]=0;
+        patch[`budget/${old.budgetKey}/migratedAt`]=now;
+        patch[`budget/${old.budgetKey}/migrationVersion`]=version;
+        patch[`budget/${old.budgetKey}/note`]=joinedNote(budgets[old.budgetKey].note,"Preis für den fachlich getrennten Getränkeposten noch zu ermitteln.").slice(0,300);
+      }
+    });
+    if(current.spirit){
+      const row=current.spirit;
+      patch[`migrationArchive/${version}/assets/spirit`]={...row,archivedAt:now,archivedBy:"Planstand 03.09.2026",reason:"In Jopen Koyt und Tafelbier getrennt"};
+      patch["assets/spirit"]=null;
+      if(row.budgetKey&&budgets[row.budgetKey])archive("budget",row.budgetKey,budgets[row.budgetKey]);
+      if(row.shoppingKey&&shopping[row.shoppingKey])archive("shopping",row.shoppingKey,shopping[row.shoppingKey]);
+    }
+
+    const ingredientRows={
+      hibiskus:["Reiner Hibiskus für Heiltrank","nach Rezepttest","Nur reinen Hibiskus ohne Fruchtsaft- oder Limonadenbasis beschaffen."],
+      schmetterlingserbsenblueten:["Reine Schmetterlingserbsenblüten für Manatrank","nach Rezepttest","Reines Produkt ohne Blue Curaçao oder andere Farbsirupe beschaffen."],
+      dextrose:["Dextrose für Heil- und Manatrank","nach Rezepttest","Für beide alkoholfreien Tränke."],
+      zitronensaeure:["Lebensmittelechte Zitronensäure als Arkane Essenz","nach Rezepttest","Separat und eindeutig beschriftet bereitstellen; keine medizinische Verträglichkeitsgarantie."]
+    };
+    Object.entries(ingredientRows).forEach(([key,[item,qty,note]])=>setAsset(key,{
+      area:"Alchemistenstation",item,type:"Verbrauch",status:"Zu kaufen",source:"noch offen",qty,
+      planned:Number(current[key]?.planned||0),next:"Rezept testen, benötigte Menge bestimmen und Preis ermitteln",note:joinedNote(current[key]?.note,`${note} Preis noch zu ermitteln.`)
+    }));
+    setAsset("spender",{next:"Beide Spender reinigen und beim Rezepttest einsetzen",note:joinedNote(current.spender?.note,"Je ein Spender für Heiltrank und Manatrank; genaue Mengen erst nach Rezepttest.")});
+    setAsset("alchemie",{next:"Station, Zutatenhinweise und separate Arkane Essenz vorbereiten",note:joinedNote(current.alchemie?.note,"Heiltrank: Wasser, reiner Hibiskus und Dextrose. Manatrank: Wasser, reine Schmetterlingserbsenblüten und Dextrose. Lebensmittelechte Zitronensäure wird separat als 'Arkane Essenz' angeboten. Keine medizinische Verträglichkeitsgarantie.")});
+    setAsset("tavernenplatten_ausstattung",{area:"Essen & Feuer",item:"Servierausstattung für Tavernenplatten",type:"Kaufen",status:"Offene Entscheidung",source:"Eigenbestand prüfen / noch offen",qty:"mehrere kleine Bretter, Schalen und Zangen",planned:Number(current.tavernenplatten_ausstattung?.planned||0),next:"Eigenbestand prüfen; fehlende Holzbretter, Schalen, Servierbesteck und Kühlmöglichkeit bestimmen; Preis ermitteln",note:joinedNote(current.tavernenplatten_ausstattung?.note,"Obst und herzhafte Bestandteile getrennt präsentieren. Veganen Weichkäse und vegane Wurst kühlen; Zutatenlisten bzw. Verpackungen verfügbar halten. Preis noch zu ermitteln.")});
+    setAsset("grillgut",{area:"Essen & Feuer",item:"Veganes Buffet und Tavernenplatte für ca. 25 Personen",type:"Verbrauch",status:"Zu kaufen",source:current.grillgut?.source||"noch offen",qty:"für ca. 25 Personen",planned:current.grillgut?Number(current.grillgut.planned||0):245,next:"Finale Mengen nach bestätigter Gästezahl prüfen und gestaffelt einkaufen",note:joinedNote(current.grillgut?.note,"Vollständig vegan: Stewed Capon mit Seitan, Seitan-Pilz-Pies, eingelegtes Gemüse, historische Saucen, Gyngerbrede, 5–6 kg rustikales Brot und dauerhaft verfügbare Tavernenplatten. Lebensmittelbudget insgesamt ca. 230–245 EUR.")});
+    setAsset("feuerschale",{item:"Feuerschale für Feuerstelle und Kesselbereich",next:"Sicheren Standort für Feuerstelle und Kessel festlegen",note:joinedNote(current.feuerschale?.note,"Unabhängig von einem Grillfleisch-Konzept für Atmosphäre und Feuer-/Kesselbetrieb vorgesehen.")});
+    setAsset("grillrost",{item:"Grillrost für flexible Feuerstellen-Nutzung",next:"Einsatzmöglichkeit am Feuer- und Kesselaufbau testen",note:joinedNote(current.grillrost?.note,"Nur verwenden, wenn er für den finalen veganen Küchen- oder Feuerstellenablauf benötigt wird.")});
+    setAsset("brennstoff",{item:"Brennholz, ggf. Grillkohle und Anzünder für Feuerstelle/Kessel",qty:"nach finalem Feuer- und Kesselplan",next:"Bedarf kurz vor dem Event anhand des finalen Feuer- und Kesselbetriebs festlegen",note:joinedNote(current.brennstoff?.note,"Für Feuerstelle und veganen Kessel-/Küchenbetrieb; keine Grillfleischplanung.")});
+
+    const ensureShopping=(key,needles,item,qty,category,note)=>{
+      const found=findKey(shopping,row=>needles.every(needle=>norm(row.item).includes(needle)));
+      const target=found||key;
+      if(!found)patch[`shopping/${target}`]={item,qty,category,responsible:"",note,bought:false,by:"System",ts:now};
+      return target;
+    };
+    const shoppingSpecs={
+      hibiskus:["system_hibiskus_20260903",["hibiskus"],"Reiner Hibiskus","nach Rezepttest","Alchemistenstation"],
+      schmetterlingserbsenblueten:["system_schmetterlingserbsenblueten_20260903",["schmetterlingserbs"],"Reine Schmetterlingserbsenblüten","nach Rezepttest","Alchemistenstation"],
+      dextrose:["system_dextrose_20260903",["dextrose"],"Dextrose","nach Rezepttest","Alchemistenstation"],
+      zitronensaeure:["system_zitronensaeure_20260903",["zitronensäure"],"Lebensmittelechte Zitronensäure","nach Rezepttest","Alchemistenstation"],
+      koyt:["system_jopen_koyt_20260903",["jopen","koyt"],"Jopen Koyt","12 Flaschen à 0,33 l","Getränke"],
+      tafelbier:["system_tafelbier_20260903",["tafelbier"],"Tafelbier","nach RSVP","Getränke"]
+    };
+    Object.entries(shoppingSpecs).forEach(([assetKey,[key,needles,item,qty,category]])=>{
+      patch[`assets/${assetKey}/shoppingKey`]=ensureShopping(key,needles,item,qty,category,"Preis noch zu ermitteln; Menge bzw. Rezeptstand vor Kauf prüfen.");
+    });
+
+    const baldBudgetKey=bald.budgetKey||findKey(budgets,row=>norm(row.title).includes("baldachin")&&norm(row.title).includes("eigen"))||"system_baldachin_kauf_20260817";
+    const oldBudget=budgets[baldBudgetKey]||{};
+    patch[`budget/${baldBudgetKey}`]={...oldBudget,title:"Eigener 6x6-m-Baldachin inkl. Holzgestänge",category:"Zelt",planned:650,actual:Number(oldBudget.actual||bald.actual||0),paidBy:oldBudget.paidBy||"",reimbursed:Boolean(oldBudget.reimbursed),note:joinedNote(oldBudget.note,"600 EUR Kaufpreis plus 50 EUR Spritgeld; Ist erst nach Bezahlung und Übergabe erfassen."),by:oldBudget.by||"System",ts:oldBudget.ts||now,migratedAt:now,migrationVersion:version};
+    patch["assets/baldachin_kauf/budgetKey"]=baldBudgetKey;
+    const baldShoppingKey=bald.shoppingKey||findKey(shopping,row=>norm(row.item).includes("baldachin"))||"system_baldachin_purchase_20260817";
+    const oldShop=shopping[baldShoppingKey]||{};
+    patch[`shopping/${baldShoppingKey}`]={...oldShop,item:"6x6-m-Baldachin inkl. Holzgestänge",qty:"1 vollständiges Set",category:"Zelt",responsible:oldShop.responsible||"",note:joinedNote(oldShop.note,"Abholtermin bestätigen; Vollständigkeit, Zustand und Setumfang vor Übernahme prüfen. 600 EUR Kaufpreis plus 50 EUR Spritgeld."),bought:Boolean(oldShop.bought||baldBought),by:oldShop.by||"System",ts:oldShop.ts||now,migratedAt:now,migrationVersion:version};
+    patch["assets/baldachin_kauf/shoppingKey"]=baldShoppingKey;
+
+    const decisionKey=findKey(decisions,row=>norm(row.title).includes("zeltkonzept"))||"system_zeltkonzept_20260817";
+    patch[`decisions/${decisionKey}/title`]="Zeltkonzept final";
+    patch[`decisions/${decisionKey}/text`]="Gewählte Lösung: eigener 6x6-m-Baldachin inklusive Holzgestänge für 600 EUR plus 50 EUR Spritgeld, kombiniert mit dem vorhandenen 3x6-m-Pavillon. Vor Übernahme Termin, Vollständigkeit, Zustand und Setumfang prüfen. Pavillon mit Schabracken, Jute, Sisalseilen und DIY-Bannern verkleiden. Other Ages bleibt unabhängig davon erhalten.";
+    patch[`decisions/${decisionKey}/migratedAt`]=now;patch[`decisions/${decisionKey}/migrationVersion`]=version;
+    patch["meta/budgetCap"]=4000;
+    patch["assetMeta/currentProcurementPlanVersion"]=version;
+    patch["assetMeta/currentProcurementPlanUpdatedAt"]=now;
+    await update(ref(db,dbPath("")),patch);
+    const migratedAssets=(await get(ref(db,dbPath("assets")))).val()||{};
+    const activePlan=Object.values(migratedAssets).filter(row=>row?.status!=="Fallback").reduce((sum,row)=>sum+Number(row?.planned||0),0);
+    await update(ref(db,dbPath("meta")),{budgetCap:4000,budgetPlanTarget:Math.round(activePlan*100)/100,budgetPlanCalculatedAt:Date.now()});
+  }catch(error){console.error("Aktuelle Beschaffungsplan-Migration fehlgeschlagen",error);setSyncBar("✕ Beschaffungsplan-Migration fehlgeschlagen: "+error.message,"err");}
+}
 
 // system_decoration_plan_migration_20260831
 async function ensureDecorationPlanData() {
@@ -1983,8 +2137,9 @@ document.addEventListener("DOMContentLoaded",async()=>{
   }
   document.addEventListener("keydown", event => { if (event.key === "Escape") window.APP.closeMobileMenu(); });
   setSyncBar("⟳ Verbinde mit Firebase…");
-  ensureTentPlanData();
-  ensureFinalBudgetPlanData();
+  await ensureTentPlanData();
+  await ensureFinalBudgetPlanData();
+  await migrateCurrentProcurementPlan();
   bindFirebase();
 });
 </script>
@@ -2012,6 +2167,20 @@ const PHASES_DATA = [{"id":"phase1","label":"Jetzt","title":"Planung sichern","s
   updateTask("plan2_beilagen_final", "Eingelegtes Gemüse und vier historische Saucen final festlegen; außerdem kleine Bretter, Schalen und Servierbesteck für die Tavernenplatten bestimmen, Obst getrennt von Käse, Wurst und Nüssen anrichten sowie Mengen, Beschriftung, Kühlung und Vorbereitung am Vortag definieren");
   updateTask("plan2_kueche_geschirr", "Küchen- und Geschirrausstattung vollständig machen; kleine Bretter und Schalen, Servierbesteck, getrennte Obst- und herzhafte Platten sowie geeignete Kühlbehälter für das laufende Nachfüllen einplanen");
   updateTask("plan2_lebensmittel_einkauf", "Lebensmittel gestaffelt einkaufen: Gluten, Trockenfrüchte, Nüsse, Sirup, Essig, Senf und Gewürze früh; Brot, Pilze, Kräuter, Obst, frisches Gemüse, veganen Weichkäse und vegane Wurst ein bis zwei Tage vorher; Kühlkette einhalten und 15 bis 20 Prozent Reserve berücksichtigen");
+  updateTask("now_baldachin_lager_transport", "Abholtermin für den gewählten 6x6-m-Baldachin verbindlich bestätigen; vor Übernahme Zelthaut, Holzgestänge, Seile, Heringe, Vollständigkeit und Zustand prüfen, vollständigen Setumfang dokumentieren und trockenen Lagerort sowie Transport klären; danach 600 EUR Kaufpreis und 50 EUR Spritgeld als Ist-Kosten erfassen");
+
+  const obsoleteTentTasks = new Set(["now_baldachin_preisbeobachtung", "oct_suchagenten_start", "oct_gebrauchtmarkt", "oct_wetterschutzentscheidung", "jan_wetterschutz_kaufen", "jan_baldachin_neupreis"]);
+  PHASES_DATA.forEach(phase => phase.categories.forEach(category => {
+    category.tasks = category.tasks.filter(task => !obsoleteTentTasks.has(task.id));
+  }));
+  const tentHandover = PHASES_DATA.find(phase => phase.id === "phase2")?.categories.find(category => category.title.includes("Baldachin"));
+  if(tentHandover){
+    tentHandover.title = "⛺ Baldachin · Übernahme";
+    const compare = tentHandover.tasks.find(task => task.id === "oct_angebote_vergleichen");
+    if(compare) compare.text = "Vor Übernahme des gewählten Baldachins Zelthaut, Mittelmast, Seitenstangen, Seile und Heringe auf Vollständigkeit, Schimmel, Stockflecken, Reparaturen und sicheren Zustand prüfen; Setumfang dokumentieren";
+    const transport = tentHandover.tasks.find(task => task.id === "oct_lager_transport_bestaetigen");
+    if(transport) transport.text = "Abholtermin, Transport der langen Stangen, trockenen Lagerort und Möglichkeit zum vollständigen Trocknen der Baumwollplane verbindlich bestätigen";
+  }
 
   const aprilFood = PHASES_DATA.find(phase => phase.id === "phase5")?.categories.find(category => category.title.includes("Essen & Küche"));
   if (aprilFood) aprilFood.title = "🍲 Essen & Küche";
@@ -2614,7 +2783,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
             komplett veganes, mittelalterlich angehauchtes Hauptbuffet
             plus dauerhaft verfügbare Tavernenplatte. Lebensmittelbudget:
             ca. 230 bis 245 EUR (ca. 9 bis 10 EUR pro Person).
-            Hypocras, Met, Grutbier und weitere Getränke kommen separat dazu.
+            Hypocras, Jopen Koyt, Tafelbier und optionaler veganer Met kommen separat dazu.
           </p>
 
           <details>
