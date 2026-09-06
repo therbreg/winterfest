@@ -24,5 +24,12 @@ test('Procurement workflow keeps its manual implementation',()=>{
  const file='.github/workflows/sync-procurement.yml';assert.equal(after(file).slice(after(file).indexOf('permissions:')),before(file).slice(before(file).indexOf('permissions:')));assert.ok(!/^\s+push:/m.test(after(file)));
 });
 test('PWA metadata and beverage data remain unchanged',()=>{
- for(const file of ['manifest.webmanifest','pwa.js','pwa.css','data/beverages.json','icons/icon.svg'])assert.equal(after(file),before(file));
+ for(const file of ['pwa.css','data/beverages.json','icons/icon.svg'])assert.equal(after(file),before(file));
+});
+
+test('App identity and installation logic survive icon replacement',()=>{
+ const old=JSON.parse(before('manifest.webmanifest')),current=JSON.parse(after('manifest.webmanifest'));
+ for(const key of Object.keys(old).filter(key=>key!=='icons'))assert.deepEqual(current[key],old[key]);
+ for(const icon of current.icons){const bytes=readFileSync(icon.src);const size=Number(icon.sizes.split('x')[0]);assert.equal(bytes.readUInt32BE(16),size);assert.equal(bytes.readUInt32BE(20),size);}
+ assert.equal(after('pwa.js').replaceAll('./icons/app-icon-192.png','./icons/icon.svg'),before('pwa.js'));
 });

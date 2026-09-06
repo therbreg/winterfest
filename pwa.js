@@ -30,7 +30,7 @@
     overlay.innerHTML = `
       <section class="pwa-install-card" role="dialog" aria-modal="true" aria-labelledby="pwaInstallTitle">
         <button class="pwa-install-close" type="button" aria-label="Schließen">✕</button>
-        <img class="pwa-install-mark" src="./icons/icon.svg" alt="">
+        <img class="pwa-install-mark" src="./icons/app-icon-192.png" alt="">
         <h2 id="pwaInstallTitle">Winterfest als App installieren</h2>
         <div data-install-instructions></div>
         <button class="pwa-install-primary" type="button" data-native-install hidden>App installieren</button>
