@@ -16,6 +16,8 @@
 <script src="./pwa.js" defer></script>
 
 <script type="module">
+import { initHub, renderOverview } from "./js/hub-ui.mjs";
+import { activeAssets as selectActiveAssets } from "./js/hub-model.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -124,8 +126,9 @@ const setSyncBar = (msg,cls) => {
   el.className = "sync-bar"+(cls?" "+cls:"");
 };
 
+window._hubLoaded = new Set();
 function bindValue(path, cb) {
-  onValue(ref(db,dbPath(path)), snap => cb(snap.val() || {}), err => setSyncBar("✕ Firebase-Fehler: "+err.message,"err"));
+  onValue(ref(db,dbPath(path)), snap => { window._hubLoaded.add(path); cb(snap.val() || {}); }, err => setSyncBar("✕ Firebase-Fehler: "+err.message,"err"));
 }
 
 function maybeMigrateLegacyTaskData() {
@@ -1164,7 +1167,7 @@ function renderBudget(data) {
   if (!list) return;
   const items = Object.entries(data || {}).filter(([,value])=>{const text=[value?.title,value?.note].join(" ").toLowerCase();return !value?.archived&&!text.includes("vendera")&&!(text.includes("mittelalter")&&text.includes("zelt")&&text.includes("miet"));}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const assetItems = Object.entries(window._assets || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value}));
-  const activeAssets = assetItems.filter(i=>i.status!=="Fallback");
+  const activeAssets = selectActiveAssets(window._assets);
   const planned = activeAssets.reduce((s,i)=>s+Number(i.planned||0),0);
   const actual = activeAssets.reduce((s,i)=>s+Number(i.actual||0),0);
   const openActual = activeAssets.reduce((s,i)=>s+Math.max(Number(i.planned||0)-Number(i.actual||0),0),0);
@@ -1335,38 +1338,13 @@ function renderTentLeads(data) {
 }
 
 function renderDashboard() {
-  const stats = document.getElementById("dashboardStats");
-  const pins = document.getElementById("dashboardPins");
-  if (!stats || !pins) return;
-  const taskEls = [...document.querySelectorAll(".task[data-key]:not(.task-deleted)")];
-  const total = taskEls.length;
-  const done = taskEls.filter(el=>el.classList.contains("done")).length;
-  const activeTaskValues = Object.values(window._taskData || {}).filter(t=>t && t.deleted !== true);
-  const blocked = activeTaskValues.filter(t=>validStatus(t.status)==="blocked").length;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const overdue = activeTaskValues.filter(t=>t.due && validStatus(t.status)!=="done" && new Date(t.due+"T12:00:00") < today).length;
-  const budgetActual = Object.values(window._assets || {}).filter(i=>i.status!=="Fallback").reduce((s,i)=>s+Number(i.actual||0),0);
-  const shoppingOpen = Object.values(window._shopping || {}).filter(i=>!i.bought).length;
-  const tentActive = Object.values(window._tentLeads || {}).filter(i=>!["Absage","Gebucht","Fallback"].includes(i.status)).length;
-  stats.innerHTML = `
-    <div class="dash-stat"><strong>${done}/${total}</strong><span>Aufgaben erledigt</span></div>
-    <div class="dash-stat"><strong>${blocked}</strong><span>blockiert</span></div>
-    <div class="dash-stat"><strong>${overdue}</strong><span>überfällig</span></div>
-    <div class="dash-stat"><strong>${fmtMoney(budgetActual)}</strong><span>tatsächliche Kosten</span></div>
-    <div class="dash-stat"><strong>${shoppingOpen}</strong><span>Einkäufe offen</span></div>
-    <div class="dash-stat"><strong>${tentActive}</strong><span>Zeltoptionen offen</span></div>`;
-
-  const pinItems = Object.entries(window._pins || {}).map(([key,value])=>({type:"Pin",key,...value}));
-  const docItems = Object.entries(window._documents || {}).filter(([,v])=>v.pinned).map(([key,value])=>({type:"Dokument",key,...value}));
-  const decisionItems = Object.entries(window._decisions || {}).filter(([,v])=>v.pinned).map(([key,value])=>({type:"Beschluss",key,...value}));
-  const allPins = [...pinItems, ...decisionItems, ...docItems].sort((a,b)=>(b.ts||0)-(a.ts||0));
-  pins.innerHTML = allPins.length ? allPins.slice(0,8).map(p=>`<article class="dashboard-pin">
-      <span class="doc-pin">${esc(p.type)}</span>
-      <h3>${esc(p.title || "Ohne Titel")}</h3>
-      <p>${esc(p.text || p.note || p.category || "")}</p>
-    </article>`).join("") : `<p class="empty-state doc-empty">Keine angepinnten Informationen. Trage oben Pins, wichtige Dokumente oder wichtige Beschlüsse ein.</p>`;
+  renderOverview(PHASES_DATA, {
+    tasks:window._taskData, customTasks:window._customTasks,
+    assets:window._assets, budget:window._budget, shopping:window._shopping,
+    pins:window._pins, documents:window._documents, decisions:window._decisions,
+    tentLeads:window._tentLeads
+  });
 }
-
 
 function isTaskDeleted(key) {
   return (window._taskData || {})[key]?.deleted === true;
@@ -1963,7 +1941,7 @@ window.APP = {
   },
 
   switchView(view, persist = true) {
-    const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins"];
+    const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins","assets","timeline"];
     if (!valid.includes(view)) view = "overview";
     document.querySelectorAll(".orga-view").forEach(el => el.classList.toggle("is-active", el.dataset.view === view));
     document.querySelectorAll(".view-tab").forEach(btn => {
@@ -1978,7 +1956,7 @@ window.APP = {
     document.querySelectorAll("[data-menu-view]").forEach(item => item.classList.toggle("is-current", item.dataset.menuView === view));
     if (persist) localStorage.setItem("wf_view", view);
     window.APP.closeMobileMenu();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "auto" });
   },
   printHub() { window.print(); },
   openMobileMenu() {
@@ -2122,6 +2100,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
   else window.APP.showName();
   populateCustomTaskForm();
   buildUI();
+  initHub(PHASES_DATA, window.APP);
   const requestedView = new URLSearchParams(location.search).get("view");
   window.APP.switchView(requestedView || localStorage.getItem("wf_view") || "overview", false);
   const equipmentLink = document.getElementById("equipmentLink");
@@ -2573,6 +2552,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 @media(min-width:701px){.mobile-more-overlay{display:none!important}.progress-section.orga-view{display:block!important}}
 
 </style>
+<link rel="stylesheet" href="./styles/codex.css">
 </head>
 <body data-view="overview">
 
@@ -2624,6 +2604,8 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <button class="view-tab" data-view="tentleads" onclick="APP.switchView('tentleads')">Zelte</button>
     <button class="view-tab" data-view="decisions" onclick="APP.switchView('decisions')">Beschlüsse</button>
     <button class="view-tab" data-view="pins" onclick="APP.switchView('pins')">Pins</button>
+    <button class="view-tab" data-view="assets" onclick="APP.switchView('assets')">Ausstattung</button>
+    <button class="view-tab" data-view="timeline" onclick="APP.switchView('timeline')">Ablauf</button>
     <button class="mobile-more-btn" id="mobileMoreButton" type="button" onclick="APP.openMobileMenu()" aria-haspopup="dialog" aria-controls="mobileMoreMenu"><span class="tab-icon" aria-hidden="true">☰</span><span>Mehr</span></button>
   </nav>
 

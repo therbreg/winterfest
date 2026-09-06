@@ -1,8 +1,6 @@
 name: Beschaffungsplan mit Firebase synchronisieren
 on:
-  push:
-    branches: [main]
-    paths: [ausstattung.html, index.html, .github/workflows/sync-procurement.yml]
+  # Layout changes must not rewrite production data. Run this historical plan explicitly.
   workflow_dispatch:
 permissions:
   contents: read

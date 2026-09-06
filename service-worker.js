@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "winterfest-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v2`;
+const CACHE_NAME = `${CACHE_PREFIX}v3`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,7 +8,11 @@ const APP_SHELL = [
   "./manifest.webmanifest",
   "./pwa.css",
   "./pwa.js",
-  "./icons/icon.svg"
+  "./icons/icon.svg",
+  "./styles/codex.css",
+  "./js/hub-model.mjs",
+  "./js/hub-ui.mjs",
+  "./js/equipment-bridge.js"
 ];
 
 self.addEventListener("install", event => {

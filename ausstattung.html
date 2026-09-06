@@ -59,6 +59,8 @@
   .footnote{font-size:.8rem;line-height:1.4}
 }
 </style>
+<link rel="stylesheet" href="./styles/codex.css">
+<script src="./js/equipment-bridge.js" defer></script>
 </head>
 <body>
 <div id="setup" class="setup hidden">
@@ -79,6 +81,7 @@
   </main>
 </div>
 <script type="module">
+import { activeAssets as selectActiveAssets } from "./js/hub-model.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -1023,7 +1026,7 @@ function card(i){
   const a=num(i.actual);
   const remaining=Math.max(p-a,0);
 
-  return `<article class="asset ${klass(i.status)}">
+  return `<article class="asset ${klass(i.status)}" data-asset-key="${esc(i.key)}">
     <div class="head">
 
       <div>
@@ -1212,9 +1215,7 @@ function render(){
     ...v
   }));
 
-  const activeRows=rows.filter(
-    i=>i.status!=="Fallback"
-  );
+  const activeRows=selectActiveAssets(assets);
 
   const planned=activeRows.reduce(
     (sum,i)=>sum+num(i.planned),
@@ -1407,6 +1408,7 @@ function render(){
     }).join("")
 
     :'<div class="empty">Keine Posten für diesen Filter.</div>';
+  window.dispatchEvent(new Event('winterfest:assets-rendered'));
 }
 
 window.AS={
@@ -1503,12 +1505,16 @@ document.getElementById("reset").onclick=()=>{["search","filterArea","filterStat
 onValue(ref(db,dbPath("assets")),s=>{assets=s.val()||{};render();sync("Firebase verbunden","ok");},e=>sync("Firebase-Fehler: "+e.message,"err"));
 onValue(ref(db,dbPath("budget")),s=>{budget=s.val()||{};render();});
 onValue(ref(db,dbPath("shopping")),s=>{shopping=s.val()||{};render();});
+// The integrated view must never add a second seed/migration entrypoint.
+// Standalone behavior and all historical migration markers remain unchanged.
+if (new URLSearchParams(location.search).get("embedded") !== "1") {
 await seed();
 await migrateTentPlan();
 await migrateCostPlan();
 await migrateMissingEquipment();
 await migrateFinalBudgetPlan();
 await selfLink();
+}
 </script>
 </body>
 </html>
