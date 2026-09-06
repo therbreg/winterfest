@@ -134,3 +134,11 @@ Prüfungen: tests/model.test.mjs, tests/preservation.test.mjs, tests/firebase-st
 `node tests/preview.cjs` öffnet einen lokalen Server unter http://127.0.0.1:4173/#test_event_123456789012345. Die Vorschau ersetzt Firebase durch flüchtige Testdaten, deaktiviert PWA-Installation und blockiert externe Datenverbindungen. Änderungen in der Vorschau gehen beim Neuladen verloren.
 
 Das Repository verwendet GitHub Pages; vorhandene erfolgreiche Pages-Läufe stammen aus main. Ein Merge nach main ist deshalb als Veröffentlichung zu behandeln. Zunächst den Entwurf prüfen und vor dem Merge den tatsächlichen Firebase-Eventbestand sichern. Die lokale Vorschau benötigt keinen produktiven Event-Key.
+
+## Gestalterische und inhaltliche Abstimmung
+
+Ausstattung, Einkaufsliste, Kosten/Erstattung und Zeltanfragen teilen einen gemeinsamen Navigationsbereich. Der bisherige Spruch und die XXX-Platzhalter im Seitenkopf und in der Navigation entfallen. Das bereitgestellte Rabenlogo ersetzt sie; die Originaldatei bleibt unter icons/winterfest-logo.png erhalten.
+
+Der bisherige Tagesablauf bleibt maßgeblich. Das große Essen beginnt weiterhin um 16 Uhr; Snacks und Tavernenplatten stehen ab dem Ankommen und zwischendurch zur Verfügung. Die Angaben sind keine festen Endzeiten der Essensausgabe. Zusätzliche Grundsatztexte zur freiwilligen Teilnahme oder flexiblen Anwesenheit werden auf Wunsch nicht ergänzt.
+
+Bildbearbeitung: eingebautes ImageGen, Hintergrundfreistellung. Verwendeter Prompt: Background extraction only for the user's burgundy raven and crescent logo: remove all pale cream parchment background including light spaces inside the ring, eye and ornaments, replacing it with actual transparent alpha. Preserve the exact burgundy raven, crescent, broken circular ring, stars and ornaments, composition, proportions and color. No redesign, no text, no shadows, no cream border, no painted checkerboard. Output transparent PNG, full uncropped mark for placing on the website's parchment background.

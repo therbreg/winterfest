@@ -6,7 +6,7 @@ const date = value => value ? new Date(`${value}T12:00:00`).toLocaleDateString('
 const groups = [
   ['', [['overview','Übersicht','01']]],
   ['Planung', [['tasks','Aufgaben','02'],['decisions','Beschlüsse','03'],['pins','Pins','04']]],
-  ['Ressourcen', [['assets','Ausstattung','05'],['shopping','Einkauf','06'],['budget','Budget','07'],['helpers','Helfer','08']]],
+  ['Ressourcen', [['assets','Ausstattung & Beschaffung','05'],['helpers','Helfer','06']]],
   ['Projekt', [['documents','Dokumente & Konzepte','09'],['timeline','Ablauf','10']]]
 ];
 let phases = [], lastState, frame, selectedAsset = '';
@@ -37,22 +37,35 @@ function focusRecord(key, view) {
 export function initHub(data, app) {
   phases = data;
   document.body.classList.add('codex-hub');
-  document.querySelector('header').innerHTML = `<div class="folio-label">Organisation · 2026 — 2027</div><h1>Ende des<br><span>30. Winters</span></h1><div class="hero-rule"></div><p class="hero-caption">Ein Fest. Ein gemeinsamer Plan.</p><p class="header-date">29. Mai 2027 <span>·</span> Maximal 30 Gäste</p><span class="hero-mark" aria-hidden="true">XXX</span>`;
+  document.querySelector('header').innerHTML = `<div class="folio-label">Organisation · 2026 — 2027</div><h1>Ende des<br><span>30. Winters</span></h1><img class="winterfest-logo" src="icons/winterfest-logo-transparent.png" alt="Zeichen des Dreißigsten Winters: Rabe und Mondsichel" width="1254" height="1254"><div class="hero-rule"></div><p class="header-date">29. Mai 2027 <span>·</span> Maximal 30 Gäste</p>`;
   const nav = document.createElement('aside');
   nav.className = 'codex-sidebar';
-  nav.innerHTML = `<a class="codex-brand" href="?view=overview${location.hash}"><img src="icons/icon.svg" alt=""><span>Der Dreißigste<br><small>Organisationskodex</small></span></a><nav aria-label="Hauptnavigation">${groups.map(([label,items]) => `<div class="nav-group">${label ? `<p>${label}</p>` : ''}${items.map(([view,title,num]) => `<button class="codex-nav-link" data-go="${view}"><span class="nav-number">${num}</span>${title}</button>`).join('')}</div>`).join('')}</nav><div class="sidebar-foot"><span>XXIX · V · MMXXVII</span><p>Alles an seinem Platz.<br>Schritt für Schritt zum Fest.</p><button data-install-app class="pwa-install-action">App installieren ↗</button></div>`;
+  nav.innerHTML = `<a class="codex-brand" href="?view=overview${location.hash}"><img src="icons/winterfest-logo-transparent.png" alt="" width="1254" height="1254"><span>Der Dreißigste<br><small>Organisationskodex</small></span></a><nav aria-label="Hauptnavigation">${groups.map(([label,items]) => `<div class="nav-group">${label ? `<p>${label}</p>` : ''}${items.map(([view,title,num]) => `<button class="codex-nav-link" data-go="${view}"><span class="nav-number">${num}</span>${title}</button>`).join('')}</div>`).join('')}</nav><div class="sidebar-foot"><span>XXIX · V · MMXXVII</span><p>Alles an seinem Platz.<br>Schritt für Schritt zum Fest.</p><button data-install-app class="pwa-install-action">App installieren ↗</button></div>`;
   document.body.prepend(nav);
   const container = document.querySelector('.container');
   const equipment = document.createElement('section');
   equipment.id = 'equipmentView'; equipment.dataset.view = 'assets'; equipment.className = 'orga-view';
-  equipment.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Ressourcen / 05</p><h2>Ausstattung</h2><p>Bestand, Beschaffung und die nächsten Schritte.</p></div><div class="resource-tabs"><button class="selected" data-go="assets">Material & Bestand</button><button data-go="tentleads">Zelt · Anfragen & Kontakte</button><a href="ausstattung.html${location.hash}">Separat öffnen ↗</a></div><p class="codex-empty" id="equipmentLoading">Ausstattung wird geladen …</p><iframe id="equipmentFrame" title="Ausstattung und Beschaffung" class="equipment-frame"></iframe>`;
+  equipment.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Ressourcen / 05</p><h2>Ausstattung & Beschaffung</h2><p>Material, Einkauf und Kosten gemeinsam verwalten.</p></div><div class="resource-tabs"><button class="selected" data-go="assets">Material & Bestand</button><button data-go="tentleads">Zelt · Anfragen & Kontakte</button><a href="ausstattung.html${location.hash}">Separat öffnen ↗</a></div><p class="codex-empty" id="equipmentLoading">Ausstattung wird geladen …</p><iframe id="equipmentFrame" title="Ausstattung und Beschaffung" class="equipment-frame"></iframe>`;
   container.append(equipment);
   const timeline = document.createElement('section');
   timeline.className = 'orga-view'; timeline.dataset.view = 'timeline'; timeline.id='eventTimeline';
-  timeline.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Projekt / 10</p><h2>Der Eventtag</h2><p>29. Mai 2027 · Vom ersten Aufbau bis zum letzten Licht.</p></div><div class="codex-agenda">${(phases.find(p => p.id==='phase8')?.timeline || []).map(item => `<article><time>${esc(item.time)}</time><p>${esc(item.text)}</p></article>`).join('')}</div>`;
+  timeline.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Projekt / 10</p><h2>Der Eventtag</h2><p>29. Mai 2027 · Vom ersten Aufbau bis zum letzten Licht.</p><p>Ab dem Ankommen gibt es Snacks und laufend nachgefüllte Tavernenplatten. Das große Essen beginnt um 16 Uhr; die Essensausgabe ist nicht auf ein starres Zeitfenster begrenzt.</p></div><div class="codex-agenda">${(phases.find(p => p.id==='phase8')?.timeline || []).map(item => `<article><time>${esc(item.time)}</time><p>${esc(item.text)}</p></article>`).join('')}</div>`;
   container.append(timeline);
-  const tent = document.getElementById('tentleads');
-  tent.insertAdjacentHTML('afterbegin', '<div class="resource-tabs"><button data-go="assets">← Ausstattung</button><span>Zelt · Anfragen & Kontakte</span></div>');
+  const resourceViews = ['assets','shopping','budget','tentleads'];
+  const resourceTabs = active => '<nav class="resource-tabs" aria-label="Ausstattung und Beschaffung">' + [['assets','Material & Bestand'],['shopping','Einkaufsliste'],['budget','Kosten & Erstattung'],['tentleads','Zeltanfragen']].map(([view,label]) => '<button data-go="'+view+'"'+(active===view?' class="selected" aria-current="page"':'')+'>'+label+'</button>').join('') + '</nav>';
+  equipment.querySelector('.resource-tabs').outerHTML = resourceTabs('assets') + '<p class="resource-fallback"><a href="ausstattung.html'+location.hash+'">Ausstattung separat öffnen ↗</a></p>';
+  for (const view of resourceViews.slice(1)) {
+    const section = document.getElementById(view);
+    section.insertAdjacentHTML('afterbegin', '<div class="codex-page-heading"><p class="folio-label">Ressourcen / 05</p><h2>Ausstattung & Beschaffung</h2></div>'+resourceTabs(view));
+  }
+  const workspace = document.querySelector('.workspace-tabs');
+  workspace.querySelectorAll('[data-view="shopping"],[data-view="budget"],[data-view="tentleads"]').forEach(button => button.remove());
+  const assetTab = workspace.querySelector('[data-view="assets"]');
+  assetTab.classList.add('mobile-primary');
+  assetTab.innerHTML = '<span class="tab-icon" aria-hidden="true">⚒</span><span>Ausstattung</span>';
+  const helperTab = workspace.querySelector('[data-view="helpers"]');
+  helperTab.classList.add('mobile-primary');
+  helperTab.innerHTML = '<span class="tab-icon" aria-hidden="true">♟</span><span>Helfer</span>';
   document.querySelector('#tentleads .progress-title').textContent = 'Zelt · Anfragen & Kontakte';
   document.querySelector('#decisions .progress-title').textContent = 'Beschlüsse';
   document.querySelector('#documents .progress-title').textContent = 'Dokumente & Konzepte';
@@ -64,10 +77,11 @@ export function initHub(data, app) {
     switchView(view, persist);
     const active = document.body.dataset.view;
     document.querySelectorAll('.codex-nav-link').forEach(button => {
-      const selected = button.dataset.go === active || (active === 'tentleads' && button.dataset.go === 'assets');
+      const selected = button.dataset.go === active || (resourceViews.includes(active) && button.dataset.go === 'assets');
       button.classList.toggle('selected', selected);
       if (selected) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
     });
+    assetTab.classList.toggle('active', resourceViews.includes(active));
     if (active === 'assets') loadEquipment();
     if (persist) {
       const url = new URL(location.href); url.searchParams.set('view', active);
