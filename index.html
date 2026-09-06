@@ -2103,6 +2103,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
   initHub(PHASES_DATA, window.APP);
   const requestedView = new URLSearchParams(location.search).get("view");
   window.APP.switchView(requestedView || localStorage.getItem("wf_view") || "overview", false);
+  document.body.classList.add("hub-ready");
+  document.getElementById("hubStartup")?.remove();
   const equipmentLink = document.getElementById("equipmentLink");
   if (equipmentLink) {
     equipmentLink.href = `ausstattung.html#${encodeURIComponent(EVENT_ID)}`;
@@ -2554,7 +2556,8 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 </style>
 <link rel="stylesheet" href="./styles/codex.css">
 </head>
-<body data-view="overview">
+<body class="codex-hub" data-view="overview">
+<div id="hubStartup" role="status"><p>Planung wird geladen …</p><p>Falls diese Anzeige bestehen bleibt, prüfe die Verbindung und lade die Seite erneut.</p><noscript>Bitte JavaScript aktivieren, um die Planung zu öffnen.</noscript></div>
 
 <div class="topbar">
   <div class="topbar-title">⚔ Das 30. Winterfest</div>
@@ -2565,11 +2568,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 
 <div class="sync-bar" id="syncBar">⟳ Verbinde mit Firebase…</div>
 
-<header>
-  <p class="header-eyebrow">Kollaborative Planung · Mittelalterliches Waldlager</p>
-  <h1>Das <span>30.</span> Winterfest</h1>
-  <p class="header-date">29. Mai 2027 · maximal 30 Personen</p>
-</header>
+<header><div class="folio-label">Organisation · 2026 — 2027</div><h1>Ende des<br><span>30. Winters</span></h1><img class="winterfest-logo" src="icons/winterfest-logo-transparent.png" alt="Zeichen des Dreißigsten Winters: Rabe und Mondsichel" width="1254" height="1254"><div class="hero-rule"></div><p class="header-date">29. Mai 2027 <span>·</span> Maximal 30 Gäste</p></header>
 
 <div class="container">
   <div class="progress-section orga-view is-active" data-view="overview">
