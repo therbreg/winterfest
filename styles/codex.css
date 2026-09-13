@@ -217,3 +217,13 @@ button{cursor:pointer}
 .codex-hub:not(.hub-ready) .container{display:none}
 #hubStartup{margin:24px 40px;padding:20px;border:1px solid var(--rule);font-family:Crimson Text,Georgia,serif;color:var(--ink)}
 #hubStartup p+p{font-size:15px;color:var(--ash)}
+
+.task-plan-details{grid-column:1/-1;min-width:0;width:100%;padding:8px 0;overflow-wrap:anywhere}
+.task-plan-details summary{cursor:pointer;color:var(--ember)}
+.task-plan-details fieldset{border:1px solid var(--rule);padding:10px 14px;margin:12px 0;min-width:0}
+.task-plan-details legend{font-weight:600;padding:0 5px}
+.task-plan-details label{display:flex;gap:10px;align-items:flex-start;padding:6px 0;line-height:1.5}
+.task-plan-details input{flex:none;margin-top:5px;width:18px;height:18px}
+#groundsBudgetFrame{margin-bottom:16px;overflow-wrap:anywhere}
+#groundsBudgetFrame p{margin-top:8px}
+.codex-agenda article>div{min-width:0}

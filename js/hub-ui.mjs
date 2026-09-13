@@ -1,3 +1,4 @@
+import {groundsMilestones} from './grounds-plan.mjs';
 import {overview, EVENT_DATE, daysUntil, berlinDate, CAP} from './hub-model.mjs';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -51,6 +52,7 @@ export function initHub(data, app) {
   timeline.className = 'orga-view'; timeline.dataset.view = 'timeline'; timeline.id='eventTimeline';
   timeline.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Projekt / 10</p><h2>Der Eventtag</h2><p>29. Mai 2027 · Vom ersten Aufbau bis zum letzten Licht.</p><p>Ab dem Ankommen gibt es Snacks und laufend nachgefüllte Tavernenplatten. Das große Essen beginnt um 16 Uhr; die Essensausgabe ist nicht auf ein starres Zeitfenster begrenzt.</p></div><div class="codex-agenda">${(phases.find(p => p.id==='phase8')?.timeline || []).map(item => `<article><time>${esc(item.time)}</time><p>${esc(item.text)}</p></article>`).join('')}</div>`;
   container.append(timeline);
+  timeline.insertAdjacentHTML('afterbegin', `<div class="codex-page-heading"><h2>Geländeplanung bis zum Fest</h2></div><div class="codex-agenda">${groundsMilestones.map(item=>`<article><time>${esc(item.time)}</time><div>${item.tasks.map(task=>rowLink(task.text, task.hint, 'tasks', task.id)).join('')}</div></article>`).join('')}<article><time>29.05.2027</time><p>Veranstaltung · Ende des 30. Winters</p></article></div>`);
   const resourceViews = ['assets','shopping','budget','tentleads'];
   const resourceTabs = active => '<nav class="resource-tabs" aria-label="Ausstattung und Beschaffung">' + [['assets','Material & Bestand'],['shopping','Einkaufsliste'],['budget','Kosten & Erstattung'],['tentleads','Zeltanfragen']].map(([view,label]) => '<button data-go="'+view+'"'+(active===view?' class="selected" aria-current="page"':'')+'>'+label+'</button>').join('') + '</nav>';
   equipment.querySelector('.resource-tabs').outerHTML = resourceTabs('assets') + '<p class="resource-fallback"><a href="ausstattung.html'+location.hash+'">Ausstattung separat öffnen ↗</a></p>';

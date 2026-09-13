@@ -25,7 +25,7 @@ const server=http.createServer((req,res)=>{let p=decodeURIComponent(new URL(req.
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  await page.goto(base+'/index.html#test_event_123456789012345');
  await page.locator('.progress-number').waitFor();
- assert.equal(await page.evaluate(()=>window.__writes.length),0);
+ assert.equal(await page.evaluate(()=>window.__writes.length),1);
  assert.equal(await page.locator('.phase-step').count(),8);
  await page.screenshot({path:path.join(root,'tests/desktop.png'),fullPage:true});
  for(const view of ['tasks','decisions','pins','shopping','budget','helpers','documents','timeline','tentleads']){
@@ -34,8 +34,8 @@ const server=http.createServer((req,res)=>{let p=decodeURIComponent(new URL(req.
  await page.evaluate(()=>APP.switchView('assets'));
  const equipment=page.frameLocator('#equipmentFrame');
  await equipment.locator('.asset').first().waitFor();
- assert.equal(await equipment.locator('.asset').count(),4);
- assert.equal(await page.evaluate(()=>window.__writes.length),0,'Embedding must not seed or migrate');
+ assert.equal(await equipment.locator('.asset').count(),10);
+ assert.equal(await page.evaluate(()=>window.__writes.length),1,'Embedding must not repeat grounds initialization');
  await equipment.locator('#search').fill('Tonkrüge');assert.equal(await equipment.locator('.asset').count(),1);
  await equipment.locator('#reset').click();
  await equipment.locator('[data-asset-key="baldachin_kauf"] summary').click();
@@ -48,7 +48,7 @@ const server=http.createServer((req,res)=>{let p=decodeURIComponent(new URL(req.
  await page.locator('[data-go="assets"][data-record="licht"]').first().click();
  await equipment.locator('[data-asset-key="licht"].is-target').waitFor();
  await page.waitForTimeout(200);
- assert.equal(await page.evaluate(()=>window.__writes.length),2,'Only intended asset and linked budget edits');
+ assert.equal(await page.evaluate(()=>window.__writes.length),3,'Only intended asset and linked budget edits');
  await page.setViewportSize({width:390,height:844});
  await page.evaluate(()=>APP.switchView('overview'));
  await page.screenshot({path:path.join(root,'tests/mobile.png'),fullPage:true});
@@ -59,7 +59,38 @@ const server=http.createServer((req,res)=>{let p=decodeURIComponent(new URL(req.
  await page.screenshot({path:path.join(root,'tests/mobile-equipment.png'),fullPage:true});
  await page.goBack();assert.equal(await page.locator('body').getAttribute('data-view'),'overview');
  assert.deepEqual(errors,[]);
- console.log('PASS: navigation, dashboard, forms, filters, linked costs, no startup writes, mobile, history.');
+ await page.evaluate(()=>APP.switchView('tasks'));
+ assert.equal(await page.locator('.task[data-key^="grounds_"]').count(),18);
+ const toolTask=page.locator('.task[data-key="grounds_tools"]');
+ await toolTask.locator('.task-plan-details summary').click();
+ await toolTask.locator('[data-check-id="s0_i0"]').check();
+ await page.waitForFunction(()=>window.__fixture.tasks.grounds_tools.checklist.s0_i0===true);
+ await page.evaluate(()=>APP.switchView('budget'));
+ assert.ok((await page.locator('#groundsBudgetFrame').innerText()).includes('1.355'));
+ const machineCard=page.locator('.budget-card').filter({hasText:'Grünschnitt · Maschinen / Transport / Kraftstoff'});
+ await machineCard.locator('summary').click();
+ await machineCard.locator('input').nth(1).fill('480');
+ await machineCard.locator('input').nth(1).press('Tab');
+ await page.waitForFunction(()=>window.__fixture.assets.grounds_machines.actual===480);
+ assert.ok((await page.locator('#groundsBudgetFrame').innerText()).includes('480'));
+ for(const view of ['tasks','budget','timeline']){
+  await page.evaluate(v=>APP.switchView(v),view);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No mobile overflow: '+view);
+  await page.screenshot({path:path.join(root,'tests/grounds-'+view+'.png'),fullPage:true});
+ }
+ const persisted=await page.evaluate(()=>window.__fixture);
+ await context.addInitScript(data=>{window.__fixture=data;},persisted);
+ await page.reload();await page.locator('.progress-number').waitFor({state:'attached'});
+ assert.equal(await page.evaluate(()=>window.__writes.filter(w=>w.patch?.['assetMeta/groundsPlanVersion']).length),0);
+ assert.deepEqual(errors,[]);
+ await page.evaluate(()=>APP.switchView('tasks'));
+ const restored=page.locator('.task[data-key="grounds_tools"]');
+ await restored.locator('.task-plan-details summary').click();
+ assert.equal(await restored.locator('[data-check-id="s0_i0"]').isChecked(),true);
+ await restored.scrollIntoViewIfNeeded();
+ await page.screenshot({path:path.join(root,'tests/grounds-detail.png')});
+ assert.equal(await page.evaluate(()=>window.__fixture.assets.grounds_machines.actual),480);
+ console.log('PASS: navigation, preserved data, one-time initialization, checklist persistence, single-source costs, mobile, history.');
  }finally{await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});
 

@@ -108,9 +108,10 @@ document.getElementById("app").classList.remove("hidden");
 document.getElementById("backLink").href=`index.html#${encodeURIComponent(EVENT_ID)}`;
 
 const app=initializeApp(firebaseConfig),db=getDatabase(app),dbPath=sub=>`events/${EVENT_ID}/${sub}`;
-const AREAS=["Zelt & Pavillon","Other Ages","Toilette","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];
+import {ensureGroundsPlan, GROUNDS_CATEGORY} from './js/grounds-plan.mjs';
+const AREAS=[GROUNDS_CATEGORY,"Zelt & Pavillon","Other Ages","Toilette","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];
 const TYPES=["Vorhanden","Kaufen","Mieten","DIY","Leihen","Beauftragen","Verbrauch","Entscheidung"];
-const STATUSES=["Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional"];
+const STATUSES=["Zu reservieren","Angebote prüfen","Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional"];
 const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Fallback","Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));
 const BUDGET_CAP=4000;
 let assets={},budget={},shopping={};
@@ -1514,6 +1515,7 @@ await migrateCostPlan();
 await migrateMissingEquipment();
 await migrateFinalBudgetPlan();
 await selfLink();
+await ensureGroundsPlan({get,ref,update,db,dbPath});
 }
 </script>
 </body>

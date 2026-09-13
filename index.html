@@ -18,6 +18,7 @@
 <script type="module">
 import { initHub, renderOverview } from "./js/hub-ui.mjs";
 import { activeAssets as selectActiveAssets } from "./js/hub-model.mjs";
+import {integrateGrounds, ensureGroundsPlan, GROUNDS_CATEGORY, GROUNDS_FRAME, FIRST_CUT_RESERVE, firstCutRange} from "./js/grounds-plan.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -979,6 +980,7 @@ function applyTaskState() {
   today.setHours(0,0,0,0);
   document.querySelectorAll(".task[data-key]").forEach(el => {
     const s = data[el.dataset.key] || {};
+    el.querySelectorAll('[data-check-id]').forEach(input=>{input.checked=!!s.checklist?.[input.dataset.checkId];});
     const isDeleted = s.deleted === true;
     el.classList.toggle("task-deleted", isDeleted);
     if (isDeleted) return;
@@ -1165,6 +1167,12 @@ function renderBudget(data) {
   const list = document.getElementById("budgetList");
   const stats = document.getElementById("budgetStats");
   if (!list) return;
+  const grounds = selectActiveAssets(window._assets).filter(i=>i.area===GROUNDS_CATEGORY);
+  let frame = document.getElementById('groundsBudgetFrame');
+  if (!frame) { frame=document.createElement('article'); frame.id='groundsBudgetFrame'; frame.className='mini-card'; list.before(frame); }
+  const groundsPlanned=grounds.reduce((s,i)=>s+Number(i.planned||0),0);
+  const groundsActual=grounds.reduce((s,i)=>s+Number(i.actual||0),0);
+  frame.innerHTML=`<div><span class="doc-cat">${esc(GROUNDS_CATEGORY)}</span><h3>Budgetrahmen ${fmtMoney(GROUNDS_FRAME)}</h3><p>Geplante Einzelkosten: <strong>${fmtMoney(groundsPlanned)}</strong> · Tatsächlich ausgegeben: <strong>${fmtMoney(groundsActual)}</strong> · Verbleibender Planrahmen: <strong>${fmtMoney(GROUNDS_FRAME-groundsPlanned)}</strong></p><p>Ursprüngliche Grünschnitt-Spanne: ${fmtMoney(firstCutRange.min)}–${fmtMoney(firstCutRange.max)} · interne Reserve ${fmtMoney(FIRST_CUT_RESERVE)} (${fmtMoney(firstCutRange.max-FIRST_CUT_RESERVE)} unter dem oberen Planwert). Spätere Pflege noch offen.</p><p>Rahmen und interne Reserve sind keine zusätzlichen Ausgaben. Planwerte starten am oberen Ende der Spanne; Ist-Kosten erst nach Zahlung erfassen.</p></div>`;
   const items = Object.entries(data || {}).filter(([,value])=>{const text=[value?.title,value?.note].join(" ").toLowerCase();return !value?.archived&&!text.includes("vendera")&&!(text.includes("mittelalter")&&text.includes("zelt")&&text.includes("miet"));}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const assetItems = Object.entries(window._assets || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value}));
   const activeAssets = selectActiveAssets(window._assets);
@@ -1221,7 +1229,8 @@ function renderBudget(data) {
         <button class="doc-delete" onclick='APP.deleteBudget(${JSON.stringify(i.key)})'>Löschen</button>
       </div>
     </article>`;
-  }).join("") : `<p class="empty-state doc-empty">Noch keine Budgetposten eingetragen.</p>`;
+  }).join("") : (grounds.length ? "" : `<p class="empty-state doc-empty">Noch keine Budgetposten eingetragen.</p>`);
+  list.insertAdjacentHTML('afterbegin', grounds.map(i=>`<article class="mini-card budget-card"><div><span class="doc-cat">${esc(i.area)}</span><h3>${esc(i.item)}</h3><span class="doc-cat">${esc(i.status)}</span><div class="money-line"><span>Plan: <strong>${i.planned ? fmtMoney(i.planned) : 'offen'}</strong></span><span>Ist: <strong>${fmtMoney(i.actual)}</strong></span><span>Ursprüngliche Spanne: ${i.rangeMax ? fmtMoney(i.rangeMin)+'–'+fmtMoney(i.rangeMax) : 'noch offen'}</span></div><p class="doc-note">${esc(i.note)}</p><details class="edit-details"><summary>Kosten nachtragen</summary><div class="inline-edit-grid"><label>Geplant € <input type="number" min="0" step="0.01" value="${Number(i.planned||0)}" onchange='APP.updateGroundsCost(${JSON.stringify(i.key)}, "planned", this.value)'></label><label>Tatsächlich € <input type="number" min="0" step="0.01" value="${Number(i.actual||0)}" onchange='APP.updateGroundsCost(${JSON.stringify(i.key)}, "actual", this.value)'></label></div></details><button class="doc-open" data-go="assets" data-record="${esc(i.key)}">Posten in Ausstattung bearbeiten ↗</button></div></article>`).join(''));
 }
 
 function renderShopping(data) {
@@ -1459,6 +1468,12 @@ function renderTaskItem(ul, key, task, prioLabel, isCustom = false, context = {}
       </div>
       <div class="task-meta"></div>
     </details>`;
+  if (task.sections) {
+    const details=document.createElement('details');
+    details.className='task-plan-details';
+    details.innerHTML=`<summary>${esc(task.timing)} · Checkliste</summary><p class="doc-cat">${esc(task.hint)}</p>${task.sections.map(section=>`<fieldset><legend>${esc(section.title)}</legend>${section.items.map(item=>`<label><input type="checkbox" data-check-id="${item.id}" onchange='APP.updateTaskChecklist(${JSON.stringify(key)}, ${JSON.stringify(item.id)}, this.checked)'><span>${esc(item.text)}</span></label>`).join('')}</fieldset>`).join('')}`;
+    li.append(details);
+  }
   ul.appendChild(li);
 }
 
@@ -1479,6 +1494,15 @@ function populateCustomTaskForm() {
 window.refreshCustomTaskCategoryOptions = refreshCustomTaskCategoryOptions;
 
 window.APP = {
+  updateTaskChecklist(key, item, checked) {
+    if (!currentUser) { pendingCb=()=>APP.updateTaskChecklist(key,item,checked); APP.showName(); return; }
+    update(ref(db,dbPath(`tasks/${key}/checklist`)),{[item]:!!checked});
+  },
+  updateGroundsCost(key, field, value) {
+    if (!currentUser) { pendingCb=()=>APP.updateGroundsCost(key,field,value); APP.showName(); return; }
+    if (!['planned','actual'].includes(field) || !window._assets[key]) return;
+    update(ref(db,dbPath(`assets/${key}`)),{[field]:parseMoney(value),updatedBy:currentUser,updatedAt:Date.now()});
+  },
   toggleTask(key) {
     if (!currentUser) { pendingCb=()=>window.APP.toggleTask(key); window.APP.showName(); return; }
     const s = (window._taskData || {})[key] || {};
@@ -2094,6 +2118,8 @@ function buildUI() {
 }
 
 document.addEventListener("DOMContentLoaded",async()=>{
+  integrateGrounds(PHASES_DATA);
+  if (!COMMON_CATEGORIES.includes(GROUNDS_CATEGORY)) COMMON_CATEGORIES.push(GROUNDS_CATEGORY);
   document.getElementById("commentInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendComment();} });
   document.getElementById("chatInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendChat();} });
   if (currentUser) document.getElementById("userLabel").textContent=currentUser;
@@ -2114,6 +2140,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
   setSyncBar("⟳ Verbinde mit Firebase…");
   await ensureTentPlanData();
   await ensureFinalBudgetPlanData();
+  try { await ensureGroundsPlan({get,ref,update,db,dbPath}); }
+  catch(error) { console.error(error); alert('Gelände-Plan konnte nicht gespeichert werden. Bitte Verbindung prüfen und neu laden.'); }
   bindFirebase();
 });
 </script>
