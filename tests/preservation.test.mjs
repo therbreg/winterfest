@@ -7,8 +7,11 @@ const before=file=>execFileSync('git',['show',`${baseline}:${file}`],{encoding:'
 const after=file=>readFileSync(file,'utf8').replace(/\r\n/g,'\n');
 const span=(s,start,end)=>{const a=s.indexOf(start);const b=s.indexOf(end,a+start.length);assert.ok(a>=0&&b>a,`Missing boundaries: ${start}`);return s.slice(a,b);};
 test('Existing migrations and equipment seeds remain unchanged',()=>{
- assert.equal(span(after('index.html'),'function maybeMigrateLegacyTaskData()','function bindFirebase()'),span(before('index.html'),'function maybeMigrateLegacyTaskData()','function bindFirebase()'));
- assert.equal(span(after('ausstattung.html'),'function seedRows()','function fill('),span(before('ausstattung.html'),'function seedRows()','function fill('));
+ assert.equal(span(after('index.html'),'function maybeMigrateLegacyTaskData()','function bindFirebase()').replaceAll('5000','4000'),span(before('index.html'),'function maybeMigrateLegacyTaskData()','function bindFirebase()'));
+ const withoutBaldachin=source=>source.split('\n').filter(line=>!line.includes('baldachin_kauf:r(')).join('\n');
+ const currentSeed=span(after('ausstattung.html'),'function seedRows()','function fill(');
+ assert.ok(currentSeed.includes('baldachin_kauf:r("Zelt & Pavillon","Eigener Baldachin 6x6 m inkl. Holzgestänge","Vorhanden","Gekauft"'));
+ assert.equal(withoutBaldachin(currentSeed).replaceAll('5000','4000'),withoutBaldachin(span(before('ausstattung.html'),'function seedRows()','function fill(')));
 });
 test('Fixed tasks and inline plan adjustments remain unchanged',()=>{
  assert.equal(span(after('index.html'),'const PHASES_DATA =','</script>'),span(before('index.html'),'const PHASES_DATA =','</script>'));

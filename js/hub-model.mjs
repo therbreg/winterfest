@@ -1,6 +1,6 @@
 // Read-only projections. Existing Firebase keys and records remain authoritative.
 export const EVENT_DATE = '2027-05-29';
-export const CAP = 4000;
+export const CAP = 5000;
 export const completeAsset = row => ['Vorhanden', 'Gekauft', 'Erledigt'].includes(row.status);
 export const doneTask = row => row.done === true || row.status === 'done';
 export const records = data => Object.entries(data || {}).filter(([, row]) => row && typeof row === 'object').map(([key, row]) => ({...row, key}));

@@ -52,13 +52,23 @@ export const groundsTasks = [
     ['Mögliche Arbeiten',['Erneut ausgetriebene Brombeeren entfernen','Gezielt weitere Bereiche öffnen','Problematische Gehölze bearbeiten','Wege verbreitern','Eventflächen genauer vorbereiten']]],'prio-2'),
   task('spring','Frühjahrspflege','April / Mai 2027','Nur leichte Pflege',[
     ['Laufend bis zum Aufbau',['Gras mähen','Brombeertriebe kleinhalten','Laufwege freihalten','Stolperstellen beseitigen','Flächen für Aufbau vorbereiten','Kein erneuter großer Rodungseinsatz kurz vor dem Event']]],'prio-2'),
-  task('sanitary','Toilettenwagen für das Hauptevent prüfen','Bis zur Sanitärentscheidung für den 29.05.2027','Angebote prüfen · nicht gebucht',[
-    ['Anforderungen',['Damenbereich','Herrenbereich','Waschbecken / vernünftige Handwaschmöglichkeit','Möglichst autark oder praktikable Wasser-/Abwasserlösung','Angebote vergleichen; noch keine verbindliche Festlegung','Vorhandenes Dixi bleibt bis zur endgültigen Entscheidung bestehen']]],'prio-2')
+  task('sanitary','Endgültige Sanitärlösung für das Hauptevent festlegen','Bis zur Sanitärentscheidung für den 29.05.2027','MUSS · vergleichen und reservieren',[
+    ['Umsetzung',['Angebote vergleichen','Toilettenwagen beziehungsweise geeignete Lösung reservieren','Anlieferung und Abholung klären','Handwaschmöglichkeit sicherstellen','Beleuchtung und Verbrauchsmaterial organisieren','Vorhandenes Dixi bleibt nur für Arbeitseinsätze bestehen']]],'prio-1')
 ];
 
+const GROUNDS_PHASES = {
+  phase2:['tools','machines','transport','shopping','ppe','dixi','food','first_cut','saturday','sunday','measure','photos'],
+  phase3:['data','model','layout'],
+  phase4:['second_cut','sanitary'],
+  phase6:['spring']
+};
 export function integrateGrounds(phases) {
-  const phase = phases.find(p=>p.id==='phase2');
-  if (!phase.categories.some(c=>c.title==='GELÄNDE & GRÜNSCHNITT')) phase.categories.push({title:'GELÄNDE & GRÜNSCHNITT',tasks:groundsTasks});
+  for (const [phaseId, ids] of Object.entries(GROUNDS_PHASES)) {
+    const phase = phases.find(p=>p.id===phaseId);
+    if (!phase || phase.categories.some(c=>c.groundsPlan===true)) continue;
+    const freeIndex=phase.categories.findIndex(c=>c.title.includes('Freie Zusatzaufgaben'));
+    phase.categories.splice(freeIndex<0?phase.categories.length:freeIndex,0,{title:'🌿 Gelände & Grünschnitt',groundsPlan:true,tasks:ids.map(id=>groundsTasks.find(t=>t.id==='grounds_'+id)).filter(Boolean)});
+  }
 }
 export const groundsMilestones = [
   ['Oktober 2026',['first_cut']],
@@ -77,7 +87,7 @@ export const groundsAssets = {
   grounds_sanitary:cost('Hauptevent · Toilettenwagen (Option)',400,500,'Mieten','Angebote prüfen','Angebote anhand der Sanitär-Aufgabe vergleichen','29.05.2027 · nicht gebucht; keine verbindliche Festlegung. Vorhandenes Dixi bleibt bis zur Entscheidung bestehen.'),
   grounds_care:cost('Spätere Geländepflege',0,0,'Verbrauch','Später organisieren','Nach erstem Grünschnitt und 3D-Planung kalkulieren','Kosten noch offen; keine Kostenzusage.')
 };
-export const GROUNDS_VERSION = '2026-09-13-v1';
+export const GROUNDS_VERSION = '2026-09-14-v2';
 // Only missing records are added. A marker prevents deleted rows being reintroduced.
 export function groundsSeedPatch(existing, version) {
   if (version === GROUNDS_VERSION) return {};

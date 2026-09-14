@@ -227,3 +227,10 @@ button{cursor:pointer}
 #groundsBudgetFrame{margin-bottom:16px;overflow-wrap:anywhere}
 #groundsBudgetFrame p{margin-top:8px}
 .codex-agenda article>div{min-width:0}
+
+/* Project gates: the core event is secured before optional production. */
+.milestone-board{margin-bottom:1.5rem}.milestone-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.5rem}
+.milestone{border:1px solid var(--codex-line,#c9b98f);background:var(--parchment,#f0e8d6);padding:.7rem;text-align:left;color:inherit;cursor:pointer}
+.milestone time,.milestone span{display:block;font:600 .58rem/1.4 'JetBrains Mono',monospace;text-transform:uppercase;color:var(--ash)}
+.milestone strong{display:block;margin:.25rem 0;font-family:'Cinzel',serif;font-size:.72rem}.milestone.complete{border-color:var(--moss);background:#4a5c3a14}.milestone.complete span{color:var(--moss)}
+@media(max-width:900px){.milestone-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:560px){.milestone-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

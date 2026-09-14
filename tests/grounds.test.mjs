@@ -16,11 +16,11 @@ test('Budget counts single costs only, including optional sanitation; frames are
  assert.equal(cut.reduce((n,r)=>n+r.rangeMin,0),625);assert.equal(cut.reduce((n,r)=>n+r.rangeMax,0),855);
  assert.equal(groundsAssets.grounds_sanitary.status,'Angebote prüfen');
 });
-test('New tasks append without changing old categories, task keys or custom category indices',()=>{
- const old={id:'phase2',categories:[{title:'Bisher',tasks:[{id:'old',text:'Erhalten'}]},{title:'Freie Aufgaben',tasks:[]}]};
- const phases=[structuredClone(old)];integrateGrounds(phases);integrateGrounds(phases);
- assert.deepEqual(phases[0].categories.slice(0,2),old.categories);
- assert.equal(phases[0].categories.length,3);assert.equal(groundsTasks.length,18);
- assert.equal(new Set(groundsTasks.map(t=>t.id)).size,18);
- for(const t of groundsTasks){const ids=t.sections.flatMap(s=>s.items.map(i=>i.id));assert.equal(new Set(ids).size,ids.length);}
+test('Ground tasks are distributed by their actual dates without changing existing categories',()=>{
+ const phases=['phase2','phase3','phase4','phase6'].map(id=>({id,categories:[{title:'Bisher',tasks:[{id:`old_${id}`,text:'Erhalten'}]},{title:'Freie Aufgaben',tasks:[]}]}));
+ const before=structuredClone(phases);integrateGrounds(phases);integrateGrounds(phases);
+ phases.forEach((phase,index)=>assert.deepEqual(phase.categories.slice(0,2),before[index].categories));
+ assert.deepEqual(phases.map(p=>p.categories.find(c=>c.groundsPlan).tasks.length),[12,3,2,1]);
+ assert.equal(groundsTasks.length,18);assert.equal(new Set(groundsTasks.map(t=>t.id)).size,18);
+ for(const task of groundsTasks){const ids=task.sections.flatMap(section=>section.items.map(item=>item.id));assert.equal(new Set(ids).size,ids.length);}
 });

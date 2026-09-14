@@ -18,6 +18,7 @@
 <script type="module">
 import { initHub, renderOverview } from "./js/hub-ui.mjs";
 import { activeAssets as selectActiveAssets } from "./js/hub-model.mjs";
+import {replaceEventPlan} from "./js/event-plan.mjs";
 import {integrateGrounds, ensureGroundsPlan, GROUNDS_CATEGORY, GROUNDS_FRAME, FIRST_CUT_RESERVE, firstCutRange} from "./js/grounds-plan.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -94,11 +95,24 @@ const dateStr = v => v ? new Date(v + "T12:00:00").toLocaleDateString("de-DE",{d
 const taskKey = (phaseId,ci,ti) => `${phaseId}_c${ci}_t${ti}`;
 window._baseTaskContexts = {};
 const LEGACY_TASK_MIGRATIONS = {"phase1_c0_t7":"plan2_gelaende_fotos","phase1_c1_t1":"plan2_budgetrahmen","phase1_c1_t2":"plan2_budgetstruktur","phase2_c1_t0":"plan2_wetterschutz_inventur","phase2_c1_t3":"plan2_planen_aufbauvariante","phase2_c1_t4":"plan2_befestigungspunkte","phase2_c2_t2":"plan2_bogenbedarf","phase2_c2_t1":"plan2_axtbedarf","phase3_c1_t0":"plan2_essenskonzept","phase4_c1_t0":"plan2_einladung","phase4_c1_t1":"plan2_einladungsinhalt","phase5_c2_t1":"plan2_uebernachtung_fahrt","phase4_c0_t5":"plan2_kabelinventur","phase5_c2_t0":"plan2_rsvp_auswerten","phase5_c2_t2":"plan2_helferrollen","phase5_c0_t0":"plan2_test_grillfleisch","phase5_c0_t1":"plan2_test_bratwurst","phase5_c0_t2":"plan2_test_kesselgericht","phase5_c1_t0":"plan2_test_bogenschießen","phase5_c1_t1":"plan2_test_axtwerfen","phase5_c1_t2":"plan2_test_metkrug","phase5_c1_t3":"plan2_test_punktesystem","phase6_c0_t0":"plan2_gelaendebegehung","phase6_c0_t1":"plan2_lageplan_final","phase6_c1_t2":"plan2_sicherheitsplan","phase5_c0_t3":"plan2_beilagen_final","phase5_c0_t4":"plan2_prep_zeitplan","phase6_c2_t1":"plan2_wettkampfmaterial_vollständig","phase6_c1_t0":"plan2_ablaufplan","phase6_c1_t4":"plan2_notfallkontakte","phase6_c2_t0":"plan2_deko_fehlteile","phase4_c0_t6":"plan2_erste_hilfe","phase4_c0_t7":"plan2_loeschmittel","phase6_c2_t2":"plan2_kueche_geschirr","phase6_c2_t3":"plan2_schilder","phase7_c0_t0":"plan2_gelaende_maehen","phase6_c0_t3":"plan2_rampe_sichern","phase6_c1_t1":"plan2_ablauf_verteilen","phase7_c0_t3":"plan2_wetter_pruefen","phase5_c0_t5":"plan2_finale_einkaufsliste","phase7_c0_t1":"plan2_getraenke_einkauf","phase7_c0_t2":"plan2_lebensmittel_einkauf","phase2_c0_t3":"plan2_toilettenmaterial","phase8_c0_t1":"plan2_trinkwasser","phase7_c1_t0":"plan2_dixie_positionieren","phase7_c1_t1":"plan2_wetterschutz_aufbauen","phase7_c1_t2":"plan2_rampe_beleuchtung","phase7_c1_t3":"plan2_strom_verlegen","phase7_c1_t4":"plan2_wettkampfbereiche_markieren","phase7_c1_t5":"plan2_deko_aufhaengen","phase7_c1_t6":"plan2_kueche_aufbauen","phase7_c1_t7":"plan2_getraenkestation","phase7_c1_t8":"plan2_sicherheitscheck_aufbau","phase7_c1_t10":"plan2_spendenkasse","phase7_c2_t0":"plan2_grill_marinieren","phase7_c2_t1":"plan2_kessel_vorbereiten","phase7_c2_t2":"plan2_beilagen_vorbereiten","phase8_c0_t0":"plan2_event_strom","phase8_c0_t2":"plan2_event_dixie","phase8_c0_t3":"plan2_event_erstehilfe","phase8_c0_t4":"plan2_event_loeschmittel","phase8_c0_t5":"plan2_event_aufsicht","phase8_c0_t6":"plan2_event_punkteliste","phase8_c0_t7":"plan2_event_rampe","phase8_c0_t8":"plan2_event_musik","phase8_c0_t9":"plan2_event_begruessung","phase8_c1_t0":"plan2_abbau_dixie","phase8_c1_t1":"plan2_abbau_muell","phase8_c1_t2":"plan2_abbau_material","phase8_c1_t3":"plan2_abbau_endkontrolle","phase8_c1_t4":"plan2_abbau_uebergabe"};
+Object.assign(LEGACY_TASK_MIGRATIONS, {
+  "oct_gruenschnitt":"grounds_first_cut", "oct_gelaende_fotos":"grounds_photos",
+  "plan2_gelaendebegehung":"grounds_second_cut", "plan2_gelaende_maehen":"grounds_spring",
+  "now_baldachin_preisbeobachtung":"plan2_wetterschutz_inventur", "oct_suchagenten_start":"plan2_wetterschutz_inventur",
+  "oct_gebrauchtmarkt":"plan2_wetterschutz_inventur", "oct_wetterschutzentscheidung":"now_baldachin_lager_transport",
+  "jan_wetterschutz_kaufen":"plan2_wetterschutz_inventur", "jan_baldachin_neupreis":"plan2_wetterschutz_inventur"
+});
+function applyLegacyAliases(tasks, comments) {
+  for (const [oldKey,newKey] of Object.entries(LEGACY_TASK_MIGRATIONS)) {
+    if (tasks?.[oldKey] && !tasks[newKey] && tasks[oldKey].deleted !== true) tasks[newKey]={...tasks[oldKey]};
+    if (comments?.[oldKey]) comments[newKey]={...(comments[oldKey]||{}),...(comments[newKey]||{})};
+  }
+}
 let legacyMigrationRunning = false;
 
 const validStatus = s => ["open","progress","blocked","done"].includes(s) ? s : "open";
 const statusLabel = s => ({open:"Offen", progress:"In Arbeit", blocked:"Blockiert", done:"Erledigt"})[validStatus(s)];
-const BUDGET_CAP = 4000;
+const BUDGET_CAP = 5000;
 const parseMoney = v => {
   const n = Number(String(v || "").replace(",",".").replace(/[^0-9.-]/g,""));
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
@@ -598,7 +612,7 @@ async function ensureFinalBudgetPlanData(){
 
     patch["assetMeta/finalBudgetPlanVersion"] = version;
     patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
-    patch["meta/budgetCap"] = 4000;
+    patch["meta/budgetCap"] = 5000;
     patch["meta/budgetPlanTarget"] = 2964;
 
     await update(ref(db, dbPath("")), patch);
@@ -746,13 +760,13 @@ async function migrateCurrentProcurementPlan(){
     const decisionKey=findKey(decisions,row=>norm(row.title).includes("zeltkonzept"))||"system_zeltkonzept_20260817";
     patch[`decisions/${decisionKey}/title`]="Zeltkonzept final";
     patch[`decisions/${decisionKey}/text`]="Gewählte Lösung: eigener 6x6-m-Baldachin inklusive Holzgestänge für 600 EUR plus 50 EUR Spritgeld, kombiniert mit dem vorhandenen 3x6-m-Pavillon. Vor Übernahme Termin, Vollständigkeit, Zustand und Setumfang prüfen. Pavillon mit Schabracken, Jute, Sisalseilen und DIY-Bannern verkleiden. Other Ages bleibt unabhängig davon erhalten.";
-    patch["meta/budgetCap"]=4000;
+    patch["meta/budgetCap"]=5000;
     patch["assetMeta/currentProcurementPlanVersion"]=version;
     patch["assetMeta/currentProcurementPlanUpdatedAt"]=now;
     await update(ref(db,dbPath("")),patch);
     const migratedAssets=(await get(ref(db,dbPath("assets")))).val()||{};
     const activePlan=Object.values(migratedAssets).filter(row=>row?.status!=="Fallback").reduce((sum,row)=>sum+Number(row?.planned||0),0);
-    await update(ref(db,dbPath("meta")),{budgetCap:4000,budgetPlanTarget:Math.round(activePlan*100)/100,budgetPlanCalculatedAt:Date.now()});
+    await update(ref(db,dbPath("meta")),{budgetCap:5000,budgetPlanTarget:Math.round(activePlan*100)/100,budgetPlanCalculatedAt:Date.now()});
   }catch(error){const detail=error?.code||error?.message||String(error);console.error("Aktuelle Beschaffungsplan-Migration fehlgeschlagen",error);setSyncBar("✕ Beschaffungsplan-Migration fehlgeschlagen: "+detail,"err");}
 }
 
@@ -934,6 +948,7 @@ async function ensureDecorationPlanData() {
 function bindFirebase() {
   bindValue("tasks", data => {
     window._taskData = data;
+    applyLegacyAliases(window._taskData, window._allComments);
     window._tasksLoaded = true;
     maybeMigrateLegacyTaskData();
     buildUI();
@@ -943,6 +958,7 @@ function bindFirebase() {
   });
   bindValue("comments", data => {
     window._allComments = data;
+    applyLegacyAliases(window._taskData, window._allComments);
     window._commentsLoaded = true;
     maybeMigrateLegacyTaskData();
     updateCommentIndicators();
@@ -1194,7 +1210,7 @@ function renderBudget(data) {
     <span>Offen/ungeklärt: <strong>${fmtMoney(openActual)}</strong></span>
     <span>ohne Ist-Kosten: <strong>${withoutActual}</strong></span>
     <span>Obergrenze: <strong>${fmtMoney(BUDGET_CAP)}</strong></span>
-    <span>Puffer bis 4.000: <strong>${fmtMoney(budgetBuffer)}</strong></span>
+    <span>Reserve bis 5.000: <strong>${fmtMoney(budgetBuffer)}</strong></span>
     <span>Summenquelle: <strong>Ausstattung &amp; Beschaffung</strong></span>
     ${categoryRows.length ? `<span class="budget-cat-summary">${categoryRows.map(([c,v])=>`${esc(c)}: ${fmtMoney(v.planned)}`).join(" · ")}</span>` : ""}`;
   list.innerHTML = items.length ? items.map(i=>{
@@ -1237,7 +1253,7 @@ function renderShopping(data) {
   const list = document.getElementById("shoppingList");
   const stats = document.getElementById("shoppingStats");
   if (!list) return;
-  const items = Object.entries(data || {}).filter(([,value])=>{const text=String(value?.item||"").toLowerCase();return !value?.archived&&!text.includes("vendera")&&!(text.includes("mittelalter-zelt")&&text.includes("baldachin"));}).map(([key,value])=>({key,...value})).sort((a,b)=>(a.bought===true)-(b.bought===true)||(b.ts||0)-(a.ts||0));
+  const items = Object.entries(data || {}).filter(([,value])=>{const text=String(value?.item||"").toLowerCase();return !value?.archived&&!text.includes("baldachin")&&!text.includes("vendera");}).map(([key,value])=>({key,...value})).sort((a,b)=>(a.bought===true)-(b.bought===true)||(b.ts||0)-(a.ts||0));
   const bought = items.filter(i=>i.bought).length;
   if (stats) stats.innerHTML = `<span>${bought} / ${items.length} gekauft</span>`;
   list.innerHTML = items.length ? items.map(i=>`<article class="mini-card ${i.bought?"done-card":""}">
@@ -1302,7 +1318,7 @@ function renderTentLeads(data) {
   const list = document.getElementById("tentLeadsList");
   const stats = document.getElementById("tentLeadsStats");
   if (!list) return;
-  const items = Object.entries(data || {}).filter(([,value])=>{const text=String(value?.name||"").toLowerCase();return !value?.archived&&!text.includes("vendera")&&!(text.includes("mittelalter-zelt")&&text.includes("baldachin"));}).map(([key,value])=>({key,...value}))
+  const items = Object.entries(data || {}).filter(([,value])=>{const text=String(value?.name||"").toLowerCase();return !value?.archived&&!text.includes("baldachin")&&!text.includes("vendera");}).map(([key,value])=>({key,...value}))
     .sort((a,b)=>(b.pinned===true)-(a.pinned===true) || (TENT_STATUS_ORDER[a.status] ?? 99) - (TENT_STATUS_ORDER[b.status] ?? 99) || String(a.followUp || "9999-12-31").localeCompare(String(b.followUp || "9999-12-31")) || (b.ts || 0)-(a.ts || 0));
   const statusCounts = items.reduce((acc,i)=>{ const s=i.status||"Unklar"; acc[s]=(acc[s]||0)+1; return acc; },{});
   if (stats) stats.innerHTML = `
@@ -2017,7 +2033,7 @@ window.APP = {
 
 function buildUI() {
   const container = document.getElementById("mainContainer");
-  const prioLabel = {"prio-1":"Kritisch","prio-2":"Wichtig","prio-3":"Optional"};
+  const prioLabel = {"prio-1":"MUSS","prio-2":"SOLL","prio-3":"BONUS"};
   if (!container) return;
   container.innerHTML = "";
   window._baseTaskContexts = {};
@@ -2118,6 +2134,7 @@ function buildUI() {
 }
 
 document.addEventListener("DOMContentLoaded",async()=>{
+  replaceEventPlan(PHASES_DATA);
   integrateGrounds(PHASES_DATA);
   if (!COMMON_CATEGORIES.includes(GROUNDS_CATEGORY)) COMMON_CATEGORIES.push(GROUNDS_CATEGORY);
   document.getElementById("commentInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendComment();} });
@@ -2641,7 +2658,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
     <div class="hub-form task-add-form">
       <select id="newTaskPhase" onchange="refreshCustomTaskCategoryOptions()"></select>
       <select id="newTaskCategory"></select>
-      <select id="newTaskPrio"><option value="prio-1">Kritisch</option><option value="prio-2" selected>Wichtig</option><option value="prio-3">Optional</option></select>
+      <select id="newTaskPrio"><option value="prio-1">MUSS</option><option value="prio-2" selected>SOLL</option><option value="prio-3">BONUS</option></select>
       <input id="newTaskTag" type="text" maxlength="40" placeholder="Tag, z.B. Strom">
       <textarea id="newTaskText" maxlength="220" placeholder="Neue Aufgabe, z.B. Prüfen, ob genug Kabeltrommeln vorhanden sind"></textarea>
       <div class="task-add-small">

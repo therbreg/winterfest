@@ -10,7 +10,7 @@ test('Joins fixed and custom tasks without counting migration markers or deleted
  assert.equal(JSON.stringify(state),before);
 });
 test('Asset budget excludes fallback and archives, keeps optional, never adds budget copies',()=>{
- assert.deepEqual(budgetSummary({one:{planned:650,actual:600,budgetKey:'copy'},fallback:{planned:900,actual:100,status:'Fallback'},archived:{planned:100,archived:true},optional:{planned:50,status:'Optional'},open:{planned:0,type:'Kaufen'}}),{planned:700,actual:600,buffer:3300,remaining:100,unpriced:1});
+ assert.deepEqual(budgetSummary({one:{planned:650,actual:600,budgetKey:'copy'},fallback:{planned:900,actual:100,status:'Fallback'},archived:{planned:100,archived:true},optional:{planned:50,status:'Optional'},open:{planned:0,type:'Kaufen'}}),{planned:700,actual:600,buffer:4300,remaining:100,unpriced:1});
 });
 test('Legacy done=true overrides old status for deadlines and recent completions',()=>{
  const result=overview(phases,{tasks:{fixed:{done:true,status:'open',due:'2026-01-01',at:3},removed:{deleted:true}},customTasks:{},assets:{},pins:{}},'2026-09-06');

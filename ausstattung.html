@@ -77,7 +77,7 @@
     <div class="toolbar"><input id="search" class="search" type="search" placeholder="Suchen, z.B. Baldachin, Pavillon, Other Ages"><select id="filterArea"><option value="">Alle Bereiche</option></select><select id="filterStatus"><option value="">Alle Status</option></select><select id="filterType"><option value="">Alle Typen</option></select><button id="reset" class="btn secondary" type="button">Filter löschen</button></div>
     <details class="addbox" id="addbox"><summary>Neuen Posten hinzufügen</summary><div class="addgrid"><input id="nItem" class="span2" maxlength="100" placeholder="Gegenstand / Aufgabe"><select id="nArea"></select><select id="nType"></select><select id="nStatus"></select><input id="nSource" maxlength="100" placeholder="Quelle / Anbieter"><input id="nQty" maxlength="60" placeholder="Menge"><input id="nPlanned" type="number" min="0" step="0.01" placeholder="Planpreis EUR"><input id="nActual" type="number" min="0" step="0.01" placeholder="Ist-Kosten EUR"><input id="nDue" type="date"><input id="nNext" class="span2" maxlength="180" placeholder="Nächster Schritt"><textarea id="nNote" class="span4" maxlength="700" placeholder="Notiz, Maße, Transport, Abhängigkeiten"></textarea><div class="actions-row"><button id="add" class="btn" type="button">Posten hinzufügen</button></div></div></details>
     <div id="groups"></div>
-    <p class="footnote"><strong>Zeltkonzept:</strong> Nahezu abschließend gewählt sind der eigene 6x6-m-Baldachin inklusive Holzgestänge für 600 EUR plus 50 EUR Spritgeld sowie der vorhandene 3x6-m-Pavillon als zweiter überdachter Bereich. Vor der Übernahme werden Termin, Vollständigkeit und Zustand verbindlich geprüft. Other Ages bleibt davon unabhängig auf "Später bestätigen" für Frühjahr 2027.</p>
+    <p class="footnote"><strong>Zeltkonzept:</strong> Bereits gekauft sind der eigene 6x6-m-Baldachin inklusive Holzgestänge für 600 EUR plus 50 EUR Spritgeld sowie der vorhandene 3x6-m-Pavillon als zweiter überdachter Bereich. Vor der Übernahme werden Termin, Vollständigkeit und Zustand verbindlich geprüft. Other Ages bleibt davon unabhängig auf "Später bestätigen" für Frühjahr 2027.</p>
   </main>
 </div>
 <script type="module">
@@ -113,7 +113,7 @@ const AREAS=[GROUNDS_CATEGORY,"Zelt & Pavillon","Other Ages","Toilette","Geländ
 const TYPES=["Vorhanden","Kaufen","Mieten","DIY","Leihen","Beauftragen","Verbrauch","Entscheidung"];
 const STATUSES=["Zu reservieren","Angebote prüfen","Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional"];
 const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Fallback","Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));
-const BUDGET_CAP=4000;
+const BUDGET_CAP=5000;
 let assets={},budget={},shopping={};
 const esc=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const fmt=n=>Number(n||0).toLocaleString("de-DE",{style:"currency",currency:"EUR"});
@@ -126,7 +126,7 @@ function seedRows(){
   const now=Date.now();
   const r=(area,item,type,status,source="",qty="",planned=0,actual=0,next="",note="")=>({area,item,type,status,source,qty,planned,actual,next,note,due:"",seeded:true,ts:now,updatedAt:now,updatedBy:"Planstand 14.08.2026"});
   return {
-    baldachin_kauf:r("Zelt & Pavillon","Eigener Baldachin 6x6 m inkl. Holzgestänge","Kaufen","Gewählte Lösung","Privatkontakt / Abholung","1 vollständiges Set",650,0,"Abholtermin verbindlich bestätigen; vor Übernahme Vollständigkeit und Zustand prüfen und Setumfang dokumentieren; danach 600 EUR Kaufpreis und 50 EUR Spritgeld als Ist-Kosten erfassen","Nahezu abschließend gewählte Lösung. Planwert: 600 EUR Kaufpreis plus 50 EUR Spritgeld. Bis Bezahlung und Übergabe erfolgt sind, bleibt der Status 'Gewählte Lösung' und Ist 0 EUR."),
+    baldachin_kauf:r("Zelt & Pavillon","Eigener Baldachin 6x6 m inkl. Holzgestänge","Vorhanden","Gekauft","Privatkontakt / Abholung","1 vollständiges Set",650,650,"Abholtermin verbindlich bestätigen; vor Übernahme Vollständigkeit und Zustand prüfen und Setumfang dokumentieren; danach 600 EUR Kaufpreis und 50 EUR Spritgeld als Ist-Kosten erfassen","Nahezu abschließend gewählte Lösung. Planwert: 600 EUR Kaufpreis plus 50 EUR Spritgeld. Bis Bezahlung und Übergabe erfolgt sind, bleibt der Status 'Gewählte Lösung' und Ist 0 EUR."),
     pavillon:r("Zelt & Pavillon","Vorhandener Pavillon 3x6 m","Vorhanden","Vorhanden","Eigenbestand","1",0,0,"Mit Schabracken, Stoff/Jute, Sisalseil und Bannern verkleiden","Bleibt als zweiter überdachter Bereich neben dem eigenen 6x6-m-Baldachin."),
     regenregel:r("Zelt & Pavillon","Keine zusätzlichen Lagerplanen einplanen","Entscheidung","Erledigt","Planungsentscheidung","-",0,0,"Keine weitere Beschaffung","Bei ernsthaftem Regen wird das Event verschoben. Daher keine zusätzliche Stoffhaut oder aufwendige Schlechtwetterlösung für den Pavillon."),
     schabracken:r("Zelt & Pavillon","Schabracken für den vorhandenen Pavillon","Beauftragen","Zu beauftragen","Schneiderei","für 3x6 m Pavillon",0,0,"Maße und Höhe festlegen, Stoff auswählen, Schneiderei anfragen","Saubere lange Nähte; Bestandteil der endgültigen Lösung aus eigenem Baldachin plus vorhandenem Pavillon."),
@@ -841,7 +841,7 @@ async function migrateFinalBudgetPlan(){
 
     patch["assetMeta/finalBudgetPlanVersion"] = version;
     patch["assetMeta/finalBudgetPlanUpdatedAt"] = now;
-    patch["meta/budgetCap"] = 4000;
+    patch["meta/budgetCap"] = 5000;
     patch["meta/budgetPlanTarget"] = 2964;
 
     await update(ref(db, dbPath("")), patch);
@@ -988,13 +988,13 @@ async function migrateCurrentProcurementPlan(){
     const decisionKey=findKey(decisions,row=>norm(row.title).includes("zeltkonzept"))||"system_zeltkonzept_20260817";
     patch[`decisions/${decisionKey}/title`]="Zeltkonzept final";
     patch[`decisions/${decisionKey}/text`]="Gewählte Lösung: eigener 6x6-m-Baldachin inklusive Holzgestänge für 600 EUR plus 50 EUR Spritgeld, kombiniert mit dem vorhandenen 3x6-m-Pavillon. Vor Übernahme Termin, Vollständigkeit, Zustand und Setumfang prüfen. Pavillon mit Schabracken, Jute, Sisalseilen und DIY-Bannern verkleiden. Other Ages bleibt unabhängig davon erhalten.";
-    patch["meta/budgetCap"]=4000;
+    patch["meta/budgetCap"]=5000;
     patch["assetMeta/currentProcurementPlanVersion"]=version;
     patch["assetMeta/currentProcurementPlanUpdatedAt"]=now;
     await update(ref(db,dbPath("")),patch);
     const migratedAssets=(await get(ref(db,dbPath("assets")))).val()||{};
     const activePlan=Object.values(migratedAssets).filter(row=>row?.status!=="Fallback").reduce((sum,row)=>sum+Number(row?.planned||0),0);
-    await update(ref(db,dbPath("meta")),{budgetCap:4000,budgetPlanTarget:Math.round(activePlan*100)/100,budgetPlanCalculatedAt:Date.now()});
+    await update(ref(db,dbPath("meta")),{budgetCap:5000,budgetPlanTarget:Math.round(activePlan*100)/100,budgetPlanCalculatedAt:Date.now()});
   }catch(error){const detail=error?.code||error?.message||String(error);console.error("Aktuelle Beschaffungsplan-Migration fehlgeschlagen",error);sync("Beschaffungsplan-Migration fehlgeschlagen: "+detail,"err");}
 }
 
