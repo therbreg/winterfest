@@ -4,7 +4,8 @@ export const CAP = 5000;
 export const completeAsset = row => ['Vorhanden', 'Gekauft', 'Erledigt'].includes(row.status);
 export const doneTask = row => row.done === true || row.status === 'done';
 export const records = data => Object.entries(data || {}).filter(([, row]) => row && typeof row === 'object').map(([key, row]) => ({...row, key}));
-export const activeAssets = data => records(data).filter(row => !row.archived && row.status !== 'Fallback' && row.key !== 'spirit' && !/vendera|mittelalter-zelt.*baldachin/i.test([row.item, row.source].join(' ')));
+export const activeAssets = data => records(data).filter(row => !row.archived && row.status !== 'Fallback' && row.status !== 'Optional' && row.budgetClass !== 'optional' && row.key !== 'spirit' && !/vendera|mittelalter-zelt.*baldachin/i.test([row.item, row.source].join(' ')));
+export const optionalAssets = data => records(data).filter(row => !row.archived && (row.status === 'Optional' || row.budgetClass === 'optional'));
 export function budgetSummary(data) {
   const rows = activeAssets(data);
   const money = value => Number.isFinite(Number(value)) ? Number(value) : 0;

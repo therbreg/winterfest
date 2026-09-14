@@ -9,12 +9,12 @@ test('Grounds initialization preserves existing rows, is repeatable, and never r
  assert.equal(Object.keys(patch).length,6);
  assert.deepEqual(groundsSeedPatch({},GROUNDS_VERSION),{});
 });
-test('Budget counts single costs only, including optional sanitation; frames are not costs',()=>{
+test('Budget counts single necessary costs; frames are not costs',()=>{
  const summary=budgetSummary(groundsAssets);
  assert.equal(summary.planned,1355);assert.equal(summary.actual,0);assert.equal(summary.unpriced,1);
  const cut=Object.entries(groundsAssets).filter(([key])=>!['grounds_sanitary','grounds_care'].includes(key)).map(([,row])=>row);
  assert.equal(cut.reduce((n,r)=>n+r.rangeMin,0),625);assert.equal(cut.reduce((n,r)=>n+r.rangeMax,0),855);
- assert.equal(groundsAssets.grounds_sanitary.status,'Angebote prüfen');
+ assert.equal(groundsAssets.grounds_sanitary.status,'Zu reservieren');
 });
 test('Ground tasks are distributed by their actual dates without changing existing categories',()=>{
  const phases=['phase2','phase3','phase4','phase6'].map(id=>({id,categories:[{title:'Bisher',tasks:[{id:`old_${id}`,text:'Erhalten'}]},{title:'Freie Aufgaben',tasks:[]}]}));

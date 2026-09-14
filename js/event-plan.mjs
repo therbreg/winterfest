@@ -1,12 +1,12 @@
 // Canonical planning revision. Task state and comments remain in Firebase under stable ids.
-const t=(id,prio,text)=>({id,prio,text});
+const t=(id,prio,text,meta={})=>({id,prio,text,status:'offen',...meta});
 const c=(title,tasks)=>({title,tasks});
 const p=(id,title,subtitle,categories,timeline=[])=>({id,label:id==='phase8'?'29. Mai 2027':id.replace('phase','Phase '),title,subtitle,categories:[...categories,c('➕ Freie Zusatzaufgaben',[])],timeline});
 export const projectMilestones=[['milestone_site_exposed','31.10.2026','Gelände freigelegt'],['plan2_lageplan_final','28.02.2027','Layout Freeze'],['milestone_concept_freeze','31.03.2027','Konzept Freeze'],['milestone_production_complete','09.05.2027','Production Complete'],['milestone_site_ready','23.05.2027','Site Ready'],['milestone_build_complete','28.05.2027','Build Complete']].map(([id,date,title])=>({id,date,title}));
 export const EVENT_PHASES=[
 p('phase1','Bestand & Richtung','September 2026',[
- c('🔴 MUSS · Kernplanung',[t('plan2_budgetrahmen','prio-1','5.000 EUR als Obergrenze, nicht als Ausgabenziel, festhalten'),t('plan2_budgetstruktur','prio-1','Budget in bereits ausgegeben, geplant, Reserve und Prognose gliedern'),t('now_dixie_zustand','prio-1','Vorhandenes Dixi für Arbeitseinsätze prüfen; nicht als finale Event-Sanitärlösung voraussetzen'),t('plan2_wetterschutz_inventur','prio-1','Gekauften 6 × 6 m Baldachin und vorhandenen 3 × 6 m Pavillon vollständig prüfen')]),
- c('🟠 SOLL · Deko',[t('deko_sep_bestand','prio-2','Deko-, Licht- und Schilderbestand dokumentieren und Stilrichtung festlegen'),t('deko_sep_prototyp','prio-2','Höchstens eine Musterkombination aus Banner, Wimpel und Stoff testen; keine Großproduktion')])
+ c('🔴 MUSS · Kernplanung',[t('plan2_budgetrahmen','prio-1','5.000 EUR als Obergrenze, nicht als Ausgabenziel, festhalten'),t('plan2_budgetstruktur','prio-1','Budget in bereits ausgegeben, geplant, Reserve und Prognose gliedern'),t('now_dixie_zustand','prio-1','Vorhandenes Dixi für Arbeitseinsätze prüfen; nicht als finale Event-Sanitärlösung voraussetzen'),t('plan2_wetterschutz_inventur','prio-1','Baldachin, Pavillon, drei Kühlboxen, 14-Liter-Kessel, Schwenkgrill, acht LED-Laternen, Bretter, Werkzeuge, Kanister sowie Strom- und Kabelbestand inventarisieren',{area:'Inventur',due:'2026-10-31',dependencies:[],note:'Vorhandene Stückzahlen, Zustand und konkrete Fehlmengen dokumentieren.'})]),
+ c('🟠 SOLL · Deko',[t('deko_sep_bestand','prio-2','Deko-, Licht- und Schilderbestand einschließlich vorhandener Stoffe, Juteschnüre sowie Materialien für Wimpelketten und Banner dokumentieren',{area:'Deko',due:'2026-10-31',budgetKey:'banner_wimpel',dependencies:['plan2_wetterschutz_inventur'],note:'Fehlmengen erst nach der Bestandsaufnahme kaufen.'}),t('deko_sep_prototyp','prio-2','Höchstens eine Musterkombination aus Banner, Wimpel und Stoff testen; keine Großproduktion')])
 ]),
 p('phase2','Gelände freilegen','Oktober 2026',[
  c('🔴 MUSS · Ergebnis',[t('milestone_site_exposed','prio-1','MEILENSTEIN · Gelände freigelegt: Hauptfläche begehbar, zentrale Flächen und Wege offen, Vermessung und Fotos möglich'),t('now_baldachin_lager_transport','prio-1','Transport und trockene Lagerung des bereits gekauften Baldachins klären')])
@@ -24,7 +24,7 @@ p('phase4','Layout Freeze & Beschaffung','Februar – März 2027',[
  c('🟢 BONUS',[t('clay_oven_go_no_go','prio-3','Anfang April Lehmofen nur bei Zeit, Helfern, Material und Trocknungswetter freigeben; sonst streichen')])
 ]),
 p('phase5','Produzieren & testen','April 2027',[
- c('🔴 MUSS · Infrastruktur',[t('apr_planen_testaufbau','prio-1','Baldachin und Pavillon vollständig probeaufbauen, abspannen und prüfen'),t('apr_transportprobe','prio-1','Transport, Packlogik und Aufbaufolge testen'),t('plan2_erste_hilfe','prio-1','Erste-Hilfe-Ausstattung prüfen und ergänzen'),t('plan2_loeschmittel','prio-1','Geeignete Löschmittel organisieren'),t('waste_transport_plan','prio-1','Müllentsorgung, Fahrzeuge, Materialtransport sowie Auf- und Abbauhelfer planen')]),
+ c('🔴 MUSS · Infrastruktur',[t('apr_planen_testaufbau','prio-1','Baldachin und Pavillon vollständig probeaufbauen, abspannen und prüfen'),t('apr_transportprobe','prio-1','Transport, Packlogik und Aufbaufolge testen'),t('waste_transport_plan','prio-1','Müllentsorgung, Fahrzeuge, Materialtransport sowie Auf- und Abbauhelfer planen')]),
  c('🔴 MUSS · Versorgung',[t('apr_mengenplanung','prio-1','Mengen für Essen, Getränke, Trinkwasser und Reserve planen'),t('apr_kuecheninventur','prio-1','Kühlung, Kochstellen, Grill, Kessel, Arbeitsflächen, Geschirr und Serviermaterial prüfen'),t('plan2_prep_zeitplan','prio-1','Vorbereitungsplan für Vortag und Eventtag erstellen')]),
  c('🟠 SOLL · Produktion & Test',[t('entrance_build','prio-2','Modulares Tor bis Ende April bauen und probeaufbauen'),t('deko_april_production','prio-2','Banner, Wimpel, Schilder und nötige Deko montagefertig herstellen'),t('larp_full_test','prio-2','LARP mit mehreren Personen testen: Hauptquest, Questökonomie und problematische Aufgaben überarbeiten'),t('event_dramaturgy','prio-2','Dramaturgie aus Wettkämpfen, Karten, Quests, Essen, Siegerehrung, Ritual/Auktion und Abendprogramm zusammenführen'),t('music_tech_test','prio-2','PA, Licht, ausgewählte Liveelemente und Technikposition testen')]),
  c('🟢 BONUS · Ritual & Effekte',[t('ritual_project','prio-3','Ritualplatz: Standort, drei Monolithen und Altar festlegen, Materialtest machen, bauen und Stand-/Wetterfestigkeit prüfen'),t('fog_test','prio-3','Nebelmaschine nur bei sicherer, tatsächlich geplanter Nutzung testen')])
@@ -47,4 +47,74 @@ p('phase8','Eventtag & Abbau','Nur Versorgung, Restpunkte und Veranstaltung',[
  c('🔴 MUSS · Abbau',[t('plan2_abbau_muell','prio-1','Müll vollständig entfernen'),t('plan2_abbau_material','prio-1','Wetterschutz, Möbel, Küche, Technik und Material trocken verstauen'),t('plan2_abbau_endkontrolle','prio-1','Gelände auf Heringe, Kabel, Werkzeuge, Gefahren und Müll kontrollieren')])
 ],[['12:00','Ankunft'],['14:00–16:00','Wettkämpfe'],['16:00–17:30','Essen'],['17:30–19:00','Weitere Wettbewerbe und Questfinale'],['19:00–20:00','Siegerehrung, Ritual/Auktion'],['ab 20:00','Tavernenabend']].map(([time,text])=>({time,text})))
 ];
+
+const add=(phaseId,title,tasks)=>{
+ const phase=EVENT_PHASES.find(p=>p.id===phaseId),free=phase.categories.findIndex(c=>c.title.includes('Freie Zusatzaufgaben'));
+ phase.categories.splice(free<0?phase.categories.length:free,0,c(title,tasks));
+};
+const meta=(area,due,budgetKey,dependencies,note,status='offen')=>({area,due,budgetKey,dependencies,status,note});
+
+add('phase1','📦 Bestand, Anbieter & Transport',[
+ t('trailer_availability','prio-1','Anhänger und weitere Transportmöglichkeiten klären',meta('Logistik','2026-10-31','grounds_machines',[],'Eignung für Maschinen und Other-Ages-Mietmaterial prüfen.')),
+ t('toilet_trailer_terms','prio-1','Verfügbarkeit und Lieferbedingungen des Toilettenwagens prüfen',meta('Toilette','2026-10-31','grounds_sanitary',['now_dixie_zustand'],'Notwendige Event-Sanitärlösung.')),
+ t('other_ages_terms','prio-1','Mietbedingungen für Bankett-Sets, Weinkrüge, Festzeltgarnituren, Servierschüsseln und Jutedecken dokumentieren',meta('Other Ages','2026-10-31','oa_bankett',['trailer_availability'],'Abholung, Rückgabe, Kaution und Schäden klären.')),
+ t('friends_loans','prio-2','Offene Leihgaben im Freundeskreis abfragen',meta('Inventur','2026-10-31','',[],'Nur bestätigte Zusagen als vorhanden markieren.'))
+]);
+add('phase3','🧾 Reservieren & verbindlich klären',[
+ t('reserve_toilet_trailer','prio-1','Toilettenwagen reservieren',meta('Toilette','2027-01-29','grounds_sanitary',['toilet_trailer_terms'],'Lieferung, Standort und Abholung bestätigen.','geplant')),
+ t('reserve_other_ages','prio-1','Bankett-Sets, vier Weinkrüge, vier Festzeltgarnituren, zwei Servierschüsseln und vier Jutedecken vorreservieren',meta('Other Ages','2027-01-29','oa_bankett',['other_ages_terms'],'Notwendige Mietpositionen gemeinsam bestätigen.','geplant')),
+ t('confirm_other_ages_transport','prio-1','Selbstabholung und Rückgabe bei Other Ages verbindlich klären',meta('Logistik','2027-01-29','oa_transport',['reserve_other_ages','trailer_availability'],'Bankett-Koffer und Krüge transportsicher einplanen.')),
+ t('organize_grounds_work','prio-1','Grünschnitt, Maschinen, Transport und Kraftstoff konkret organisieren',meta('Gelände','2027-01-29','grounds_machines',['trailer_availability'],'Anhänger leihen oder Kostenoptionen vergleichen.')),
+ t('plan2_erste_hilfe','prio-1','Erste-Hilfe-Kasten prüfen und fehlendes Material beschaffen',meta('Sicherheit','2027-01-29','erstehilfe',['plan2_wetterschutz_inventur'],'Bestehende stabile Aufgabe; gut sichtbar und schnell erreichbar einplanen.')),
+ t('plan2_loeschmittel','prio-1','Feuerlöscher, Löschdecken und geeignete Löschmittel beschaffen',meta('Sicherheit','2027-01-29','brandschutz',['plan2_wetterschutz_inventur'],'Bestehende stabile Aufgabe; Feuer- und Kochstellen gemeinsam absichern.')),
+ t('decide_jute','prio-2','Miet-Jutedecken bestätigen oder optional Jute-Meterware wählen',meta('Other Ages','2027-01-29','oa_jute',['other_ages_terms'],'Meterware nur statt, nicht zusätzlich zur Mietlösung.'))
+]);
+add('phase5','🍲 Mengen, Einladungen & Bestellung',[
+ t('send_invitations_rsvp','prio-1','Einladungen verschicken und Rückmeldungen sammeln; um Spenden oder Mitgebrachtes bitten, aber nicht als Budgetentlastung rechnen',meta('Gäste','2027-03-29','',['plan2_einladung'],'Teilnehmerzahl und Zahl der Fleischesser aktualisieren.')),
+ t('finalize_stew_recipe','prio-1','Rezept und Mengen für den veganen herzhaften Eintopf im 14-Liter-Kessel festlegen',meta('Essen','2027-03-29','essen_gesamt',['send_invitations_rsvp'],'Kesselvolumen und Portionen prüfen.')),
+ t('finalize_grill_supplement','prio-1','Kartoffeln, vegane Würstchen/Alternativen und kleine Fleischmenge für 3–4 Personen festlegen',meta('Essen','2027-03-29','essen_gesamt',['send_invitations_rsvp'],'Fleisch getrennt behandeln.')),
+ t('finalize_drink_amounts','prio-1','Mengen für Bier, Wein, abgefülltes Wasser und alkoholfreie Getränke aktualisieren',meta('Getränke','2027-03-29','getraenke_gesamt',['send_invitations_rsvp'],'Separate Versorgung unter dem zweiten Pavillon.')),
+ t('order_potion_bottles','prio-1','20 kleine runde Heiltrankfläschchen mit Korkverschluss bestellen',meta('Alchemistenstation','2027-03-29','zauberflaschen',[],'Nur einzelne dekorative Etiketten.')),
+ t('test_drink_dispensers','prio-1','Zwei Getränkespender auf Bestand und Funktion prüfen',meta('Alchemistenstation','2027-03-29','alchemie',['plan2_wetterschutz_inventur'],'Je einer für Hibiskus- und Butterfly-Pea-Trank.')),
+ t('finalize_potion_ingredients','prio-2','Zutaten und Rezept für Hibiskus- und Butterfly-Pea-Getränke festlegen',meta('Alchemistenstation','2027-03-29','alchemie_zutaten',['test_drink_dispensers'],'Beide Getränke alkoholfrei.')),
+ t('add_consumables_to_list','prio-1','Holz-Einwegbesteck, Servietten, Küchenrolle und große Müllbeutel auf die Einkaufsliste setzen',meta('Verbrauchsmaterial','2027-03-29','verbrauchsmaterial',[],'Müllbeutel nur einmal kalkulieren.')),
+ t('complete_serving_inventory','prio-2','Fehlende Bretter, Schüsseln und Küchenhelfer beschaffen',meta('Geschirr','2027-03-29','holzbretter',['plan2_wetterschutz_inventur'],'Vorhandene Akazienbretter berücksichtigen.'))
+]);
+add('phase6','📦 Einkauf & Packlisten',[
+ t('final_food_drink_costing','prio-1','Lebensmittel und Getränke vier bis sechs Wochen vorher final kalkulieren',meta('Budget','2027-04-24','essen_gesamt',['finalize_stew_recipe','finalize_drink_amounts'],'Kernbudget gegen 5.000-EUR-Obergrenze prüfen.')),
+ t('buy_durable_supplies','prio-1','Haltbare Lebensmittel, Gewürze, Getränke und Verbrauchsmaterial einkaufen',meta('Einkauf','2027-04-24','essen_gesamt',['final_food_drink_costing'],'Frische Ware erst in der letzten Woche.')),
+ t('optional_decor_go_no_go','prio-3','Holzwanne, Strohballen und Jute-Meterware nur bei ausreichendem Restbudget freigeben',meta('Optionen','2027-04-24','holzwanne',['final_food_drink_costing'],'Alle drei Positionen bleiben optional und budgetabhängig.','optional')),
+ t('build_signage_banners','prio-1','Wimpelketten, Banner und Beschilderung bauen',meta('Deko','2027-04-24','banner_wimpel',['deko_sep_bestand'],'Montagefertig und nach Zone verpacken.')),
+ t('prepare_boundaries','prio-1','Pfosten, Befestigungen und Geländeabgrenzungen vorbereiten',meta('Gelände','2027-04-24','pfosten',['plan2_lageplan_final'],'Befestigungsmaterial direkt zuordnen.')),
+ t('test_lighting','prio-1','Funktionale Beleuchtung und acht LED-Laternen testen',meta('Beleuchtung','2027-04-24','beleuchtung',['plan2_lageplan_final'],'Sicherheitslicht und warme Atmosphäre getrennt prüfen.')),
+ t('buy_fire_supplies','prio-1','Feuerholz, Kohle und Anzünder beschaffen',meta('Essen & Feuer','2027-04-24','brennstoff',[],'Trocken lagern.')),
+ t('cooling_storage_plan','prio-1','Kühl- und Lagerkonzept mit drei vorhandenen Kühlboxen festlegen',meta('Logistik','2027-04-24','kuehlung',['plan2_wetterschutz_inventur','finalize_drink_amounts'],'Eis/Kühlmaterial bleibt optionale Zusatzposition.')),
+ t('organize_water','prio-1','Kanister und abgefülltes Trinkwasser organisieren',meta('Wasser','2027-04-24','wasserlogistik',['plan2_wetterschutz_inventur'],'Quellwasser nur für Reinigung und Handhygiene.')),
+ t('pack_by_station','prio-1','Material nach Stationen packen und beschriften',meta('Packliste','2027-05-23','',['plan2_wetterschutz_inventur'],'Zonen: Wetterschutz, Gelände, Küche, Buffet, Geschirr, Alchemie, Getränke, Kühlung, Wasser/Hygiene, Toilette, Sicherheit, Werkzeug, Deko, LARP und Rückgabe.','geplant')),
+  t('vehicle_load_plan','prio-1','Beladeplan pro Fahrzeug erstellen und Transportbehälter zuordnen',meta('Packliste','2027-05-23','oa_transport',['pack_by_station','trailer_availability'],'Sperriges und zerbrechliches Mietmaterial getrennt sichern.','geplant'))
+]);
+const packTask=EVENT_PHASES.flatMap(phase=>phase.categories).flatMap(category=>category.tasks).find(task=>task.id==='pack_by_station');
+Object.assign(packTask,{timing:'Spätestens 23. Mai 2027',hint:'Jede Kiste beschriften; Mietmaterial und Rückgabe getrennt kennzeichnen.',sections:[
+ {title:'Wetterschutz, Gelände & Deko',items:[['pack_canopy','6×6-m-Baldachin, Pavillon, Abspannungen und Heringe'],['pack_boundary','Pfosten, sichtbare Abgrenzung, Schilder und Befestigungsmaterial'],['pack_decor','Wimpelketten, Banner, acht LED-Laternen und zusätzliche Beleuchtung']]},
+ {title:'Küche, Buffet & Geschirr',items:[['pack_cooking','14-Liter-Kessel, Schwenkgrill, Werkzeuge, Feuerholz, Kohle und Anzünder'],['pack_banquet','Fünf Bankett-Koffer, vier Weinkrüge, zwei Servierschüsseln und vier Festzeltgarnituren'],['pack_serving','Akazien-/Holzbretter, Holz-Einwegbesteck und vier Miet-Jutedecken']]},
+ {title:'Getränke, Kühlung & Wasser',items:[['pack_alchemy','Zwei Getränkespender, 20 Korkfläschchen und Zutaten für Hibiskus- und Butterfly-Pea-Trank'],['pack_drinks','Bier, Wein, abgefülltes Trinkwasser und weitere alkoholfreie Getränke getrennt packen'],['pack_cooling','Drei vorhandene Kühlboxen, Behälter und nur bei Bedarf Eis/Kühlmaterial'],['pack_water','Kanister für Reinigung und Handhygiene; Quellwasser klar als Nicht-Trinkwasser markieren']]},
+ {title:'Sanitär, Sicherheit & Verbrauch',items:[['pack_dixi','Dixi-Reinigungsmaterial, Seife und Desinfektion'],['pack_safety','Feuerlöscher, Löschdecken, Wassereimer und Erste-Hilfe-Material'],['pack_consumables','Servietten, Küchenrolle und große Müllbeutel ohne Doppelposten']]},
+ {title:'Optional & Rückgabe',items:[['pack_optional','Holzwanne, Strohballen oder Jute-Meterware nur nach Budgetfreigabe'],['pack_returns','Leere Rückgabekisten, Schutzmaterial, Mietliste und Schadensdokumentation']]}
+ ].map(section=>({...section,items:section.items.map(([id,text])=>({id,text}))}))});
+add('phase7','🥬 Letzte Woche & Mietabholung',[
+ t('buy_fresh_food','prio-1','Frische Lebensmittel und Obst einkaufen',meta('Essen','2027-05-26','essen_gesamt',['final_food_drink_costing'],'Kühlkette einhalten.')),
+ t('pre_cool_drinks','prio-1','Getränke vorkühlen und benötigtes Eis/Kühlmaterial besorgen',meta('Getränke','2027-05-27','kuehlung',['cooling_storage_plan'],'Optionales Kühlmaterial nur nach tatsächlichem Bedarf.')),
+ t('prepare_potions','prio-1','Heiltrank- und Manatrank-Zutaten vorbereiten',meta('Alchemistenstation','2027-05-28','alchemie_zutaten',['finalize_potion_ingredients'],'Hibiskus rot, Butterfly Pea blau.')),
+ t('collect_other_ages','prio-1','Geschirr, Weinkrüge, Servierschüsseln und Festzeltgarnituren abholen',meta('Other Ages','2027-05-28','oa_transport',['confirm_other_ages_transport'],'Mietmaterial direkt dokumentieren.')),
+ t('check_banquet_cases','prio-1','Bankett-Koffer auf Vollständigkeit und Schäden prüfen',meta('Other Ages','2027-05-28','oa_bankett',['collect_other_ages'],'Pro Set 6 Teller, 6 Becher, 6 Suppenschalen und 6 Schnapsbecher.')),
+ t('confirm_toilet_delivery','prio-1','Toilettenwagen-Lieferung und Standort bestätigen',meta('Toilette','2027-05-26','grounds_sanitary',['reserve_toilet_trailer','plan2_lageplan_final'],'Zufahrt und Handhygiene prüfen.')),
+ t('update_setup_map','prio-1','Lage- und Aufbauplan mit allen Stationen aktualisieren',meta('Aufbau','2027-05-26','',['plan2_lageplan_final'],'Getränke- und Alchemistenstation getrennt eintragen.'))
+]);
+add('phase8','📦 Stationsaufbau & Rückgabe',[
+ t('setup_cooling_drinks','prio-1','Kühlboxen und gegebenenfalls optionale Holzwanne aufbauen',meta('Getränke','2027-05-29','holzwanne',['cooling_storage_plan'],'Kühlboxen bleiben die eigentliche Kühlung.')),
+ t('setup_separate_drink_stations','prio-1','Getränkeversorgung und Alchemistenstation getrennt einrichten',meta('Getränke','2027-05-29','getraenke_gesamt',['setup_cooling_drinks'],'Alkohol nicht der Alchemistenstation zurechnen.')),
+ t('setup_tableware','prio-1','Bankett-Sets, Weinkrüge, Servierschüsseln, Holzbretter und Jutedecken verteilen',meta('Geschirr','2027-05-29','oa_bankett',['check_banquet_cases'],'Keine gemieteten Servierplatten.')),
+ t('setup_hygiene_waste','prio-1','Wasser, Seife, Desinfektion, Servietten und Müllbeutel sichtbar bereitstellen',meta('Hygiene','2027-05-29','verbrauchsmaterial',['organize_water'],'Müllmaterial zentral und an Stationen verteilen.')),
+ t('return_rentals','prio-1','Geschirr, Mietmaterial und Transport nach dem Fest vollständig kontrollieren und zurückgeben',meta('Rückgabe','2027-05-31','oa_transport',['setup_tableware'],'Schäden und Vollständigkeit vor Rückgabe dokumentieren.'))
+]);
 export function replaceEventPlan(target){target.splice(0,target.length,...structuredClone(EVENT_PHASES));}

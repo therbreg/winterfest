@@ -84,7 +84,7 @@ export const groundsAssets = {
   grounds_shopping:cost('Grünschnitt · Baumarkt / PSA / Verbrauchsmaterial',100,180,'Verbrauch','Zu kaufen','Checkliste Baumarkt-Einkauf abarbeiten','Mit zusätzlicher hochwertiger Arbeitskleidung maximal ca. 200 €. Dixi-Material separat; vorhandene Werkzeuge nicht als Neukauf kalkuliert.'),
   grounds_dixi:cost('Grünschnitt · Dixi-Reinigung',15,25,'Verbrauch','Zu kaufen','Vorhandenes Dixi reinigen','Reinigungsmaterial und Handseife aus dem Baumarkt hier abrechnen, nicht zusätzlich im Baumarkt-Posten. Kein Auspumpen eingeplant, solange Kapazität und Hygiene ausreichen.'),
   grounds_food:cost('Grünschnitt · Helferverpflegung',70,100,'Verbrauch','Zu kaufen','Arbeitsverpflegung vorbereiten','Für 4–5 Personen; späteres Dankeschön-Essen getrennt.'),
-  grounds_sanitary:cost('Hauptevent · Toilettenwagen (Option)',400,500,'Mieten','Angebote prüfen','Angebote anhand der Sanitär-Aufgabe vergleichen','29.05.2027 · nicht gebucht; keine verbindliche Festlegung. Vorhandenes Dixi bleibt bis zur Entscheidung bestehen.'),
+  grounds_sanitary:cost('Hauptevent · Toilettenwagen',500,500,'Mieten','Zu reservieren','Verfügbarkeit und Lieferbedingungen prüfen; anschließend reservieren','Notwendige Sanitärposition für den 29.05.2027. Vorhandenes Dixi bleibt nur für Arbeitseinsätze bestehen.'),
   grounds_care:cost('Spätere Geländepflege',0,0,'Verbrauch','Später organisieren','Nach erstem Grünschnitt und 3D-Planung kalkulieren','Kosten noch offen; keine Kostenzusage.')
 };
 export const GROUNDS_VERSION = '2026-09-14-v2';

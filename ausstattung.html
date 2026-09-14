@@ -77,11 +77,14 @@
     <div class="toolbar"><input id="search" class="search" type="search" placeholder="Suchen, z.B. Baldachin, Pavillon, Other Ages"><select id="filterArea"><option value="">Alle Bereiche</option></select><select id="filterStatus"><option value="">Alle Status</option></select><select id="filterType"><option value="">Alle Typen</option></select><button id="reset" class="btn secondary" type="button">Filter löschen</button></div>
     <details class="addbox" id="addbox"><summary>Neuen Posten hinzufügen</summary><div class="addgrid"><input id="nItem" class="span2" maxlength="100" placeholder="Gegenstand / Aufgabe"><select id="nArea"></select><select id="nType"></select><select id="nStatus"></select><input id="nSource" maxlength="100" placeholder="Quelle / Anbieter"><input id="nQty" maxlength="60" placeholder="Menge"><input id="nPlanned" type="number" min="0" step="0.01" placeholder="Planpreis EUR"><input id="nActual" type="number" min="0" step="0.01" placeholder="Ist-Kosten EUR"><input id="nDue" type="date"><input id="nNext" class="span2" maxlength="180" placeholder="Nächster Schritt"><textarea id="nNote" class="span4" maxlength="700" placeholder="Notiz, Maße, Transport, Abhängigkeiten"></textarea><div class="actions-row"><button id="add" class="btn" type="button">Posten hinzufügen</button></div></div></details>
     <div id="groups"></div>
-    <p class="footnote"><strong>Zeltkonzept:</strong> Bereits gekauft sind der eigene 6x6-m-Baldachin inklusive Holzgestänge für 600 EUR plus 50 EUR Spritgeld sowie der vorhandene 3x6-m-Pavillon als zweiter überdachter Bereich. Vor der Übernahme werden Termin, Vollständigkeit und Zustand verbindlich geprüft. Other Ages bleibt davon unabhängig auf "Später bestätigen" für Frühjahr 2027.</p>
+    <p class="footnote"><strong>Budgetstand:</strong> Die Gesamtobergrenze beträgt 5.000 EUR. Der fachlich geschätzte Kernbudgetstand liegt derzeit bei etwa 3.900–3.950 EUR und schöpft den verfügbaren Rahmen damit weitgehend aus. Optionale Positionen werden separat berechnet und erst später bei ausreichendem Restbudget entschieden.</p>
+    <p class="footnote"><strong>Zeltkonzept:</strong> Der eigene 6×6-m-Baldachin inklusive Holzgestänge ist für 600 EUR gekauft und bildet den zentralen Atmosphärenpunkt. Es wird kein zusätzliches Spritgeld eingeplant. Der vorhandene 3×6-m-Pavillon dient als zweiter überdachter Bereich; weitere Baldachin-, Vorhang- oder Schabracken-Leihgaben sind keine notwendigen Kosten.</p>
   </main>
 </div>
 <script type="module">
 import { activeAssets as selectActiveAssets } from "./js/hub-model.mjs";
+import { optionalAssets as selectOptionalAssets } from "./js/hub-model.mjs";
+import { ensureCurrentProcurementPlan } from "./js/current-procurement-plan.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -111,7 +114,7 @@ const app=initializeApp(firebaseConfig),db=getDatabase(app),dbPath=sub=>`events/
 import {ensureGroundsPlan, GROUNDS_CATEGORY} from './js/grounds-plan.mjs';
 const AREAS=[GROUNDS_CATEGORY,"Zelt & Pavillon","Other Ages","Toilette","Gelände","Deko","Beleuchtung","Essen & Feuer","Getränke","Alchemistenstation","Wettkampf","Sicherheit","Logistik","Sonstiges"];
 const TYPES=["Vorhanden","Kaufen","Mieten","DIY","Leihen","Beauftragen","Verbrauch","Entscheidung"];
-const STATUSES=["Zu reservieren","Angebote prüfen","Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional"];
+const STATUSES=["Geplant","Zu reservieren","Angebote prüfen","Gewählte Lösung","Vorhanden","Gekauft","Erledigt","Angefragt","Warten auf Antwort","Später bestätigen","Zu kaufen","Zu basteln","Zu beauftragen","Offene Entscheidung","Später organisieren","Fallback","Optional","Verworfen"];
 const COMPLETE=new Set(["Vorhanden","Gekauft","Erledigt"]),WAIT=new Set(["Angefragt","Warten auf Antwort","Später bestätigen"]),OPTIONAL=new Set(["Fallback","Optional"]),ORDER=Object.fromEntries(STATUSES.map((s,i)=>[s,i]));
 const BUDGET_CAP=5000;
 let assets={},budget={},shopping={};
@@ -1217,6 +1220,7 @@ function render(){
   }));
 
   const activeRows=selectActiveAssets(assets);
+  const optionalRows=selectOptionalAssets(assets);
 
   const planned=activeRows.reduce(
     (sum,i)=>sum+num(i.planned),
@@ -1227,6 +1231,7 @@ function render(){
     (sum,i)=>sum+num(i.actual),
     0
   );
+  const optionalPlanned=optionalRows.reduce((sum,i)=>sum+num(i.planned),0);
 
   const budgetBuffer=BUDGET_CAP-planned;
 
@@ -1277,7 +1282,12 @@ function render(){
 
     <div class="stat">
       <strong>${fmt(planned)}</strong>
-      <span>Plan aktiv</span>
+      <span>Kernbudget geplant</span>
+    </div>
+
+    <div class="stat">
+      <strong>${fmt(optionalPlanned)}</strong>
+      <span>Optionen separat</span>
     </div>
 
     <div class="stat">
@@ -1516,6 +1526,7 @@ await migrateMissingEquipment();
 await migrateFinalBudgetPlan();
 await selfLink();
 await ensureGroundsPlan({get,ref,update,db,dbPath});
+await ensureCurrentProcurementPlan({get,ref,update,db,dbPath});
 }
 </script>
 </body>

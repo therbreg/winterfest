@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="Winterfest">
 <title>Das 30. Winterfest – Planung</title>
 <link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" type="image/png" href="./icons/app-icon-192.png">
-<link rel="apple-touch-icon" sizes="180x180" href="./icons/app-icon-180.png">
+<link rel="icon" type="image/png" href="./icons/app-icon-192-v2.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/app-icon-180-v2.png">
 <link rel="stylesheet" href="./pwa.css">
 <script src="./pwa.js" defer></script>
 
@@ -20,6 +20,7 @@ import { initHub, renderOverview } from "./js/hub-ui.mjs";
 import { activeAssets as selectActiveAssets } from "./js/hub-model.mjs";
 import {replaceEventPlan} from "./js/event-plan.mjs";
 import {integrateGrounds, ensureGroundsPlan, GROUNDS_CATEGORY, GROUNDS_FRAME, FIRST_CUT_RESERVE, firstCutRange} from "./js/grounds-plan.mjs";
+import {ensureCurrentProcurementPlan} from "./js/current-procurement-plan.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -1188,7 +1189,7 @@ function renderBudget(data) {
   if (!frame) { frame=document.createElement('article'); frame.id='groundsBudgetFrame'; frame.className='mini-card'; list.before(frame); }
   const groundsPlanned=grounds.reduce((s,i)=>s+Number(i.planned||0),0);
   const groundsActual=grounds.reduce((s,i)=>s+Number(i.actual||0),0);
-  frame.innerHTML=`<div><span class="doc-cat">${esc(GROUNDS_CATEGORY)}</span><h3>Budgetrahmen ${fmtMoney(GROUNDS_FRAME)}</h3><p>Geplante Einzelkosten: <strong>${fmtMoney(groundsPlanned)}</strong> · Tatsächlich ausgegeben: <strong>${fmtMoney(groundsActual)}</strong> · Verbleibender Planrahmen: <strong>${fmtMoney(GROUNDS_FRAME-groundsPlanned)}</strong></p><p>Ursprüngliche Grünschnitt-Spanne: ${fmtMoney(firstCutRange.min)}–${fmtMoney(firstCutRange.max)} · interne Reserve ${fmtMoney(FIRST_CUT_RESERVE)} (${fmtMoney(firstCutRange.max-FIRST_CUT_RESERVE)} unter dem oberen Planwert). Spätere Pflege noch offen.</p><p>Rahmen und interne Reserve sind keine zusätzlichen Ausgaben. Planwerte starten am oberen Ende der Spanne; Ist-Kosten erst nach Zahlung erfassen.</p></div>`;
+  frame.innerHTML=`<div><span class="doc-cat">${esc(GROUNDS_CATEGORY)} · Teilbudget</span><h3>Gelände-Orientierungsrahmen ${fmtMoney(GROUNDS_FRAME)}</h3><p><strong>Gesamtobergrenze des Festes: ${fmtMoney(BUDGET_CAP)}.</strong> Geplante Einzelkosten dieses Teilbereichs: <strong>${fmtMoney(groundsPlanned)}</strong> · Tatsächlich ausgegeben: <strong>${fmtMoney(groundsActual)}</strong> · Verbleibender Gelände-Rahmen: <strong>${fmtMoney(GROUNDS_FRAME-groundsPlanned)}</strong></p><p>Ursprüngliche Grünschnitt-Spanne: ${fmtMoney(firstCutRange.min)}–${fmtMoney(firstCutRange.max)} · interne Reserve ${fmtMoney(FIRST_CUT_RESERVE)} (${fmtMoney(firstCutRange.max-FIRST_CUT_RESERVE)} unter dem oberen Planwert). Spätere Pflege noch offen.</p><p>Der Gelände-Rahmen und seine interne Reserve sind keine zusätzlichen Ausgaben und keine zweite Gesamtobergrenze.</p></div>`;
   const items = Object.entries(data || {}).filter(([,value])=>{const text=[value?.title,value?.note].join(" ").toLowerCase();return !value?.archived&&!text.includes("vendera")&&!(text.includes("mittelalter")&&text.includes("zelt")&&text.includes("miet"));}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const assetItems = Object.entries(window._assets || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value}));
   const activeAssets = selectActiveAssets(window._assets);
@@ -1253,7 +1254,7 @@ function renderShopping(data) {
   const list = document.getElementById("shoppingList");
   const stats = document.getElementById("shoppingStats");
   if (!list) return;
-  const items = Object.entries(data || {}).filter(([,value])=>{const text=String(value?.item||"").toLowerCase();return !value?.archived&&!text.includes("baldachin")&&!text.includes("vendera");}).map(([key,value])=>({key,...value})).sort((a,b)=>(a.bought===true)-(b.bought===true)||(b.ts||0)-(a.ts||0));
+  const items = Object.entries(data || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value})).sort((a,b)=>(a.bought===true)-(b.bought===true)||(b.ts||0)-(a.ts||0));
   const bought = items.filter(i=>i.bought).length;
   if (stats) stats.innerHTML = `<span>${bought} / ${items.length} gekauft</span>`;
   list.innerHTML = items.length ? items.map(i=>`<article class="mini-card ${i.bought?"done-card":""}">
@@ -1483,6 +1484,13 @@ function renderTaskItem(ul, key, task, prioLabel, isCustom = false, context = {}
         <label>Tag <input class="task-tag" type="text" maxlength="40" placeholder="z.B. Strom" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "tag", this.value)'></label>
       </div>
       <div class="task-meta"></div>
+      ${(task.area||task.budgetKey||task.dependencies?.length||task.note)?`<div class="task-plan-meta">
+        ${task.status?`<p><strong>Planstatus:</strong> ${esc(task.status)}</p>`:''}
+        ${task.area?`<p><strong>Bereich:</strong> ${esc(task.area)}</p>`:''}
+        ${task.budgetKey?`<p><strong>Budgetbezug:</strong> <button class="text-link" data-go="assets" data-record="${esc(task.budgetKey)}">${esc(task.budgetKey)} ↗</button></p>`:''}
+        ${task.dependencies?.length?`<p><strong>Abhängigkeiten:</strong> ${esc(task.dependencies.join(', '))}</p>`:''}
+        ${task.note?`<p><strong>Aktueller Stand:</strong> ${esc(task.note)}</p>`:''}
+      </div>`:''}
     </details>`;
   if (task.sections) {
     const details=document.createElement('details');
@@ -2159,6 +2167,8 @@ document.addEventListener("DOMContentLoaded",async()=>{
   await ensureFinalBudgetPlanData();
   try { await ensureGroundsPlan({get,ref,update,db,dbPath}); }
   catch(error) { console.error(error); alert('Gelände-Plan konnte nicht gespeichert werden. Bitte Verbindung prüfen und neu laden.'); }
+  try { await ensureCurrentProcurementPlan({get,ref,update,db,dbPath}); }
+  catch(error) { console.error(error); alert('Aktueller Budget- und Beschaffungsplan konnte nicht gespeichert werden. Bitte Verbindung prüfen und neu laden.'); }
   bindFirebase();
 });
 </script>
@@ -2613,7 +2623,7 @@ footer{text-align:center;padding:2rem;border-top:1px solid var(--rule);font-fami
 
 <div class="sync-bar" id="syncBar">⟳ Verbinde mit Firebase…</div>
 
-<header><div class="folio-label">Organisation · 2026 — 2027</div><h1>Ende des<br><span>30. Winters</span></h1><img class="winterfest-logo" src="icons/winterfest-logo-transparent.png" alt="Zeichen des Dreißigsten Winters: Rabe und Mondsichel" width="1254" height="1254"><div class="hero-rule"></div><p class="header-date">29. Mai 2027 <span>·</span> Maximal 30 Gäste</p></header>
+<header><div class="folio-label">Organisation · 2026 — 2027</div><h1>Ende des<br><span>30. Winters</span></h1><img class="winterfest-logo" src="icons/winterfest-logo-2026.png" alt="Zeichen des Dreißigsten Winters: Rabe und Mondsichel" width="1254" height="1254"><div class="hero-rule"></div><p class="header-date">29. Mai 2027 <span>·</span> Maximal 30 Gäste</p></header>
 
 <div class="container">
   <div class="progress-section orga-view is-active" data-view="overview">
