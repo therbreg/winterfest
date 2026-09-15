@@ -16,7 +16,7 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  const at=path=>path.split('/').filter(Boolean).reduce((value,key)=>value?.[key],data);
  const writes={};
  const get=async path=>({val:()=>at(path)}),ref=(_db,path)=>path,dbPath=path=>path;
- const update=async(_root,patch)=>Object.assign(writes,patch);
+ const update=async(root,patch)=>{for(const [path,value] of Object.entries(patch))writes[`${root}/${path}`]=value;};
  await ensureCurrentProcurementPlan({get,ref,update,db:{},dbPath});
  assert.equal(writes['assets/baldachin_kauf'].actual,600);
  assert.equal(writes['budget/baldBudget'].actual,600);
@@ -35,6 +35,14 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  assert.equal(writes['meta/budgetCap'],undefined);
  assert.match(writes['decisions/tent'].text,/600 EUR/);
  assert.doesNotMatch(writes['decisions/tent'].text,/650|plus 50|zusätzliches Spritgeld eingeplant/);
+});
+
+test('Procurement migration writes scoped collections and leaves the version marker until last',async()=>{
+ const calls=[];
+ const get=async()=>({val:()=>({})}),ref=(_db,path)=>path,dbPath=path=>path;
+ const update=async(root)=>{calls.push(root);if(root==='budget')throw new Error('PERMISSION_DENIED');};
+ await assert.rejects(()=>ensureCurrentProcurementPlan({get,ref,update,db:{},dbPath}),/Firebase-Bereich "budget"/);
+ assert.deepEqual(calls,['assets','budget']);
 });
 
 test('Current totals include purchased jugs and kitchen tools while keeping the photo pillory optional',()=>{

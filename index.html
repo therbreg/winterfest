@@ -2191,7 +2191,7 @@ document.addEventListener("DOMContentLoaded",async()=>{
   try { await ensureGroundsPlan({get,ref,update,db,dbPath}); }
   catch(error) { console.error(error); alert('Gelände-Plan konnte nicht gespeichert werden. Bitte Verbindung prüfen und neu laden.'); }
   try { await ensureCurrentProcurementPlan({get,ref,update,db,dbPath}); }
-  catch(error) { console.error(error); alert('Aktueller Budget- und Beschaffungsplan konnte nicht gespeichert werden. Bitte Verbindung prüfen und neu laden.'); }
+  catch(error) { console.error(error); alert(`Aktueller Budget- und Beschaffungsplan konnte nicht gespeichert werden.\n\n${error.message}`); }
   bindFirebase();
 });
 </script>

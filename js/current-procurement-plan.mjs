@@ -58,6 +58,24 @@ const preservedNumber=(value,fallback=0)=>Number.isFinite(Number(value))?Number(
 export const coreTotal=()=>Object.values(CURRENT_ASSETS).filter(x=>x.budgetClass==='core').reduce((s,x)=>s+x.planned,0);
 export const optionalTotal=()=>Object.values(CURRENT_ASSETS).filter(x=>x.budgetClass==='optional').reduce((s,x)=>s+x.planned,0);
 
+async function updateByCollection({update,ref,db,dbPath},patch){
+  const groups={};
+  for(const [path,value] of Object.entries(patch)){
+    const [collection,...parts]=path.split('/');
+    (groups[collection]||={})[parts.join('/')]=value;
+  }
+  const order=['assets','budget','shopping','decisions','assetMeta'];
+  for(const collection of order){
+    const values=groups[collection];
+    if(!values)continue;
+    try { await update(ref(db,dbPath(collection)),values); }
+    catch(error){
+      error.message=`Firebase-Bereich "${collection}" konnte nicht gespeichert werden: ${error.message}`;
+      throw error;
+    }
+  }
+}
+
 export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   const marker=(await get(ref(db,dbPath('assetMeta/currentBudgetPackVersion')))).val();
   if(marker===PLAN_VERSION)return;
@@ -81,5 +99,5 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   patch[`decisions/${decisionKey}`]={...oldDecision,title:'Zeltkonzept final',text:'Gewählte Lösung: eigener 6×6-m-Baldachin inklusive Holzgestänge für 600 EUR, kombiniert mit dem vorhandenen 3×6-m-Pavillon. Kein zusätzliches Spritgeld. Der Baldachin ist gekauft und bildet den zentralen Atmosphärenpunkt; zusätzliche Schabracken-, Vorhang- oder Baldachin-Leihgaben sind keine notwendigen Kosten.',category:oldDecision.category||'Zelt',pinned:typeof oldDecision.pinned==='boolean'?oldDecision.pinned:true,by:oldDecision.by||'System',ts:oldDecision.ts||now,updatedAt:now,updatedBy:'Budget- und Packplan 15.09.2026'};
   patch['assetMeta/currentBudgetPackVersion']=PLAN_VERSION;
   patch['assetMeta/currentBudgetPackUpdatedAt']=now;
-  await update(ref(db,dbPath('')),patch);
+  await updateByCollection({update,ref,db,dbPath},patch);
 }
