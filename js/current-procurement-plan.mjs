@@ -61,17 +61,23 @@ export const optionalTotal=()=>Object.values(CURRENT_ASSETS).filter(x=>x.budgetC
 async function updateByCollection({update,ref,db,dbPath},patch){
   const groups={};
   for(const [path,value] of Object.entries(patch)){
-    const [collection,...parts]=path.split('/');
-    (groups[collection]||={})[parts.join('/')]=value;
+    const [collection,record,...parts]=path.split('/');
+    const key=`${collection}/${record}`;
+    const group=groups[key]||={collection,record,full:undefined,fields:{}};
+    if(parts.length)group.fields[parts.join('/')]=value;
+    else group.full=value;
   }
   const order=['assets','budget','shopping','decisions','assetMeta'];
   for(const collection of order){
-    const values=groups[collection];
-    if(!values)continue;
-    try { await update(ref(db,dbPath(collection)),values); }
-    catch(error){
-      error.message=`Firebase-Bereich "${collection}" konnte nicht gespeichert werden: ${error.message}`;
-      throw error;
+    for(const group of Object.values(groups).filter(entry=>entry.collection===collection)){
+      const fullIsObject=group.full&&typeof group.full==='object'&&!Array.isArray(group.full);
+      const target=group.full!==undefined&&!fullIsObject?collection:`${collection}/${group.record}`;
+      const values=group.full===undefined?group.fields:(fullIsObject?{...group.full,...group.fields}:{[group.record]:group.full});
+      try { await update(ref(db,dbPath(target)),values); }
+      catch(error){
+        error.message=`Firebase-Datensatz "${collection}/${group.record}" konnte nicht gespeichert werden: ${error.message}`;
+        throw error;
+      }
     }
   }
 }
