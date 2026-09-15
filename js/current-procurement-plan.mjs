@@ -79,7 +79,6 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   const decisionKey=Object.entries(decisions).find(([,row])=>/zeltkonzept|baldachin.*pavillon|pavillon.*baldachin/i.test(String(row?.title||'')))?.[0]||'system_zeltkonzept_20260817';
   const oldDecision=decisions[decisionKey]||{};
   patch[`decisions/${decisionKey}`]={...oldDecision,title:'Zeltkonzept final',text:'Gewählte Lösung: eigener 6×6-m-Baldachin inklusive Holzgestänge für 600 EUR, kombiniert mit dem vorhandenen 3×6-m-Pavillon. Kein zusätzliches Spritgeld. Der Baldachin ist gekauft und bildet den zentralen Atmosphärenpunkt; zusätzliche Schabracken-, Vorhang- oder Baldachin-Leihgaben sind keine notwendigen Kosten.',category:oldDecision.category||'Zelt',pinned:typeof oldDecision.pinned==='boolean'?oldDecision.pinned:true,by:oldDecision.by||'System',ts:oldDecision.ts||now,updatedAt:now,updatedBy:'Budget- und Packplan 15.09.2026'};
-  patch['meta/budgetCap']=5000;
   patch['assetMeta/currentBudgetPackVersion']=PLAN_VERSION;
   patch['assetMeta/currentBudgetPackUpdatedAt']=now;
   await update(ref(db,dbPath('')),patch);

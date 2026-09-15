@@ -32,6 +32,7 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  assert.equal(writes['decisions/tent'].manualField,'bleibt');
  assert.equal(writes['decisions/tent'].by,'Tim');
  assert.equal(writes['decisions/tent'].ts,123);
+ assert.equal(writes['meta/budgetCap'],undefined);
  assert.match(writes['decisions/tent'].text,/600 EUR/);
  assert.doesNotMatch(writes['decisions/tent'].text,/650|plus 50|zusätzliches Spritgeld eingeplant/);
 });
