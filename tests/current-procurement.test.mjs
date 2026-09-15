@@ -20,6 +20,7 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  await ensureCurrentProcurementPlan({get,ref,update,db:{},dbPath});
  assert.equal(writes['assets/baldachin_kauf'].actual,600);
  assert.equal(writes['assets/baldachin_kauf'].budgetClass,undefined);
+ assert.ok(writes['assets/baldachin_kauf'].updatedBy.length<=30);
  assert.equal(writes['budget/baldBudget'].actual,600);
  assert.equal(writes['shopping/baldShop'].bought,true);
  assert.match(writes['assets/baldachin_kauf'].note,/Manuelle Baldachinnotiz/);
@@ -36,6 +37,17 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  assert.equal(writes['meta/budgetCap'],undefined);
  assert.match(writes['decisions/tent'].text,/600 EUR/);
  assert.doesNotMatch(writes['decisions/tent'].text,/650|plus 50|zusätzliches Spritgeld eingeplant/);
+});
+
+test('Generated records respect Firebase text limits',async()=>{
+ const writes={};
+ const get=async()=>({val:()=>({})}),ref=(_db,path)=>path,dbPath=path=>path;
+ const update=async(root,patch)=>{writes[root]=patch;};
+ await ensureCurrentProcurementPlan({get,ref,update,db:{},dbPath});
+ for(const [path,row] of Object.entries(writes)){
+  if(path.startsWith('assets/')){assert.ok(row.updatedBy.length<=30,path);assert.ok((row.note||'').length<=700,path);}
+  if(path.startsWith('budget/')||path.startsWith('shopping/'))assert.ok((row.note||'').length<=300,path);
+ }
 });
 
 test('Procurement migration writes individual records and leaves the version marker until last',async()=>{

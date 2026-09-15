@@ -54,6 +54,7 @@ const mergedNote=(manual,canonical)=>{
   const parts=[manual,canonical].map(value=>String(value||'').trim()).filter(Boolean);
   return [...new Set(parts)].join(' · ');
 };
+const limitedNote=(manual,canonical,limit)=>mergedNote(manual,canonical).slice(0,limit);
 const preservedNumber=(value,fallback=0)=>Number.isFinite(Number(value))?Number(value):fallback;
 export const coreTotal=()=>Object.values(CURRENT_ASSETS).filter(x=>x.budgetClass==='core').reduce((s,x)=>s+x.planned,0);
 export const optionalTotal=()=>Object.values(CURRENT_ASSETS).filter(x=>x.budgetClass==='optional').reduce((s,x)=>s+x.planned,0);
@@ -94,9 +95,9 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
     const assetActual=key==='baldachin_kauf'?600:preservedNumber(old.actual,spec.actual||0);
     const oldBudget=budgets[budgetKey]||{}, budgetActual=key==='baldachin_kauf'?600:preservedNumber(oldBudget.actual,assetActual);
     const oldShopping=shopping[shoppingKey]||{};
-    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:mergedNote(old.note,spec.note),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Budget- und Packplan 14.09.2026'};
-    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:mergedNote(oldBudget.note,spec.note),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Budget- und Packplan 14.09.2026'};
-    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:mergedNote(oldShopping.note,spec.note||spec.next),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Budget- und Packplan 14.09.2026'};
+    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:limitedNote(old.note,spec.note,700),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Budgetplan 15.09.2026'};
+    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:limitedNote(oldBudget.note,spec.note,300),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Budgetplan 15.09.2026'};
+    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:limitedNote(oldShopping.note,spec.note||spec.next,300),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Budgetplan 15.09.2026'};
   }
   for(const [key,row] of Object.entries(existing))if(supersededKeys.has(key)||retired.test([key,row.item,row.source,row.note].join(' '))){patch[`assets/${key}/archived`]=true;patch[`assets/${key}/status`]='Verworfen';if(row.budgetKey)patch[`budget/${row.budgetKey}/archived`]=true;if(row.shoppingKey)patch[`shopping/${row.shoppingKey}/archived`]=true;}
   for(const [key,row] of Object.entries(budgets))if(retired.test([key,row.title,row.category,row.note].join(' ')))patch[`budget/${key}/archived`]=true;
