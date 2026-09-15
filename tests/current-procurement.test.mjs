@@ -10,7 +10,8 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
    grounds_sanitary:{actual:123,note:'Rechnung angezahlt',budgetKey:'toiletBudget',shoppingKey:'toiletShop'}
   },
   budget:{baldBudget:{actual:650,note:'Beleg vorhanden',ts:11,by:'Tim'},toiletBudget:{actual:123,note:'Anzahlung',ts:22,by:'Tim'}},
-  shopping:{baldShop:{bought:false,note:'Abholung erfolgt',responsible:'Tim',ts:33,by:'Tim'},toiletShop:{bought:true,note:'Schon bestellt',responsible:'Alex',ts:44,by:'Alex'}}
+  shopping:{baldShop:{bought:false,note:'Abholung erfolgt',responsible:'Tim',ts:33,by:'Tim'},toiletShop:{bought:true,note:'Schon bestellt',responsible:'Alex',ts:44,by:'Alex'}},
+  decisions:{tent:{title:'Zeltkonzept alt',text:'650 EUR plus Spritgeld',manualField:'bleibt'}}
  };
  const at=path=>path.split('/').filter(Boolean).reduce((value,key)=>value?.[key],data);
  const writes={};
@@ -28,6 +29,9 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  assert.equal(writes['shopping/toiletShop'].responsible,'Alex');
  assert.equal(writes['shopping/toiletShop'].ts,44);
  assert.match(writes['shopping/toiletShop'].note,/Schon bestellt/);
+ assert.equal(writes['decisions/tent'].manualField,'bleibt');
+ assert.match(writes['decisions/tent'].text,/600 EUR/);
+ assert.doesNotMatch(writes['decisions/tent'].text,/650|plus 50|zusätzliches Spritgeld eingeplant/);
 });
 
 test('Current totals include purchased jugs and kitchen tools while keeping the photo pillory optional',()=>{

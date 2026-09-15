@@ -2,7 +2,7 @@
 export const GROUNDS_CATEGORY = 'Gelände & Infrastruktur';
 export const GROUNDS_FRAME = 1500;
 export const FIRST_CUT_RESERVE = 850;
-const task = (id, text, timing, hint, sections, prio = 'prio-1') => ({id:`grounds_${id}`, text, timing, hint, sections:sections.map(([title,items],si)=>({title,items:items.map((text,ii)=>({id:`s${si}_i${ii}`,text}))})),prio});
+const task = (id, text, timing, hint, sections, prio = 'prio-1', meta = {}) => ({id:`grounds_${id}`, text, timing, hint, sections:sections.map(([title,items],si)=>({title,items:items.map((text,ii)=>({id:`s${si}_i${ii}`,text}))})),prio,...meta});
 export const groundsTasks = [
   task('tools','Werkzeugbestand prüfen','Vor dem Einkauf','Offen · Bestand prüfen',[
     ['Vor Ort und bei Freunden prüfen',['ca. 2 Astscheren','ca. 2 Astsägen','ca. 2 große Rechen','1–2 Mist-/Heugabeln','1 Spaten','1–2 Gartenscheren','1 Schubkarre','Axt optional','Besen']],
@@ -10,8 +10,11 @@ export const groundsTasks = [
   task('machines','Maschinen reservieren','Vor dem Grünschnitt','Zu reservieren',[
     ['Maschinenpaket',['1 Gestrüppmäher','2 starke Freischneider mit Dickichtmesser','Transportanhänger nur bei Bedarf (siehe Transport klären)','Motorsäge nur bei tatsächlichem Bedarf','Kraftstoff und Betriebsstoffe organisieren']],
     ['Häcksler',['Aktuell nicht einplanen; erst nach dem ersten Grünschnitt über Bedarf entscheiden.']]]),
-  task('transport','Transport klären','Vor der Reservierung','Offen',[
-    ['Prüfen',['Vorhandenen Anhänger aus dem Freundeskreis anfragen','Eignung zum Maschinentransport prüfen','Nur andernfalls Mietanhänger einplanen']]]),
+  task('transport','Anhänger und Transport verbindlich klären','Spätestens 31. Oktober 2026','Offen · Ergebnis: belastbarer Transportplan',[
+    ['Anhänger und Fahrzeug prüfen',['Vorhandenen Anhänger im Freundeskreis verbindlich anfragen','Innenmaße, Nutzlast, Plane, Zurrpunkte und Zustand dokumentieren','Zugfahrzeug, zulässige Anhängelast und passenden Führerschein prüfen','Fahrer sowie Verfügbarkeit für Grünschnitt, Other-Ages-Abholung und Rückgabe klären']],
+    ['Ladung und Termine abgleichen',['Eignung für Gestrüppmäher, Freischneider, Betriebsstoffe und Werkzeug prüfen','Other-Ages-Maße berücksichtigen: Bankett-Koffer und Weinkrüge separat und bruchsicher transportieren','Abhol- und Rückgabezeiten mit Fahrzeit, Helfern und Lagerort abstimmen']],
+    ['Alternative festhalten',['Falls der Leihanhänger nicht geeignet oder verfügbar ist, Mietanhänger und Transporter vergleichen','Mietpreis, Kaution, Kilometer, Kraftstoff und Versicherungsbedingungen dokumentieren','Gewählte Lösung samt Kosten und verantwortlicher Person festhalten']]
+  ],'prio-1',{area:'Logistik',due:'2026-10-31',budgetKey:'grounds_machines',dependencies:['plan2_wetterschutz_inventur'],planStatus:'offen',note:'Deckt frühen Anhängercheck, Maschinentransport und die spätere Other-Ages-Logistik ab.'}),
   task('shopping','Baumarkt-Einkauf','Freitag vor dem Arbeitseinsatz','Zu kaufen · Bestand zuerst prüfen',[
     ['Einkaufsliste',['2 große robuste Gewebeplanen, ungefähr 4 × 5 m','10–15 große reißfeste Müllsäcke','Robuste Garten-/Forsthandschuhe; für den Veranstalter Lederhandschuhe mit verlängertem Schaft gegen Brombeeren','Robuste Arbeitshose','Schutzbrille','Gehörschutz, falls nicht bei Mietgeräten vorhanden','1 Rolle Flatterband','1 Dose Markierspray','1 Rolle Gewebeklebeband','Kleine Packung Kabelbinder','Küchenrolle bzw. Werkstattpapier','Feuchttücher','Desinfektionsmittel','Pflaster / Erste-Hilfe-Verbrauchsmaterial','Zeckenzange oder Zeckenkarte, sofern noch nicht vorhanden','Reinigungsmaterial für das vorhandene Dixi (Kosten im separaten Dixi-Posten)','Handseife (Kosten im separaten Dixi-Posten)']],
     ['Nicht fest einplanen',['Holzpflöcke derzeit nicht fest einplanen.']]]),
@@ -55,6 +58,9 @@ export const groundsTasks = [
   task('sanitary','Endgültige Sanitärlösung für das Hauptevent festlegen','Bis zur Sanitärentscheidung für den 29.05.2027','MUSS · vergleichen und reservieren',[
     ['Umsetzung',['Angebote vergleichen','Toilettenwagen beziehungsweise geeignete Lösung reservieren','Anlieferung und Abholung klären','Handwaschmöglichkeit sicherstellen','Beleuchtung und Verbrauchsmaterial organisieren','Vorhandenes Dixi bleibt nur für Arbeitseinsätze bestehen']]],'prio-1')
 ];
+
+const groundsBudgetLinks={grounds_machines:['grounds_machines'],grounds_transport:['grounds_machines'],grounds_shopping:['grounds_shopping'],grounds_dixi:['grounds_dixi'],grounds_food:['grounds_food'],grounds_sanitary:['grounds_sanitary']};
+groundsTasks.forEach(item=>{if(groundsBudgetLinks[item.id])item.budgetKeys=groundsBudgetLinks[item.id];});
 
 const GROUNDS_PHASES = {
   phase2:['tools','machines','transport','shopping','ppe','dixi','food','first_cut','saturday','sunday','measure','photos'],

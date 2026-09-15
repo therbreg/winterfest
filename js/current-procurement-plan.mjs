@@ -1,4 +1,4 @@
-export const PLAN_VERSION='2026-09-14-budget-pack-v8';
+export const PLAN_VERSION='2026-09-14-budget-pack-v9';
 const core=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Geplant',budgetClass:'core',...extra});
 const optional=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Optional',budgetClass:'optional',...extra});
 
@@ -61,8 +61,8 @@ export const optionalTotal=()=>Object.values(CURRENT_ASSETS).filter(x=>x.budgetC
 export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   const marker=(await get(ref(db,dbPath('assetMeta/currentBudgetPackVersion')))).val();
   if(marker===PLAN_VERSION)return;
-  const [assetSnap,budgetSnap,shoppingSnap]=await Promise.all([get(ref(db,dbPath('assets'))),get(ref(db,dbPath('budget'))),get(ref(db,dbPath('shopping')))]);
-  const existing=assetSnap.val()||{}, budgets=budgetSnap.val()||{}, shopping=shoppingSnap.val()||{}, patch={}, now=Date.now();
+  const [assetSnap,budgetSnap,shoppingSnap,decisionSnap]=await Promise.all([get(ref(db,dbPath('assets'))),get(ref(db,dbPath('budget'))),get(ref(db,dbPath('shopping'))),get(ref(db,dbPath('decisions')))]);
+  const existing=assetSnap.val()||{}, budgets=budgetSnap.val()||{}, shopping=shoppingSnap.val()||{}, decisions=decisionSnap.val()||{}, patch={}, now=Date.now();
   for(const [key,spec] of Object.entries(CURRENT_ASSETS)){
     const old=existing[key]||{}, budgetKey=old.budgetKey||`plan_${key}`, needsShopping=spec.status!=='Vorhanden'&&!['DIY','Entscheidung'].includes(spec.type);
     const shoppingKey=needsShopping?(old.shoppingKey||`plan_${key}`):old.shoppingKey;
@@ -76,6 +76,8 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   for(const [key,row] of Object.entries(existing))if(supersededKeys.has(key)||retired.test([key,row.item,row.source,row.note].join(' '))){patch[`assets/${key}/archived`]=true;patch[`assets/${key}/status`]='Verworfen';if(row.budgetKey)patch[`budget/${row.budgetKey}/archived`]=true;if(row.shoppingKey)patch[`shopping/${row.shoppingKey}/archived`]=true;}
   for(const [key,row] of Object.entries(budgets))if(retired.test([key,row.title,row.category,row.note].join(' ')))patch[`budget/${key}/archived`]=true;
   for(const [key,row] of Object.entries(shopping))if(retired.test([key,row.item,row.category,row.note].join(' ')))patch[`shopping/${key}/archived`]=true;
+  const decisionKey=Object.entries(decisions).find(([,row])=>/zeltkonzept/i.test(String(row?.title||'')))?.[0]||'system_zeltkonzept_20260817';
+  patch[`decisions/${decisionKey}`]={...(decisions[decisionKey]||{}),title:'Zeltkonzept final',text:'Gewählte Lösung: eigener 6×6-m-Baldachin inklusive Holzgestänge für 600 EUR, kombiniert mit dem vorhandenen 3×6-m-Pavillon. Kein zusätzliches Spritgeld. Der Baldachin ist gekauft und bildet den zentralen Atmosphärenpunkt; zusätzliche Schabracken-, Vorhang- oder Baldachin-Leihgaben sind keine notwendigen Kosten.',updatedAt:now,updatedBy:'Budget- und Packplan 15.09.2026'};
   patch['meta/budgetCap']=5000;
   patch['assetMeta/currentBudgetPackVersion']=PLAN_VERSION;
   patch['assetMeta/currentBudgetPackUpdatedAt']=now;

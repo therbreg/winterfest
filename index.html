@@ -1003,17 +1003,20 @@ function applyTaskState() {
     if (isDeleted) return;
     const status = validStatus(s.status || (s.done ? "done" : "open"));
     const isDone = !!s.done || status === "done";
+    const dueValue=Object.prototype.hasOwnProperty.call(s,"due")?s.due:(el.dataset.defaultDue||"");
     el.classList.toggle("done", isDone);
     el.classList.toggle("status-progress", status === "progress");
     el.classList.toggle("status-blocked", status === "blocked");
-    el.classList.toggle("status-overdue", !!s.due && !isDone && new Date(s.due + "T12:00:00") < today);
+    const daysLeft=dueValue?Math.ceil((new Date(dueValue+"T12:00:00")-today)/86400000):null;
+    el.classList.toggle("status-overdue", daysLeft!==null && daysLeft<0 && !isDone);
+    el.classList.toggle("status-critical", daysLeft!==null && daysLeft>=0 && daysLeft<=14 && !isDone);
 
     const responsible = el.querySelector(".task-assignee");
     const due = el.querySelector(".task-due");
     const tag = el.querySelector(".task-tag");
     const statusSel = el.querySelector(".task-status");
     if (responsible && document.activeElement !== responsible) responsible.value = s.responsible || "";
-    if (due && document.activeElement !== due) due.value = s.due || "";
+    if (due && document.activeElement !== due) due.value = dueValue;
     if (tag && document.activeElement !== tag) tag.value = s.tag || "";
     if (statusSel && document.activeElement !== statusSel) statusSel.value = status;
 
@@ -1021,7 +1024,7 @@ function applyTaskState() {
     if (meta) {
       const parts = [];
       if (s.responsible) parts.push("Zuständig: "+s.responsible);
-      if (s.due) parts.push("Fällig: "+dateStr(s.due));
+      if (dueValue) parts.push("Fällig: "+dateStr(dueValue)+(Object.prototype.hasOwnProperty.call(s,"due")?" · manuell":" · Plantermin"));
       if (s.tag) parts.push("Tag: "+s.tag);
       parts.push("Status: "+statusLabel(status));
       if (isDone && s.by) parts.push("✓ "+s.by+" · "+ts2str(s.at));
@@ -1387,6 +1390,21 @@ function getTaskOrder(key, fallback = 9999) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function effectiveTaskDue(item) {
+  const saved=(window._taskData||{})[item.key]||{};
+  return Object.prototype.hasOwnProperty.call(saved,"due") ? saved.due : (item.task.due||"");
+}
+
+function taskUrgencySort(a,b) {
+  const savedA=(window._taskData||{})[a.key]||{}, savedB=(window._taskData||{})[b.key]||{};
+  const orderA=Number(savedA.order),orderB=Number(savedB.order);
+  if(Number.isFinite(orderA)||Number.isFinite(orderB))return (Number.isFinite(orderA)?orderA:9999)-(Number.isFinite(orderB)?orderB:9999);
+  const today=new Date();today.setHours(0,0,0,0);
+  const score=item=>{const due=effectiveTaskDue(item);if(!due)return 3;const days=Math.ceil((new Date(due+"T12:00:00")-today)/86400000);return days<0?0:days<=14?1:2;};
+  const prio={"prio-1":0,"prio-2":1,"prio-3":2};
+  return score(a)-score(b)||String(effectiveTaskDue(a)||"9999-12-31").localeCompare(String(effectiveTaskDue(b)||"9999-12-31"))||(prio[a.task.prio]??9)-(prio[b.task.prio]??9)||a.baseOrder-b.baseOrder;
+}
+
 function phaseDoneCollapsed(phaseId) {
   return localStorage.getItem(`wf_done_collapsed_${phaseId}`) !== "false";
 }
@@ -1458,6 +1476,7 @@ function renderTaskItem(ul, key, task, prioLabel, isCustom = false, context = {}
   li.dataset.key=key;
   li.dataset.phaseId=context.phaseId || "";
   li.dataset.categoryIndex=String(context.categoryIndex ?? "");
+  li.dataset.defaultDue=task.due||"";
   li.draggable = true;
   li.addEventListener("dragstart", () => li.classList.add("dragging"));
   li.addEventListener("dragend", () => {
@@ -1484,10 +1503,11 @@ function renderTaskItem(ul, key, task, prioLabel, isCustom = false, context = {}
         <label>Tag <input class="task-tag" type="text" maxlength="40" placeholder="z.B. Strom" onchange='APP.updateTaskMeta(${JSON.stringify(key)}, "tag", this.value)'></label>
       </div>
       <div class="task-meta"></div>
-      ${(task.area||task.budgetKey||task.dependencies?.length||task.note)?`<div class="task-plan-meta">
-        ${task.status?`<p><strong>Planstatus:</strong> ${esc(task.status)}</p>`:''}
+      ${(task.area||task.budgetKey||task.budgetKeys?.length||task.dependencies?.length||task.note)?`<div class="task-plan-meta">
+        ${task.planStatus?`<p><strong>Planstatus:</strong> ${esc(task.planStatus)}</p>`:''}
+        ${task.due?`<p><strong>Spätester sinnvoller Zeitpunkt:</strong> ${esc(dateStr(task.due))}</p>`:''}
         ${task.area?`<p><strong>Bereich:</strong> ${esc(task.area)}</p>`:''}
-        ${task.budgetKey?`<p><strong>Budgetbezug:</strong> <button class="text-link" data-go="assets" data-record="${esc(task.budgetKey)}">${esc(task.budgetKey)} ↗</button></p>`:''}
+        ${(task.budgetKeys?.length||task.budgetKey)?`<p><strong>Budgetbezug:</strong> ${[...new Set(task.budgetKeys?.length?task.budgetKeys:[task.budgetKey])].map(key=>`<button class="text-link" data-go="assets" data-record="${esc(key)}">${esc(key)} ↗</button>`).join(' · ')}</p>`:''}
         ${task.dependencies?.length?`<p><strong>Abhängigkeiten:</strong> ${esc(task.dependencies.join(', '))}</p>`:''}
         ${task.note?`<p><strong>Aktueller Stand:</strong> ${esc(task.note)}</p>`:''}
       </div>`:''}
@@ -2087,7 +2107,7 @@ function buildUI() {
           allTasks.push({key, task:{...task, _baseOrder:1000+(task.ts || idx)}, isCustom:true, baseOrder:1000+(task.ts || idx), categoryTitle:cat.title, phaseId:phase.id, categoryIndex:ci});
         });
 
-      const openTasks = allTasks.filter(item => !isTaskDone(item.key)).sort((a,b)=>getTaskOrder(a.key,a.baseOrder)-getTaskOrder(b.key,b.baseOrder));
+      const openTasks = allTasks.filter(item => !isTaskDone(item.key)).sort(taskUrgencySort);
       doneTasks.push(...allTasks.filter(item => isTaskDone(item.key)).sort((a,b)=>getTaskOrder(a.key,a.baseOrder)-getTaskOrder(b.key,b.baseOrder)));
 
       if (!openTasks.length) return;
@@ -2163,8 +2183,11 @@ document.addEventListener("DOMContentLoaded",async()=>{
   }
   document.addEventListener("keydown", event => { if (event.key === "Escape") window.APP.closeMobileMenu(); });
   setSyncBar("⟳ Verbinde mit Firebase…");
-  await ensureTentPlanData();
-  await ensureFinalBudgetPlanData();
+  const currentBudgetMarker=(await get(ref(db,dbPath('assetMeta/currentBudgetPackVersion')))).val();
+  if(!String(currentBudgetMarker||'').startsWith('2026-09-14-budget-pack-')){
+    await ensureTentPlanData();
+    await ensureFinalBudgetPlanData();
+  }
   try { await ensureGroundsPlan({get,ref,update,db,dbPath}); }
   catch(error) { console.error(error); alert('Gelände-Plan konnte nicht gespeichert werden. Bitte Verbindung prüfen und neu laden.'); }
   try { await ensureCurrentProcurementPlan({get,ref,update,db,dbPath}); }

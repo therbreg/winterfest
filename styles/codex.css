@@ -226,6 +226,7 @@ button{cursor:pointer}
 .task-plan-details input{flex:none;margin-top:5px;width:18px;height:18px}
 .task-plan-meta{grid-column:1/-1;margin-top:8px;padding:9px 12px;border-left:3px solid var(--rule);background:#fff8;overflow-wrap:anywhere}
 .task-plan-meta p{margin:3px 0}.task.status-overdue .task-plan-meta{border-left-color:var(--ember);background:#8b1e1410}
+.task.status-critical{border-left-color:var(--gold);background:#ab853f10}.task.status-critical .task-meta{color:#87651f}
 #groundsBudgetFrame{margin-bottom:16px;overflow-wrap:anywhere}
 #groundsBudgetFrame p{margin-top:8px}
 .codex-agenda article>div{min-width:0}
