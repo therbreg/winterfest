@@ -76,8 +76,9 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   for(const [key,row] of Object.entries(existing))if(supersededKeys.has(key)||retired.test([key,row.item,row.source,row.note].join(' '))){patch[`assets/${key}/archived`]=true;patch[`assets/${key}/status`]='Verworfen';if(row.budgetKey)patch[`budget/${row.budgetKey}/archived`]=true;if(row.shoppingKey)patch[`shopping/${row.shoppingKey}/archived`]=true;}
   for(const [key,row] of Object.entries(budgets))if(retired.test([key,row.title,row.category,row.note].join(' ')))patch[`budget/${key}/archived`]=true;
   for(const [key,row] of Object.entries(shopping))if(retired.test([key,row.item,row.category,row.note].join(' ')))patch[`shopping/${key}/archived`]=true;
-  const decisionKey=Object.entries(decisions).find(([,row])=>/zeltkonzept/i.test(String(row?.title||'')))?.[0]||'system_zeltkonzept_20260817';
-  patch[`decisions/${decisionKey}`]={...(decisions[decisionKey]||{}),title:'Zeltkonzept final',text:'Gewählte Lösung: eigener 6×6-m-Baldachin inklusive Holzgestänge für 600 EUR, kombiniert mit dem vorhandenen 3×6-m-Pavillon. Kein zusätzliches Spritgeld. Der Baldachin ist gekauft und bildet den zentralen Atmosphärenpunkt; zusätzliche Schabracken-, Vorhang- oder Baldachin-Leihgaben sind keine notwendigen Kosten.',updatedAt:now,updatedBy:'Budget- und Packplan 15.09.2026'};
+  const decisionKey=Object.entries(decisions).find(([,row])=>/zeltkonzept|baldachin.*pavillon|pavillon.*baldachin/i.test(String(row?.title||'')))?.[0]||'system_zeltkonzept_20260817';
+  const oldDecision=decisions[decisionKey]||{};
+  patch[`decisions/${decisionKey}`]={...oldDecision,title:'Zeltkonzept final',text:'Gewählte Lösung: eigener 6×6-m-Baldachin inklusive Holzgestänge für 600 EUR, kombiniert mit dem vorhandenen 3×6-m-Pavillon. Kein zusätzliches Spritgeld. Der Baldachin ist gekauft und bildet den zentralen Atmosphärenpunkt; zusätzliche Schabracken-, Vorhang- oder Baldachin-Leihgaben sind keine notwendigen Kosten.',category:oldDecision.category||'Zelt',pinned:typeof oldDecision.pinned==='boolean'?oldDecision.pinned:true,by:oldDecision.by||'System',ts:oldDecision.ts||now,updatedAt:now,updatedBy:'Budget- und Packplan 15.09.2026'};
   patch['meta/budgetCap']=5000;
   patch['assetMeta/currentBudgetPackVersion']=PLAN_VERSION;
   patch['assetMeta/currentBudgetPackUpdatedAt']=now;
