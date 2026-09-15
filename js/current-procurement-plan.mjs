@@ -88,12 +88,13 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   const [assetSnap,budgetSnap,shoppingSnap,decisionSnap]=await Promise.all([get(ref(db,dbPath('assets'))),get(ref(db,dbPath('budget'))),get(ref(db,dbPath('shopping'))),get(ref(db,dbPath('decisions')))]);
   const existing=assetSnap.val()||{}, budgets=budgetSnap.val()||{}, shopping=shoppingSnap.val()||{}, decisions=decisionSnap.val()||{}, patch={}, now=Date.now();
   for(const [key,spec] of Object.entries(CURRENT_ASSETS)){
+    const {budgetClass:assetBudgetClass,...assetSpec}=spec;
     const old=existing[key]||{}, budgetKey=old.budgetKey||`plan_${key}`, needsShopping=spec.status!=='Vorhanden'&&!['DIY','Entscheidung'].includes(spec.type);
     const shoppingKey=needsShopping?(old.shoppingKey||`plan_${key}`):old.shoppingKey;
     const assetActual=key==='baldachin_kauf'?600:preservedNumber(old.actual,spec.actual||0);
     const oldBudget=budgets[budgetKey]||{}, budgetActual=key==='baldachin_kauf'?600:preservedNumber(oldBudget.actual,assetActual);
     const oldShopping=shopping[shoppingKey]||{};
-    patch[`assets/${key}`]={...old,...spec,actual:assetActual,note:mergedNote(old.note,spec.note),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Budget- und Packplan 14.09.2026'};
+    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:mergedNote(old.note,spec.note),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Budget- und Packplan 14.09.2026'};
     patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:mergedNote(oldBudget.note,spec.note),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Budget- und Packplan 14.09.2026'};
     if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:mergedNote(oldShopping.note,spec.note||spec.next),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Budget- und Packplan 14.09.2026'};
   }

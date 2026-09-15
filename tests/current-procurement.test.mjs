@@ -19,6 +19,7 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  const update=async(root,patch)=>{writes[root]=patch;};
  await ensureCurrentProcurementPlan({get,ref,update,db:{},dbPath});
  assert.equal(writes['assets/baldachin_kauf'].actual,600);
+ assert.equal(writes['assets/baldachin_kauf'].budgetClass,undefined);
  assert.equal(writes['budget/baldBudget'].actual,600);
  assert.equal(writes['shopping/baldShop'].bought,true);
  assert.match(writes['assets/baldachin_kauf'].note,/Manuelle Baldachinnotiz/);
