@@ -59,7 +59,7 @@ test('Procurement migration writes individual records and leaves the version mar
  assert.equal(calls.some(path=>path.startsWith('assetMeta/')),false);
 });
 
-test('Current totals include purchased jugs and kitchen tools while keeping the photo pillory optional',()=>{
- assert.equal(coreTotal(),3915);
+test('Current totals include the revised food plan while keeping the photo pillory optional',()=>{
+ assert.equal(coreTotal(),3765);
  assert.equal(optionalTotal(),205);
 });

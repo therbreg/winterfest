@@ -1,4 +1,4 @@
-export const PLAN_VERSION='2026-09-14-budget-pack-v9';
+export const PLAN_VERSION='2026-09-17-food-plan-v10';
 const core=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Geplant',budgetClass:'core',...extra});
 const optional=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Optional',budgetClass:'optional',...extra});
 
@@ -26,8 +26,11 @@ export const CURRENT_ASSETS={
   oa_transport:core('Logistik','Other Ages Selbstabholung und Rückgabe',40,{type:'Mieten',status:'Später bestätigen'}),
   oa_jute:core('Other Ages','Miet-Jute-Tischdecken für vier Tische',20,{type:'Mieten',status:'Später bestätigen',qty:'4',note:'Notwendige Standardvariante.'}),
   kruege:core('Geschirr','Vier bereits gekaufte Tonkrüge',43,{actual:43,type:'Vorhanden',status:'Gekauft',qty:'4',note:'Bereits gekauft und als Ist-Kosten im Gesamtbudget berücksichtigt.'}),
-  grillwerkzeug:core('Essen & Feuer','Grill- und Küchenwerkzeug',50,{type:'Kaufen',status:'Zu kaufen',qty:'1 Set',note:'Eigenbestand prüfen und nur fehlende Grillzangen, hitzefeste Handschuhe, Messer und Küchenhelfer ergänzen.'}),
-  essen_gesamt:core('Essen & Feuer','Eintopf, Ankommensbuffet und Grillergänzung',440,{type:'Verbrauch',note:'Veganer herzhafter Eintopf aus dem 14-Liter-Gusseisenkessel. Ankommensbuffet: selbst gebackenes Sauerteigbrot, Aufstriche, Obst, Trauben, Äpfel und kleine Käseplatte mit veganen und normalen Bestandteilen. Grillergänzung: Kartoffeln, vegane Würstchen/Alternativen und kleine Fleischmenge für 3–4 Personen. Mitgebrachtes und Spenden nicht als sichere Budgetentlastung.'}),
+  grillwerkzeug:core('Essen & Feuer','Zusätzliches Küchenwerkzeug',0,{type:'Vorhanden',status:'Vorhanden',note:'Altposten ersetzt durch food_tools; Bestand zuerst inventarisieren.'}),
+  essen_gesamt:core('Verpflegung','Lebensmittel für Markttafel, Wintermahl und Nacht',235,{type:'Verbrauch',note:'Planwert 220–250 EUR für 25 Personen. Vollständig vegan; ein warmes Hauptgericht, ca. 10 l Schmortopf im vorhandenen 14-l-Potjie.'}),
+  food_drinks:core('Verpflegung','Hypocras und besondere Gewürzgetränke',40,{type:'Verbrauch',note:'Planwert 30–50 EUR; alkoholfreie Alternative eingeschlossen.'}),
+  food_tools:core('Verpflegung','Fehlendes Küchenequipment',45,{type:'Kaufen',note:'Nur tatsächliche Fehlteile nach Inventur; Plananteil im Rahmen 35–85 EUR für Equipment und Verbrauch.'}),
+  food_consumables:core('Verpflegung','Küchenverbrauchsmaterial',20,{type:'Verbrauch',note:'Küchenpapier, Müllbeutel und weitere Fehlteile; mit bestehendem Verbrauchsmaterialposten abgleichen.'}),
   alchemie:core('Alchemistenstation','Aufbau und zwei Getränkespender',40,{type:'DIY',qty:'2 Spender',note:'Nur roter Hibiskustrank und blauer Butterfly-Pea-Trank. Alkohol, Bier und Wein gehören nicht zur Alchemistenstation.'}),
   zauberflaschen:core('Alchemistenstation','Kleine runde Heiltrankfläschchen mit Korkverschluss',50,{type:'Kaufen',status:'Zu kaufen',qty:'20',note:'Nur einzelne dekorative Etiketten, keine vollständige Etikettierung.'}),
   alchemie_zutaten:core('Alchemistenstation','Zutaten für Hibiskus- und Butterfly-Pea-Trank',35,{type:'Verbrauch',status:'Zu kaufen',note:'Planbereich 30–40 EUR für zwei farbige alkoholfreie Getränke.'}),
@@ -95,9 +98,10 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
     const assetActual=key==='baldachin_kauf'?600:preservedNumber(old.actual,spec.actual||0);
     const oldBudget=budgets[budgetKey]||{}, budgetActual=key==='baldachin_kauf'?600:preservedNumber(oldBudget.actual,assetActual);
     const oldShopping=shopping[shoppingKey]||{};
-    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:limitedNote(old.note,spec.note,700),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Budgetplan 15.09.2026'};
-    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:limitedNote(oldBudget.note,spec.note,300),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Budgetplan 15.09.2026'};
-    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:limitedNote(oldShopping.note,spec.note||spec.next,300),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Budgetplan 15.09.2026'};
+    const foodKey=['essen_gesamt','grillwerkzeug','food_drinks','food_tools','food_consumables'].includes(key);
+    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:foodKey?spec.note:limitedNote(old.note,spec.note,700),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:foodKey?spec.note:limitedNote(oldBudget.note,spec.note,300),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:foodKey?spec.note:limitedNote(oldShopping.note,spec.note||spec.next,300),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
   }
   for(const [key,row] of Object.entries(existing))if(supersededKeys.has(key)||retired.test([key,row.item,row.source,row.note].join(' '))){patch[`assets/${key}/archived`]=true;patch[`assets/${key}/status`]='Verworfen';if(row.budgetKey)patch[`budget/${row.budgetKey}/archived`]=true;if(row.shoppingKey)patch[`shopping/${row.shoppingKey}/archived`]=true;}
   for(const [key,row] of Object.entries(budgets))if(retired.test([key,row.title,row.category,row.note].join(' ')))patch[`budget/${key}/archived`]=true;

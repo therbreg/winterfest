@@ -21,6 +21,8 @@ import { activeAssets as selectActiveAssets } from "./js/hub-model.mjs";
 import {replaceEventPlan} from "./js/event-plan.mjs";
 import {integrateGrounds, ensureGroundsPlan, GROUNDS_CATEGORY, GROUNDS_FRAME, FIRST_CUT_RESERVE, firstCutRange} from "./js/grounds-plan.mjs";
 import {ensureCurrentProcurementPlan} from "./js/current-procurement-plan.mjs";
+import {integrateFood} from "./js/food-plan.mjs";
+import {updateFood} from "./js/food-ui.mjs";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, update, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
@@ -956,6 +958,7 @@ function bindFirebase() {
     updateProgress(data);
     renderDashboard();
     setSyncBar("● Verbunden","ok");
+    updateFood(window._foodPlan, data, window._budget);
   });
   bindValue("comments", data => {
     window._allComments = data;
@@ -970,7 +973,8 @@ function bindFirebase() {
   bindValue("documents", data => { window._documents = data; renderDocuments(data); renderDashboard(); });
   bindValue("pins", data => { window._pins = data; renderPins(data); renderDashboard(); });
   bindValue("decisions", data => { window._decisions = data; renderDecisions(data); renderDashboard(); });
-  bindValue("budget", data => { window._budget = data; renderBudget(data); renderDashboard(); });
+  bindValue("budget", data => { window._budget = data; renderBudget(data); renderDashboard(); updateFood(window._foodPlan,window._taskData,data); });
+  bindValue("foodPlan", data => { window._foodPlan = data; updateFood(data,window._taskData,window._budget); });
   bindValue("assets", data => { window._assets = data; renderBudget(window._budget); renderDashboard(); });
   bindValue("shopping", data => { window._shopping = data; renderShopping(data); renderDashboard(); });
   bindValue("helpers", data => { window._helpers = data; renderHelpers(data); renderDashboard(); });
@@ -2009,7 +2013,7 @@ window.APP = {
   },
 
   switchView(view, persist = true) {
-    const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins","assets","timeline"];
+    const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins","assets","timeline","food"];
     if (!valid.includes(view)) view = "overview";
     document.querySelectorAll(".orga-view").forEach(el => el.classList.toggle("is-active", el.dataset.view === view));
     document.querySelectorAll(".view-tab").forEach(btn => {
@@ -2026,6 +2030,7 @@ window.APP = {
     window.APP.closeMobileMenu();
     window.scrollTo({ top: 0, behavior: "auto" });
   },
+  saveFoodField(path,value) { update(ref(db,dbPath('foodPlan')), {[path]:value}).catch(error=>{console.error(error);alert('Verpflegungsdaten konnten nicht gespeichert werden.');}); },
   printHub() { window.print(); },
   openMobileMenu() {
     const menu = document.getElementById("mobileMoreMenu");
@@ -2164,6 +2169,7 @@ function buildUI() {
 document.addEventListener("DOMContentLoaded",async()=>{
   replaceEventPlan(PHASES_DATA);
   integrateGrounds(PHASES_DATA);
+  integrateFood(PHASES_DATA);
   if (!COMMON_CATEGORIES.includes(GROUNDS_CATEGORY)) COMMON_CATEGORIES.push(GROUNDS_CATEGORY);
   document.getElementById("commentInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendComment();} });
   document.getElementById("chatInput")?.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();APP.sendChat();} });

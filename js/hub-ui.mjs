@@ -1,6 +1,7 @@
 import {groundsMilestones} from './grounds-plan.mjs';
 import {projectMilestones} from './event-plan.mjs';
 import {overview, EVENT_DATE, daysUntil, berlinDate, CAP, optionalAssets} from './hub-model.mjs';
+import {initFood} from './food-ui.mjs';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const euro = value => Number(value).toLocaleString('de-DE', {style:'currency',currency:'EUR',minimumFractionDigits:0,maximumFractionDigits:2});
@@ -9,7 +10,7 @@ const groups = [
   ['', [['overview','Übersicht','01']]],
   ['Planung', [['tasks','Aufgaben','02'],['decisions','Beschlüsse','03'],['pins','Pins','04']]],
   ['Ressourcen', [['assets','Ausstattung & Beschaffung','05'],['helpers','Helfer','06']]],
-  ['Projekt', [['documents','Dokumente & Konzepte','09'],['timeline','Ablauf','10']]]
+  ['Projekt', [['food','Verpflegungskonzept','09'],['documents','Dokumente & Konzepte','10'],['timeline','Ablauf','11']]]
 ];
 let phases = [], lastState, frame, selectedAsset = '';
 function rowLink(title, subtitle, view, key = '', asset = false) {
@@ -49,6 +50,7 @@ export function initHub(data, app) {
   equipment.id = 'equipmentView'; equipment.dataset.view = 'assets'; equipment.className = 'orga-view';
   equipment.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Ressourcen / 05</p><h2>Ausstattung & Beschaffung</h2><p>Material, Einkauf und Kosten gemeinsam verwalten.</p></div><div class="resource-tabs"><button class="selected" data-go="assets">Material & Bestand</button><button data-go="tentleads">Zelt · Anfragen & Kontakte</button><a href="ausstattung.html${location.hash}">Separat öffnen ↗</a></div><p class="codex-empty" id="equipmentLoading">Ausstattung wird geladen …</p><iframe id="equipmentFrame" title="Ausstattung und Beschaffung" class="equipment-frame"></iframe>`;
   container.append(equipment);
+  initFood(container,app,(path,value)=>app.saveFoodField(path,value));
   const timeline = document.createElement('section');
   timeline.className = 'orga-view'; timeline.dataset.view = 'timeline'; timeline.id='eventTimeline';
   timeline.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Projekt / 10</p><h2>Der Eventtag</h2><p>29. Mai 2027 · Vom ersten Aufbau bis zum letzten Licht.</p><p>Ab dem Ankommen gibt es Snacks und laufend nachgefüllte Tavernenplatten. Das große Essen beginnt um 16 Uhr; die Essensausgabe ist nicht auf ein starres Zeitfenster begrenzt.</p></div><div class="codex-agenda">${(phases.find(p => p.id==='phase8')?.timeline || []).map(item => `<article><time>${esc(item.time)}</time><p>${esc(item.text)}</p></article>`).join('')}</div>`;
@@ -106,9 +108,9 @@ export function initHub(data, app) {
   const oldItems = [...menu.children];
   const findItem = view => oldItems.find(el => el.dataset.menuView === view || el.dataset.go === view || (view === 'assets' && el.id === 'equipmentLink'));
   menu.replaceChildren();
-  for (const [label, views] of [['Planung',['decisions','pins']],['Ressourcen',['assets','helpers']],['Projekt',['documents','timeline']]]) {
+  for (const [label, views] of [['Planung',['decisions','pins']],['Ressourcen',['assets','helpers']],['Projekt',['food','documents','timeline']]]) {
     const heading = document.createElement('p'); heading.className = 'mobile-menu-group-label'; heading.textContent = label; menu.append(heading);
-    views.forEach(view => { const item = findItem(view); if (item) menu.append(item); });
+    views.forEach(view => { const item = findItem(view); if (item) menu.append(item); else if(view==='food'){const button=document.createElement('button');button.className='mobile-menu-item';button.dataset.go='food';button.textContent='Verpflegungskonzept';menu.append(button);} });
   }
   const toolsHeading = document.createElement('p'); toolsHeading.className = 'mobile-menu-group-label'; toolsHeading.textContent = 'Werkzeuge'; menu.append(toolsHeading);
   oldItems.filter(el => !el.dataset.menuView && !el.dataset.go && el.id !== 'equipmentLink').forEach(el => menu.append(el));
