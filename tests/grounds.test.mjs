@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {groundsTasks,groundsAssets,groundsSeedPatch,GROUNDS_VERSION,integrateGrounds} from '../js/grounds-plan.mjs';
 import {budgetSummary} from '../js/hub-model.mjs';
+test('Grünschnitt is accepted by the main view switcher',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const valid=html.match(/const valid = (\[[^;]+\]);/);
+ assert.ok(valid,'main view allowlist exists');
+ assert.ok(JSON.parse(valid[1]).includes('grounds'));
+});
 test('Grounds initialization preserves existing rows, is repeatable, and never restores deletions after migration',()=>{
  const old={grounds_machines:{planned:470,actual:430,note:'Angebot bestätigt',extra:true},other:{planned:50}};
  const before=structuredClone(old),patch=groundsSeedPatch(old,null);

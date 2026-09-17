@@ -2013,7 +2013,7 @@ window.APP = {
   },
 
   switchView(view, persist = true) {
-    const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins","assets","timeline","food"];
+    const valid = ["overview","tasks","documents","budget","shopping","helpers","tentleads","decisions","pins","assets","timeline","food","grounds"];
     if (!valid.includes(view)) view = "overview";
     document.querySelectorAll(".orga-view").forEach(el => el.classList.toggle("is-active", el.dataset.view === view));
     document.querySelectorAll(".view-tab").forEach(btn => {
