@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "winterfest-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v10`;
+const CACHE_NAME = `${CACHE_PREFIX}v12`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -18,6 +18,8 @@ const APP_SHELL = [
   "./js/hub-model.mjs",
   "./js/grounds-plan.mjs",
   "./js/event-plan.mjs",
+  "./js/food-plan.mjs",
+  "./js/food-ui.mjs",
   "./js/hub-ui.mjs",
   "./js/equipment-bridge.js"
 ];

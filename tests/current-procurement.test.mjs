@@ -7,7 +7,8 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
   assetMeta:{},
   assets:{
    baldachin_kauf:{actual:650,note:'Manuelle Baldachinnotiz',budgetKey:'baldBudget',shoppingKey:'baldShop'},
-   grounds_sanitary:{actual:123,note:'Rechnung angezahlt',budgetKey:'toiletBudget',shoppingKey:'toiletShop'}
+   grounds_sanitary:{actual:123,note:'Rechnung angezahlt',budgetKey:'toiletBudget',shoppingKey:'toiletShop'},
+   essen_gesamt:{foodPlan:{equipment:{0:{quantity:'1'}}}}
   },
   budget:{baldBudget:{actual:650,note:'Beleg vorhanden',ts:11,by:'Tim'},toiletBudget:{actual:123,note:'Anzahlung',ts:22,by:'Tim'}},
   shopping:{baldShop:{bought:false,note:'Abholung erfolgt',responsible:'Tim',ts:33,by:'Tim'},toiletShop:{bought:true,note:'Schon bestellt',responsible:'Alex',ts:44,by:'Alex'}},
@@ -25,6 +26,7 @@ test('Procurement migration preserves manual actuals, shopping state, notes and 
  assert.equal(writes['shopping/baldShop'].bought,true);
  assert.match(writes['assets/baldachin_kauf'].note,/Manuelle Baldachinnotiz/);
  assert.equal(writes['assets/grounds_sanitary'].actual,123);
+ assert.equal(writes['assets/essen_gesamt'].foodPlan.equipment[0].quantity,'1');
  assert.equal(writes['budget/toiletBudget'].actual,123);
  assert.equal(writes['budget/toiletBudget'].ts,22);
  assert.equal(writes['shopping/toiletShop'].bought,true);

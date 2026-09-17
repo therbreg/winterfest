@@ -4,19 +4,21 @@ export const GROUNDS_FRAME = 1500;
 export const FIRST_CUT_RESERVE = 850;
 const task = (id, text, timing, hint, sections, prio = 'prio-1', meta = {}) => ({id:`grounds_${id}`, text, timing, hint, sections:sections.map(([title,items],si)=>({title,items:items.map((text,ii)=>({id:`s${si}_i${ii}`,text}))})),prio,...meta});
 export const groundsTasks = [
-  task('tools','Werkzeugbestand prüfen','Vor dem Einkauf','Offen · Bestand prüfen',[
+  task('tools','Werkzeugbestand vor Grünschnitt prüfen','Vor dem Einkauf','Offen · Bestand prüfen',[
     ['Vor Ort und bei Freunden prüfen',['ca. 2 Astscheren','ca. 2 Astsägen','ca. 2 große Rechen','1–2 Mist-/Heugabeln','1 Spaten','1–2 Gartenscheren','1 Schubkarre','Axt optional','Besen']],
     ['Beschaffung',['Vorhandene Werkzeuge nutzen; keinen automatischen Neukauf im Budget ansetzen.']]]),
-  task('machines','Maschinen reservieren','Vor dem Grünschnitt','Zu reservieren',[
-    ['Maschinenpaket',['1 Gestrüppmäher','2 starke Freischneider mit Dickichtmesser','Transportanhänger nur bei Bedarf (siehe Transport klären)','Motorsäge nur bei tatsächlichem Bedarf','Kraftstoff und Betriebsstoffe organisieren']],
+  task('machines','Maschinen reservieren / bestätigen','Vor dem Grünschnitt','Schwamborn-Angebot vorhanden · Bestätigung offen',[
+    ['Maschinenpaket',['Schwamborn Landtechnik: AS 901 Schlegelmäher, 150 € pro Tag','2 Freischneider / Trimmer, je 49 € pro Gerät und Tag','Samstag und Sonntag: 2 Miettage, zusammen 496 €','Samstagmorgen abholen, Montagmorgen zurückgeben','Gehörschutz, Visier und weitere vorgeschriebene PSA beim Vermieter prüfen']],
     ['Häcksler',['Aktuell nicht einplanen; erst nach dem ersten Grünschnitt über Bedarf entscheiden.']]]),
   task('transport','Anhänger und Transport verbindlich klären','Spätestens 31. Oktober 2026','Offen · Ergebnis: belastbarer Transportplan',[
     ['Anhänger und Fahrzeug prüfen',['Vorhandenen Anhänger im Freundeskreis verbindlich anfragen','Innenmaße, Nutzlast, Plane, Zurrpunkte und Zustand dokumentieren','Zugfahrzeug, zulässige Anhängelast und passenden Führerschein prüfen','Fahrer sowie Verfügbarkeit für Grünschnitt, Other-Ages-Abholung und Rückgabe klären']],
     ['Ladung und Termine abgleichen',['Eignung für Gestrüppmäher, Freischneider, Betriebsstoffe und Werkzeug prüfen','Other-Ages-Maße berücksichtigen: Bankett-Koffer und Weinkrüge separat und bruchsicher transportieren','Abhol- und Rückgabezeiten mit Fahrzeit, Helfern und Lagerort abstimmen']],
     ['Alternative festhalten',['Falls der Leihanhänger nicht geeignet oder verfügbar ist, Mietanhänger und Transporter vergleichen','Mietpreis, Kaution, Kilometer, Kraftstoff und Versicherungsbedingungen dokumentieren','Gewählte Lösung samt Kosten und verantwortlicher Person festhalten']]
   ],'prio-1',{area:'Logistik',due:'2026-10-31',budgetKey:'grounds_machines',dependencies:['plan2_wetterschutz_inventur'],planStatus:'offen',note:'Deckt frühen Anhängercheck, Maschinentransport und die spätere Other-Ages-Logistik ab.'}),
+  task('friday','Freitag vorbereiten','Freitag vor dem Grünschnitt','toom-Einkauf und Logistik',[
+    ['Vorbereitung',['Werkzeugbestand abschließen und Einkaufsliste finalisieren','Mit Helfer zum toom fahren; Rabattkarte mitnehmen','Getränke und Lebensmittel besorgen; Elektrolytmischung einpacken','Brötchen und Beläge vorbereiten','Ladekabel und gegebenenfalls Verlängerungskabel einpacken; Handys laden','Anhänger und Transport für Samstagmorgen final bestätigen','Maschinen erst Samstagmorgen abholen']]]),
   task('shopping','Baumarkt-Einkauf','Freitag vor dem Arbeitseinsatz','Zu kaufen · Bestand zuerst prüfen',[
-    ['Einkaufsliste',['2 große robuste Gewebeplanen, ungefähr 4 × 5 m','10–15 große reißfeste Müllsäcke','Robuste Garten-/Forsthandschuhe; für den Veranstalter Lederhandschuhe mit verlängertem Schaft gegen Brombeeren','Robuste Arbeitshose','Schutzbrille','Gehörschutz, falls nicht bei Mietgeräten vorhanden','1 Rolle Flatterband','1 Dose Markierspray','1 Rolle Gewebeklebeband','Kleine Packung Kabelbinder','Küchenrolle bzw. Werkstattpapier','Feuchttücher','Desinfektionsmittel','Pflaster / Erste-Hilfe-Verbrauchsmaterial','Zeckenzange oder Zeckenkarte, sofern noch nicht vorhanden','Reinigungsmaterial für das vorhandene Dixi (Kosten im separaten Dixi-Posten)','Handseife (Kosten im separaten Dixi-Posten)']],
+    ['Einkaufsliste',['2 Gewebeplanen à etwa 4 × 5 m: 45,98 €','Brombeerhandschuhe mit langer Stulpe: 15–35 €','3er-Pack Schutzbrillen: ca. 17,99 €','10–15 große Müllsäcke: 8–15 €; nicht für das gesamte Schnittgut','1 Rolle Gewebeklebeband: 7–10 €','Dixi-Reinigung: 15–25 €, im Baumarktbudget enthalten','Absperr-/Flatterband: 5–10 €','Kabelbinder nur falls nicht vorhanden: 3–6 €','Markierspray nur falls sinnvoll','Erste-Hilfe-Set prüfen; nur fehlendes Verbrauchsmaterial nachkaufen','Gehörschutz nur ergänzen, falls nicht enthalten']],
     ['Nicht fest einplanen',['Holzpflöcke derzeit nicht fest einplanen.']]]),
   task('ppe','Persönliche Schutzausrüstung Helfer klären','Vor dem Arbeitseinsatz','Vorher kommunizieren',[
     ['Jeder Helfer bringt möglichst mit',['Robuste lange Hose','Festes Schuhwerk','Langärmliges Oberteil','Arbeitshandschuhe','Regenjacke']],
@@ -29,13 +31,14 @@ export const groundsTasks = [
     ['Mittag und Sonntag',['Pizza bestellen: ca. 4 größere Pizzen für fünf körperlich arbeitende Personen','Sonntag Reste / frische Brötchen; bei erneut vollem Arbeitstag wieder einfache Verpflegung organisieren','Späteres gemeinsames Dankeschön-Essen getrennt von dieser Arbeitsverpflegung planen.']]]),
   task('first_cut','Erster großer Grünschnitt','Oktober 2026','Komplettes Wochenende · 4–5 Personen',[
     ['Ziel',['Hauptarbeit möglichst am Samstag schaffen; noch keine perfekte Eventfläche herstellen','Hauptfläche wieder sichtbar und Gelände begehbar machen','Wichtige Wege freilegen','Brombeer- und Gestrüppbewuchs massiv reduzieren','Boden und Geländeform sichtbar machen','Große Bäume und relevante Gehölze freilegen','Mögliche Eventflächen erkennen','Grundlage für Vermessung und 3D-Modell schaffen','Natürliche Wald- und Randvegetation möglichst erhalten, wenn gestalterisch bzw. atmosphärisch sinnvoll']]]),
-  task('saturday','Ablauf Samstag','Samstag des Grünschnitt-Wochenendes','Hauptarbeit',[
+  task('saturday','Grünschnitt Samstag','Samstag des Grünschnitt-Wochenendes','Hauptarbeit',[
+    ['Samstagmorgen · Abholung',['AS 901 Schlegelmäher und zwei Freischneider bei Schwamborn abholen; danach zum Gelände fahren']],
     ['08:30 · Gemeinsamer Geländerundgang',['Vor Maschinenbetrieb auf Metallteile, Draht, größere Steine, Löcher, Baumstümpfe, Müll und sonstige Gefahren prüfen','Gefahrenstellen markieren']],
     ['Ab ca. 09:00 · Zugänge und Arbeitskorridore',['2 Personen arbeiten mit Freischneidern und öffnen zunächst Zugänge / Arbeitskorridore','1 Person folgt mit Gestrüppmäher','1–2 Personen räumen Schnittgut direkt weg','Gewebeplanen, Rechen, Gabel und Schubkarre nutzen','Nur 2–3 große Sammelstellen statt vieler kleiner Haufen anlegen','Dickes Astholz separat sammeln; krautiges Material separat behandeln']],
     ['Ca. 12:30 · Mittagspause',['Pizza / Pause']],
     ['13:00–ca. 17:30 · Prioritäten in dieser Reihenfolge',['1. Zentrale Eventfläche','2. Hauptwege','3. Mögliche Baldachinfläche','4. Große und relevante Baumgruppen','5. Geländeübergänge','6. Weitere potentielle Eventflächen','Nicht wahllos sämtliche Vegetation entfernen']],
     ['17:30–ca. 18:30 · Abschluss',['Schnittgut ordnen','Maschinen grob reinigen','Werkzeuge sammeln','Ergebnis fotografieren','Restaufwand für Sonntag bewerten']]]),
-  task('sunday','Ablauf Sonntag','Sonntag des Grünschnitt-Wochenendes','Variante nach Samstagergebnis wählen',[
+  task('sunday','Grünschnitt / Nacharbeit Sonntag','Sonntag des Grünschnitt-Wochenendes','Variante nach Samstagergebnis wählen',[
     ['Variante A · Samstag war erfolgreich',['Reststellen nacharbeiten','Störende Brombeerranken entfernen','Wege nacharbeiten','Schnittgut konzentrieren','Gelände vermessen (siehe Vermessungsaufgabe)','Fotos für das 3D-Modell aufnehmen (siehe Fotoaufgabe)']],
     ['Variante B · Samstag reicht nicht',['Zweiter voller Grünschnitttag','Vermessung und Fotografie später oder an separatem Termin']]]),
   task('measure','Gelände vermessen','Direkt nach erfolgreichem ersten Grünschnitt','20–30 brauchbare Kontrollmaße',[
@@ -60,10 +63,10 @@ export const groundsTasks = [
 ];
 
 const groundsBudgetLinks={grounds_machines:['grounds_machines'],grounds_transport:['grounds_machines'],grounds_shopping:['grounds_shopping'],grounds_dixi:['grounds_dixi'],grounds_food:['grounds_food'],grounds_sanitary:['grounds_sanitary']};
-groundsTasks.forEach(item=>{if(groundsBudgetLinks[item.id])item.budgetKeys=groundsBudgetLinks[item.id];});
+groundsTasks.forEach(item=>{item.tag='Gelände & Grünschnitt';if(groundsBudgetLinks[item.id])item.budgetKeys=groundsBudgetLinks[item.id];});
 
 const GROUNDS_PHASES = {
-  phase2:['tools','machines','transport','shopping','ppe','dixi','food','first_cut','saturday','sunday','measure','photos'],
+  phase2:['tools','machines','transport','friday','shopping','ppe','dixi','food','first_cut','saturday','sunday','measure','photos'],
   phase3:['data','model','layout'],
   phase4:['second_cut','sanitary'],
   phase6:['spring']
@@ -86,19 +89,32 @@ export const groundsMilestones = [
 
 const cost = (item, min, max, type, status, next, note) => ({area:GROUNDS_CATEGORY,item,planned:max,actual:0,rangeMin:min,rangeMax:max,type,status,next,note,source:'noch offen',qty:'',due:''});
 export const groundsAssets = {
-  grounds_machines:cost('Grünschnitt · Maschinen / Transport / Kraftstoff',440,550,'Mieten','Zu reservieren','Maschinen reservieren; Transport klären','Gesamtes Wochenende; kein Häcksler eingeplant.'),
-  grounds_shopping:cost('Grünschnitt · Baumarkt / PSA / Verbrauchsmaterial',100,180,'Verbrauch','Zu kaufen','Checkliste Baumarkt-Einkauf abarbeiten','Mit zusätzlicher hochwertiger Arbeitskleidung maximal ca. 200 €. Dixi-Material separat; vorhandene Werkzeuge nicht als Neukauf kalkuliert.'),
-  grounds_dixi:cost('Grünschnitt · Dixi-Reinigung',15,25,'Verbrauch','Zu kaufen','Vorhandenes Dixi reinigen','Reinigungsmaterial und Handseife aus dem Baumarkt hier abrechnen, nicht zusätzlich im Baumarkt-Posten. Kein Auspumpen eingeplant, solange Kapazität und Hygiene ausreichen.'),
+  grounds_machines:cost('Grünschnitt · Schwamborn Maschinenmiete',496,496,'Mieten','Angebot vorhanden','Reservierung bestätigen','AS 901: 150 € × 2 Tage = 300 €; zwei Freischneider: 49 € × 2 × 2 Tage = 196 €. Abholung Samstagmorgen, Rückgabe Montagmorgen.'),
+  grounds_fuel:cost('Grünschnitt · Kraftstoff',30,50,'Verbrauch','Geplant','Bedarf prüfen','Planwert; tatsächlichen Verbrauch später buchen.'),
+  grounds_transport:cost('Grünschnitt · Transport',0,0,'Mieten','Offen','Privaten Anhänger bestätigen','Erst nach Bestätigung als 0 € festhalten; sonst Kosten ergänzen.'),
+  grounds_shopping:cost('Grünschnitt · Baumarkt / PSA / Dixi-Verbrauch',110,160,'Verbrauch','Geplant','Freitag zu toom; Bestand vorher prüfen','Planwert vor Rabatt; Dixi-Reinigung 15–25 € darin enthalten. Schuhe und Arbeitshose vorhanden, keine Kaufposition.'),
   grounds_food:cost('Grünschnitt · Helferverpflegung',70,100,'Verbrauch','Zu kaufen','Arbeitsverpflegung vorbereiten','Für 4–5 Personen; späteres Dankeschön-Essen getrennt.'),
   grounds_sanitary:cost('Hauptevent · Toilettenwagen',500,500,'Mieten','Zu reservieren','Verfügbarkeit und Lieferbedingungen prüfen; anschließend reservieren','Notwendige Sanitärposition für den 29.05.2027. Vorhandenes Dixi bleibt nur für Arbeitseinsätze bestehen.'),
   grounds_care:cost('Spätere Geländepflege',0,0,'Verbrauch','Später organisieren','Nach erstem Grünschnitt und 3D-Planung kalkulieren','Kosten noch offen; keine Kostenzusage.')
 };
-export const GROUNDS_VERSION = '2026-09-14-v2';
+export const GROUNDS_VERSION = '2026-09-17-first-cut-v3';
 // Only missing records are added. A marker prevents deleted rows being reintroduced.
 export function groundsSeedPatch(existing, version) {
   if (version === GROUNDS_VERSION) return {};
   const patch = {};
-  for (const [key,row] of Object.entries(groundsAssets)) if (!Object.hasOwn(existing || {},key)) patch[`assets/${key}`]={...row};
+  for (const [key,row] of Object.entries(groundsAssets)) {
+    const previous=existing?.[key];
+    if (!previous) patch[`assets/${key}`]={...row};
+    else if (['grounds_machines','grounds_shopping','grounds_food'].includes(key)) {
+      for (const field of ['item','planned','rangeMin','rangeMax','note','next','area']) patch[`assets/${key}/${field}`]=row[field];
+      if (key==='grounds_machines' && previous.status==='Zu reservieren') patch[`assets/${key}/status`]='Angebot vorhanden';
+    }
+  }
+  if (existing?.grounds_dixi) {
+    patch['assets/grounds_dixi/planned']=0;
+    patch['assets/grounds_dixi/archived']=Number(existing.grounds_dixi.actual||0)===0;
+    patch['assets/grounds_dixi/note']='Dixi-Reinigung 15–25 € ist im Baumarktposten enthalten; keine zusätzliche Budgetsumme.';
+  }
   patch['assetMeta/groundsPlanVersion']=GROUNDS_VERSION;
   return patch;
 }
@@ -109,5 +125,5 @@ export async function ensureGroundsPlan({get,ref,update,db,dbPath}) {
 }
 
 export const firstCutRange = Object.entries(groundsAssets)
-  .filter(([key])=>['grounds_machines','grounds_shopping','grounds_dixi','grounds_food'].includes(key))
+  .filter(([key])=>['grounds_machines','grounds_fuel','grounds_shopping','grounds_food'].includes(key))
   .reduce((sum,[,row])=>({min:sum.min+row.rangeMin,max:sum.max+row.rangeMax}),{min:0,max:0});

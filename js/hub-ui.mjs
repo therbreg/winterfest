@@ -1,4 +1,4 @@
-import {groundsMilestones} from './grounds-plan.mjs';
+import {groundsMilestones,groundsTasks,FIRST_CUT_RESERVE} from './grounds-plan.mjs';
 import {projectMilestones} from './event-plan.mjs';
 import {overview, EVENT_DATE, daysUntil, berlinDate, CAP, optionalAssets} from './hub-model.mjs';
 import {initFood} from './food-ui.mjs';
@@ -55,6 +55,10 @@ export function initHub(data, app) {
   timeline.className = 'orga-view'; timeline.dataset.view = 'timeline'; timeline.id='eventTimeline';
   timeline.innerHTML = `<div class="codex-page-heading"><p class="folio-label">Projekt / 10</p><h2>Der Eventtag</h2><p>29. Mai 2027 · Vom ersten Aufbau bis zum letzten Licht.</p><p>Ab dem Ankommen gibt es Snacks und laufend nachgefüllte Tavernenplatten. Das große Essen beginnt um 16 Uhr; die Essensausgabe ist nicht auf ein starres Zeitfenster begrenzt.</p></div><div class="codex-agenda">${(phases.find(p => p.id==='phase8')?.timeline || []).map(item => `<article><time>${esc(item.time)}</time><p>${esc(item.text)}</p></article>`).join('')}</div>`;
   container.append(timeline);
+  const grounds = document.createElement('section');
+  grounds.className='orga-view grounds-view'; grounds.dataset.view='grounds'; grounds.id='groundsView';
+  container.append(grounds);
+  timeline.insertAdjacentHTML('afterbegin','<button class="text-link" data-go="grounds">Erster großer Grünschnitt · Einsatzplan öffnen ↗</button>');
   timeline.insertAdjacentHTML('afterbegin', `<div class="codex-page-heading"><h2>Geländeplanung bis zum Fest</h2></div><div class="codex-agenda">${groundsMilestones.map(item=>`<article><time>${esc(item.time)}</time><div>${item.tasks.map(task=>rowLink(task.text, task.hint, 'tasks', task.id)).join('')}</div></article>`).join('')}<article><time>29.05.2027</time><p>Veranstaltung · Ende des 30. Winters</p></article></div>`);
   const resourceViews = ['assets','shopping','budget','tentleads'];
   const resourceTabs = active => '<nav class="resource-tabs" aria-label="Ausstattung und Beschaffung">' + [['assets','Material & Bestand'],['shopping','Einkaufsliste'],['budget','Kosten & Erstattung'],['tentleads','Zeltanfragen']].map(([view,label]) => '<button data-go="'+view+'"'+(active===view?' class="selected" aria-current="page"':'')+'>'+label+'</button>').join('') + '</nav>';
@@ -104,11 +108,12 @@ export function initHub(data, app) {
   const equipmentLink = document.getElementById('equipmentLink');
   equipmentLink.addEventListener('click', event => {event.preventDefault();app.switchView('assets');});
   document.querySelector('.mobile-more-grid').insertAdjacentHTML('beforeend','<button class="mobile-menu-item" data-go="timeline"><span class="mobile-menu-icon" aria-hidden="true">◷</span><span><strong>Ablauf</strong>Der Eventtag</span></button>');
+  document.querySelector('.mobile-more-grid').insertAdjacentHTML('beforeend','<button class="mobile-menu-item" data-go="grounds"><span class="mobile-menu-icon" aria-hidden="true">✳</span><span><strong>Grünschnitt</strong>Erster Arbeitseinsatz</span></button>');
   const menu = document.querySelector('.mobile-more-grid');
   const oldItems = [...menu.children];
   const findItem = view => oldItems.find(el => el.dataset.menuView === view || el.dataset.go === view || (view === 'assets' && el.id === 'equipmentLink'));
   menu.replaceChildren();
-  for (const [label, views] of [['Planung',['decisions','pins']],['Ressourcen',['assets','helpers']],['Projekt',['food','documents','timeline']]]) {
+  for (const [label, views] of [['Planung',['decisions','pins']],['Ressourcen',['assets','helpers']],['Projekt',['food','documents','grounds','timeline']]]) {
     const heading = document.createElement('p'); heading.className = 'mobile-menu-group-label'; heading.textContent = label; menu.append(heading);
     views.forEach(view => { const item = findItem(view); if (item) menu.append(item); else if(view==='food'){const button=document.createElement('button');button.className='mobile-menu-item';button.dataset.go='food';button.textContent='Verpflegungskonzept';menu.append(button);} });
   }
@@ -135,6 +140,7 @@ export function renderOverview(data, state) {
   if (!needed.every(key => window._hubLoaded?.has(key))) return;
   const today = berlinDate();
   const summary = overview(data,state,today);
+  renderGrounds(summary,state);
   const days = daysUntil(EVENT_DATE,today);
   const deadline = summary.deadlines[0];
   const phaseTotals = data.map(phase => {
@@ -159,4 +165,24 @@ export function renderOverview(data, state) {
   <section><div class="section-caption"><h3>Am Rand vermerkt</h3><button class="text-link" data-go="pins">Alle Pins ↗</button></div>${list(important,row=>rowLink(row.title,`${row.label} · ${row.text || row.note || row.category || ''}`,row.view),'Wichtige Hinweise und Dokumente erscheinen hier.')}</section></div>`;
 }
 function recordsLocal(value) { return Object.values(value || {}).filter(row => row && typeof row==='object'); }
+
+function renderGrounds(summary,state) {
+  const target=document.getElementById('groundsView'); if(!target)return;
+  const ids=new Set(groundsTasks.filter(task=>!['grounds_sanitary','grounds_spring'].includes(task.id)).map(task=>task.id));
+  const tasks=summary.tasks.filter(task=>ids.has(task.key) || task.tag==='Gelände & Grünschnitt');
+  const done=tasks.filter(task=>task.done||task.status==='done').length;
+  const taskRows=tasks.map(task=>rowLink(task.text,`${task.done||task.status==='done'?'Erledigt':task.status||'Offen'}${task.responsible?' · '+task.responsible:''}`,'tasks',task.key)).join('');
+  const keys=['grounds_machines','grounds_fuel','grounds_shopping','grounds_food','grounds_transport'];
+  const costs=keys.map(key=>({key,...(state.assets?.[key]||{})}));
+  const costRows=costs.map(row=>`<button class="grounds-cost" data-go="assets" data-record="${esc(row.key)}"><span>${esc(row.item||row.key)}</span><strong>${row.key==='grounds_transport' && row.status==='Offen'?'offen':euro(row.planned||0)}</strong><small>Ist: ${euro(row.actual||0)}</small></button>`).join('');
+  const task=id=>groundsTasks.find(row=>row.id==='grounds_'+id);
+  const day=(title,description,items)=>`<article class="grounds-card"><h3>${title}</h3><p>${description}</p><ul>${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></article>`;
+  target.innerHTML=`<div class="codex-page-heading"><p class="folio-label">Projekt / Gelände & Infrastruktur</p><h2>Erster großer Grünschnitt</h2><p>Oktober 2026 · Maschinenstatus: ${esc(state.assets?.grounds_machines?.status||'Angebot vorhanden')}. Hauptfläche öffnen und das Gelände begehbar machen; eine fertige Eventfläche ist noch nicht das Ziel.</p><span class="grounds-chip">4–5 Helfer</span> <span class="grounds-chip">2 Arbeitstage</span> <span class="grounds-chip">496 € feste Miete</span> <span class="grounds-chip">850 € Budgetrahmen</span></div>
+  <div class="grounds-grid"><article class="grounds-card"><h3>Fortschritt · ${done} / ${tasks.length}</h3><p>Statusänderungen erfolgen in der zentralen Aufgabenübersicht und erscheinen hier sofort.</p><details><summary>Alle Grünschnitt-Aufgaben</summary>${taskRows}</details></article>
+  <article class="grounds-card"><h3>Ziel & Team</h3><p>Hauptfläche, Wege, Bäume, Bodenform und mögliche Eventflächen sichtbar machen. Brombeeren und Gestrüpp deutlich reduzieren. Sinnvolle Randvegetation erhalten.</p><p>2 Personen Freischneider · 1 Person AS 901 · 1–2 Personen Räumen und Logistik.</p></article></div>
+  <h3 class="grounds-heading">Wochenende</h3><div class="grounds-grid">${day('Freitag · Vorbereitung','Gemeinsamer toom-Einkauf vor dem Einsatz; Preise vor Rabatt.', ['Werkzeugbestand und Einkaufsliste abschließen','Planen, Brombeerhandschuhe, Schutzbrillen, Müllsäcke, Reinigungs- und Verbrauchsmaterial kaufen','Erste-Hilfe-Set prüfen','Getränke, Lebensmittel, Brötchen und Beläge vorbereiten; Elektrolyte einpacken','Handys laden, Ladekabel und ggf. Verlängerungskabel einpacken','Anhänger / Transport bestätigen; Maschinen bleiben beim Vermieter'])}${day('Samstag · Hauptarbeit','Samstagmorgen Maschinen bei Schwamborn abholen und zum Gelände fahren.', ['Sicherheitsrundgang: Metall, Draht, Steine, Löcher, Stümpfe und Müll markieren','2 Freischneider öffnen Zugänge und Baumumfeld; AS 901 bearbeitet Hauptflächen','1–2 Helfer räumen; 2–3 Sammelstellen, dickes Astholz getrennt; kein Häcksler','Mittags ca. 4 große Pizzen für fünf Arbeitende','Danach: Eventfläche, Hauptwege, 6 × 6 m Baldachinfläche, Baumgruppen, Übergänge','Maschinen grob reinigen, Werkzeug sammeln, Fortschritt fotografieren'])}${day('Sonntag · nach Fortschritt','Die Entscheidung fällt nach dem Samstagsabschluss.', ['Variante A: Restbereiche, Ranken und Wege nacharbeiten; Schnittgut konzentrieren','Dann Vermessung und Photogrammetrie aufnehmen','Variante B: zweiter voller Grünschnitttag; Messung und Fotos separat','Rückgabe der Mietgeräte Montagmorgen'])}</div>
+  <h3 class="grounds-heading">Material & Versorgung</h3><div class="grounds-grid"><article class="grounds-card"><h3>Maschinen & Schutz</h3><p>AS 901: 150 € × 2 = 300 €. Zwei Freischneider: 49 € × 2 × 2 = 196 €.</p><p>Bei Schwamborn Gehörschutz, Visier und weitere vorgeschriebene PSA prüfen. Helfer bringen lange robuste Kleidung, festes Schuhwerk, Handschuhe und bei Bedarf Regenkleidung mit. Schuhe und Überziehhose des Veranstalters sind vorhanden.</p></article><article class="grounds-card"><h3>Werkzeug & toom</h3><p>Vorhandene Astscheren, Astsägen, Rechen, Gabeln, Spaten, Gartenscheren, Schubkarre, ggf. Axt und Besen prüfen. Nur Fehlendes kaufen.</p><p>2 Planen 45,98 € · Brombeerhandschuhe 15–35 € · Schutzbrillen ca. 18 € · Müllsäcke 8–15 € · Klebeband 7–10 € · Flatterband 5–10 €. Kabelbinder und Markierspray nur bei Bedarf.</p></article><article class="grounds-card"><h3>Dixi & Verpflegung</h3><p>Dixi: Innen- und Kontaktflächen reinigen, Boden säubern, Papier, Müllbeutel und Seife prüfen. Kein Auspumpen eingeplant, solange Kapazität und Zustand ausreichen. Reinigung 15–25 € ist im Baumarktbudget enthalten.</p><p>10–12 Brötchen, vegane Beläge, Obst, Riegel, mindestens 12 l Wasser, vorhandene Elektrolyte; optional Softdrinks. Samstag Pizza, Sonntag nach Arbeitspensum. Arbeitsverpflegung 70–100 €; Dankeschön-Essen separat.</p></article></div>
+  <h3 class="grounds-heading">Kosten · zentrale Budgetposten</h3><div class="grounds-card"><p>Planung ohne bezahlten Transport: 706–806 €. Der Rahmen von ${euro(FIRST_CUT_RESERVE)} ist eine Reserve und wird nicht zu den Einzelposten addiert. Transport bleibt offen, bis der private Anhänger bestätigt ist.</p><div class="grounds-costs">${costRows}</div><button class="text-link" data-go="budget">Gesamtbudget öffnen ↗</button></div>
+  <div class="grounds-grid grounds-next"><article class="grounds-card"><h3>Danach · Vermessung & 3D</h3><p>Wenn die Fläche offen genug ist: 20–30 Kontrollmaße, 100–200 Smartphone-Fotos mit 1× Hauptkamera, Originalauflösung und 70–80 % Überlappung. Randrundgang, Linien durch die Mitte und Übersichtsvideo.</p><p>RealityCapture / RealityScan: Ausrichtung, Punktwolke, Mesh, Textur und Skalierung; Weiterarbeit in Blender für Baldachin, Tische, Feuer, Ritual, Turniere, Quest, Sanitär, Küche, Lager, Wege und Licht.</p></article><article class="grounds-card"><h3>Januar / Februar 2027</h3><span class="grounds-chip">Noch nicht konkret geplant</span><p>Zweiter Gelände- und Pflegetermin nach Grünschnitt, Vermessung, 3D-Modell und Eventlayout. Möglich: neue Brombeertriebe, weitere Flächen, Gehölze und Wege gezielt bearbeiten. Budget offen.</p>${rowLink(task('second_cut').text,'Zentrale Aufgabe öffnen','tasks','grounds_second_cut')}</article></div>`;
+}
 

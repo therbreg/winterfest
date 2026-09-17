@@ -974,7 +974,7 @@ function bindFirebase() {
   bindValue("pins", data => { window._pins = data; renderPins(data); renderDashboard(); });
   bindValue("decisions", data => { window._decisions = data; renderDecisions(data); renderDashboard(); });
   bindValue("budget", data => { window._budget = data; renderBudget(data); renderDashboard(); updateFood(window._foodPlan,window._taskData,data); });
-  bindValue("foodPlan", data => { window._foodPlan = data; updateFood(data,window._taskData,window._budget); });
+  bindValue("assets/essen_gesamt/foodPlan", data => { window._foodPlan = data; updateFood(data,window._taskData,window._budget); });
   bindValue("assets", data => { window._assets = data; renderBudget(window._budget); renderDashboard(); });
   bindValue("shopping", data => { window._shopping = data; renderShopping(data); renderDashboard(); });
   bindValue("helpers", data => { window._helpers = data; renderHelpers(data); renderDashboard(); });
@@ -1196,7 +1196,7 @@ function renderBudget(data) {
   if (!frame) { frame=document.createElement('article'); frame.id='groundsBudgetFrame'; frame.className='mini-card'; list.before(frame); }
   const groundsPlanned=grounds.reduce((s,i)=>s+Number(i.planned||0),0);
   const groundsActual=grounds.reduce((s,i)=>s+Number(i.actual||0),0);
-  frame.innerHTML=`<div><span class="doc-cat">${esc(GROUNDS_CATEGORY)} · Teilbudget</span><h3>Gelände-Orientierungsrahmen ${fmtMoney(GROUNDS_FRAME)}</h3><p><strong>Gesamtobergrenze des Festes: ${fmtMoney(BUDGET_CAP)}.</strong> Geplante Einzelkosten dieses Teilbereichs: <strong>${fmtMoney(groundsPlanned)}</strong> · Tatsächlich ausgegeben: <strong>${fmtMoney(groundsActual)}</strong> · Verbleibender Gelände-Rahmen: <strong>${fmtMoney(GROUNDS_FRAME-groundsPlanned)}</strong></p><p>Ursprüngliche Grünschnitt-Spanne: ${fmtMoney(firstCutRange.min)}–${fmtMoney(firstCutRange.max)} · interne Reserve ${fmtMoney(FIRST_CUT_RESERVE)} (${fmtMoney(firstCutRange.max-FIRST_CUT_RESERVE)} unter dem oberen Planwert). Spätere Pflege noch offen.</p><p>Der Gelände-Rahmen und seine interne Reserve sind keine zusätzlichen Ausgaben und keine zweite Gesamtobergrenze.</p></div>`;
+  frame.innerHTML=`<div><span class="doc-cat">${esc(GROUNDS_CATEGORY)} · Teilbudget</span><h3>Gelände-Orientierungsrahmen ${fmtMoney(GROUNDS_FRAME)}</h3><p><strong>Gesamtobergrenze des Festes: ${fmtMoney(BUDGET_CAP)}.</strong> Geplante Einzelkosten dieses Teilbereichs: <strong>${fmtMoney(groundsPlanned)}</strong> · Tatsächlich ausgegeben: <strong>${fmtMoney(groundsActual)}</strong> · Verbleibender Gelände-Rahmen: <strong>${fmtMoney(GROUNDS_FRAME-groundsPlanned)}</strong></p><p>Erster großer Grünschnitt: ${fmtMoney(firstCutRange.min)}–${fmtMoney(firstCutRange.max)} ohne bezahlten Transport · Budgetrahmen ${fmtMoney(FIRST_CUT_RESERVE)}. Spätere Pflege noch offen.</p><p>Der Budgetrahmen ist keine zusätzliche Ausgabe. Dixi-Reinigung ist im Baumarktposten enthalten.</p><button class="doc-open" data-go="grounds">Grünschnitt-Einsatzplan öffnen ↗</button></div>`;
   const items = Object.entries(data || {}).filter(([,value])=>{const text=[value?.title,value?.note].join(" ").toLowerCase();return !value?.archived&&!text.includes("vendera")&&!(text.includes("mittelalter")&&text.includes("zelt")&&text.includes("miet"));}).map(([key,value])=>({key,...value})).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const assetItems = Object.entries(window._assets || {}).filter(([,value])=>!value?.archived).map(([key,value])=>({key,...value}));
   const activeAssets = selectActiveAssets(window._assets);
@@ -2030,7 +2030,7 @@ window.APP = {
     window.APP.closeMobileMenu();
     window.scrollTo({ top: 0, behavior: "auto" });
   },
-  saveFoodField(path,value) { update(ref(db,dbPath('foodPlan')), {[path]:value}).catch(error=>{console.error(error);alert('Verpflegungsdaten konnten nicht gespeichert werden.');}); },
+  saveFoodField(path,value) { update(ref(db,dbPath('assets/essen_gesamt/foodPlan')), {[path]:value}).catch(error=>{console.error('Verpflegungsdaten',path,error);alert(`Verpflegungsdaten konnten nicht gespeichert werden (${path}): ${error.message}`);}); },
   printHub() { window.print(); },
   openMobileMenu() {
     const menu = document.getElementById("mobileMoreMenu");
