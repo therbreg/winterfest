@@ -2,7 +2,10 @@
 export const GROUNDS_CATEGORY = 'Gelände & Infrastruktur';
 export const GROUNDS_FRAME = 1500;
 export const FIRST_CUT_RESERVE = 850;
-const task = (id, text, timing, hint, sections, prio = 'prio-1', meta = {}) => ({id:`grounds_${id}`, text, timing, hint, sections:sections.map(([title,items],si)=>({title,items:items.map((text,ii)=>({id:`s${si}_i${ii}`,text}))})),prio,...meta});
+const task = (id, text, timing, hint, sections, prio = 'prio-1', meta = {}) => {
+  const {checklistVersion,...fields}=meta;
+  return {id:`grounds_${id}`, text, timing, hint, sections:sections.map(([title,items],si)=>({title,items:items.map((text,ii)=>({id:`${checklistVersion||''}s${si}_i${ii}`,text}))})),prio,...fields};
+};
 export const groundsTasks = [
   task('tools','Werkzeugbestand vor Grünschnitt prüfen','Vor dem Einkauf','Offen · Bestand prüfen',[
     ['Vor Ort und bei Freunden prüfen',['ca. 2 Astscheren','ca. 2 Astsägen','ca. 2 große Rechen','1–2 Mist-/Heugabeln','1 Spaten','1–2 Gartenscheren','1 Schubkarre','Axt optional','Besen']],
@@ -16,7 +19,7 @@ export const groundsTasks = [
     ['Alternative festhalten',['Falls der Leihanhänger nicht geeignet oder verfügbar ist, Mietanhänger und Transporter vergleichen','Mietpreis, Kaution, Kilometer, Kraftstoff und Versicherungsbedingungen dokumentieren','Gewählte Lösung samt Kosten und verantwortlicher Person festhalten']]
   ],'prio-1',{area:'Logistik',due:'2026-10-31',budgetKey:'grounds_machines',dependencies:['plan2_wetterschutz_inventur'],planStatus:'offen',note:'Deckt frühen Anhängercheck, Maschinentransport und die spätere Other-Ages-Logistik ab.'}),
   task('friday','Freitag vorbereiten','Freitag vor dem Grünschnitt','toom-Einkauf und Logistik',[
-    ['Vorbereitung',['Werkzeugbestand abschließen und Einkaufsliste finalisieren','Mit Helfer zum toom fahren; Rabattkarte mitnehmen','Getränke und Lebensmittel besorgen; Elektrolytmischung einpacken','Brötchen und Beläge vorbereiten','Ladekabel und gegebenenfalls Verlängerungskabel einpacken; Handys laden','Anhänger und Transport für Samstagmorgen final bestätigen','Maschinen erst Samstagmorgen abholen']]]),
+    ['Persönliche Vorbereitung',['Handys laden und Ladekabel einpacken','Gegebenenfalls Verlängerungskabel einpacken','Mit Helfer zum toom fahren; Rabattkarte mitnehmen','Vor Abfahrt prüfen, ob Werkzeugbestand, Einkauf, Verpflegung und Transport in ihren jeweiligen Aufgaben erledigt sind','Maschinen erst Samstagmorgen abholen']]],'prio-1',{checklistVersion:'v2_'}),
   task('shopping','Baumarkt-Einkauf','Freitag vor dem Arbeitseinsatz','Zu kaufen · Bestand zuerst prüfen',[
     ['Einkaufsliste',['2 Gewebeplanen à etwa 4 × 5 m: 45,98 €','Brombeerhandschuhe mit langer Stulpe: 15–35 €','3er-Pack Schutzbrillen: ca. 17,99 €','10–15 große Müllsäcke: 8–15 €; nicht für das gesamte Schnittgut','1 Rolle Gewebeklebeband: 7–10 €','Dixi-Reinigung: 15–25 €, im Baumarktbudget enthalten','Absperr-/Flatterband: 5–10 €','Kabelbinder nur falls nicht vorhanden: 3–6 €','Markierspray nur falls sinnvoll','Erste-Hilfe-Set prüfen; nur fehlendes Verbrauchsmaterial nachkaufen','Gehörschutz nur ergänzen, falls nicht enthalten']],
     ['Nicht fest einplanen',['Holzpflöcke derzeit nicht fest einplanen.']]]),
@@ -30,7 +33,7 @@ export const groundsTasks = [
     ['Mitnehmen',['10–12 Brötchen','Veganer Käse','Veganer Aufschnitt','Margarine / Aufstrich','Bananen','Äpfel','10–15 Müsliriegel','Mindestens ca. 12 Liter Wasser','Vorhandene Elektrolytmischung','Optional Softdrinks']],
     ['Mittag und Sonntag',['Pizza bestellen: ca. 4 größere Pizzen für fünf körperlich arbeitende Personen','Sonntag Reste / frische Brötchen; bei erneut vollem Arbeitstag wieder einfache Verpflegung organisieren','Späteres gemeinsames Dankeschön-Essen getrennt von dieser Arbeitsverpflegung planen.']]]),
   task('first_cut','Erster großer Grünschnitt','Oktober 2026','Komplettes Wochenende · 4–5 Personen',[
-    ['Ziel',['Hauptarbeit möglichst am Samstag schaffen; noch keine perfekte Eventfläche herstellen','Hauptfläche wieder sichtbar und Gelände begehbar machen','Wichtige Wege freilegen','Brombeer- und Gestrüppbewuchs massiv reduzieren','Boden und Geländeform sichtbar machen','Große Bäume und relevante Gehölze freilegen','Mögliche Eventflächen erkennen','Grundlage für Vermessung und 3D-Modell schaffen','Natürliche Wald- und Randvegetation möglichst erhalten, wenn gestalterisch bzw. atmosphärisch sinnvoll']]]),
+    ['Meilenstein',['Ersten Arbeitseinsatz abschließen und Ergebnis dokumentieren; Ziele, Tagesablauf und Einzelaufgaben stehen im Bereich Grünschnitt.']]],'prio-1',{checklistVersion:'v2_'}),
   task('saturday','Grünschnitt Samstag','Samstag des Grünschnitt-Wochenendes','Hauptarbeit',[
     ['Samstagmorgen · Abholung',['AS 901 Schlegelmäher und zwei Freischneider bei Schwamborn abholen; danach zum Gelände fahren']],
     ['08:30 · Gemeinsamer Geländerundgang',['Vor Maschinenbetrieb auf Metallteile, Draht, größere Steine, Löcher, Baumstümpfe, Müll und sonstige Gefahren prüfen','Gefahrenstellen markieren']],

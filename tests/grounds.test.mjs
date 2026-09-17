@@ -25,4 +25,10 @@ test('Ground tasks are distributed by their actual dates without changing existi
  assert.deepEqual(phases.map(p=>p.categories.find(c=>c.groundsPlan).tasks.length),[13,3,2,1]);
  assert.equal(groundsTasks.length,19);assert.equal(new Set(groundsTasks.map(t=>t.id)).size,19);
  for(const task of groundsTasks){const ids=task.sections.flatMap(section=>section.items.map(item=>item.id));assert.equal(new Set(ids).size,ids.length);}
+ const milestone=groundsTasks.find(task=>task.id==='grounds_first_cut');
+ assert.equal(milestone.sections.flatMap(section=>section.items).length,1);
+ assert.ok(milestone.sections[0].items[0].id.startsWith('v2_'));
+ const friday=groundsTasks.find(task=>task.id==='grounds_friday');
+ assert.ok(friday.sections[0].items.every(item=>item.id.startsWith('v2_')));
+ assert.ok(!friday.sections[0].items.some(item=>/Gewebeplanen|Brötchen|Anhänger.*bestätigen/.test(item.text)));
 });
