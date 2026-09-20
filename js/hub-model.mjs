@@ -1,7 +1,7 @@
 // Read-only projections. Existing Firebase keys and records remain authoritative.
 export const EVENT_DATE = '2027-05-29';
 export const CAP = 5000;
-export const completeAsset = row => ['Vorhanden', 'Gekauft', 'Erledigt'].includes(row.status);
+export const completeAsset = row => ['Vorhanden', 'Gekauft', 'Erledigt', 'Geklärt'].includes(row.status);
 export const doneTask = row => row.done === true || row.status === 'done';
 export const records = data => Object.entries(data || {}).filter(([, row]) => row && typeof row === 'object').map(([key, row]) => ({...row, key}));
 export const activeAssets = data => records(data).filter(row => !row.archived && row.status !== 'Fallback' && row.status !== 'Optional' && row.budgetClass !== 'optional' && row.key !== 'spirit' && !/vendera|mittelalter-zelt.*baldachin/i.test([row.item, row.source].join(' ')));

@@ -1,4 +1,4 @@
-export const PLAN_VERSION='2026-09-17-food-plan-v10';
+export const PLAN_VERSION='2026-09-20-grounds-plan-v11';
 const core=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Geplant',budgetClass:'core',...extra});
 const optional=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Optional',budgetClass:'optional',...extra});
 
@@ -6,8 +6,8 @@ export const CURRENT_ASSETS={
   baldachin_kauf:core('Zelt & Pavillon','Eigener Baldachin 6×6 m inkl. Holzgestänge',600,{actual:600,type:'Kaufen',status:'Gekauft',qty:'1 vollständiges Set',source:'Eigenbestand',next:'Vollständigkeit, trockene Lagerung und Transport prüfen',note:'Gewählte Lösung und zentraler Atmosphärenpunkt. Kein zusätzliches Spritgeld eingeplant.'}),
   grounds_sanitary:core('Toilette','Toilettenwagen',500,{type:'Mieten',status:'Zu reservieren',qty:'1',next:'Verfügbarkeit und Lieferbedingungen prüfen, dann sechs bis vier Monate vorher reservieren',note:'Notwendige Sanitärlösung für das Fest.'}),
   grounds_dixi:core('Toilette','Vorhandenes Dixi selbst reinigen',25,{type:'Verbrauch',status:'Zu kaufen',qty:'Reinigungsmaterial und Handseife',next:'Zustand prüfen und Material beschaffen',note:'Auspumpen nur später als offene Bedarfsentscheidung; keine feste Ausgabe.'}),
-  grounds_machines:core('Gelände & Grünschnitt','Grünschnitt, Maschinen, Transport und Kraftstoff',550,{type:'Mieten',status:'Zu reservieren'}),
-  grounds_shopping:core('Gelände & Grünschnitt','Baumarkt, Schutzkleidung und Verbrauchsmaterial',180,{type:'Verbrauch',status:'Zu kaufen'}),
+  grounds_machines:core('Gelände & Grünschnitt','Grünschnitt · Maschinenmiete Schwamborn',500,{type:'Mieten',status:'Zugesagt / Bestätigung ausstehend',source:'Schwamborn Kommunal-, Land- und Gartentechnik GmbH',next:'Gegenbestätigung und Mietzeitraum von Schwamborn bestätigen lassen',note:'Angebotszusage per E-Mail versendet. Angebot rund 496 EUR brutto; Planwert pauschal 500 EUR. Gegenbestätigung ausstehend.'}),
+  grounds_shopping:core('Gelände & Grünschnitt','Grünschnitt · Baumarkt / Rest-PSA / Verbrauch',150,{type:'Verbrauch',status:'Geplant',note:'Helfer meldeten keinen zusätzlichen Bedarf. Nur robuste Leder-/Dornenhandschuhe und tatsächlich fehlendes Verbrauchsmaterial kaufen.'}),
   grounds_food:core('Gelände & Grünschnitt','Helferverpflegung',100,{type:'Verbrauch',status:'Zu kaufen'}),
   pfosten:core('Gelände','Pfosten und sichtbare Geländeabgrenzung',45,{type:'Kaufen',status:'Zu kaufen',note:'Notwendige Immersions- und Wegeposition.'}),
   reparaturkoffer:core('Logistik','Aufbau-, Reparatur- und Befestigungsmaterial',60,{type:'Kaufen',status:'Zu kaufen'}),

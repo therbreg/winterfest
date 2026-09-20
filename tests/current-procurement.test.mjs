@@ -62,6 +62,6 @@ test('Procurement migration writes individual records and leaves the version mar
 });
 
 test('Current totals include the revised food plan while keeping the photo pillory optional',()=>{
- assert.equal(coreTotal(),3765);
+ assert.equal(coreTotal(),3685);
  assert.equal(optionalTotal(),205);
 });

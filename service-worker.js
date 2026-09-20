@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "winterfest-app-";
-const CACHE_NAME = `${CACHE_PREFIX}v16`;
+const CACHE_NAME = `${CACHE_PREFIX}v17`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,9 +9,10 @@ const APP_SHELL = [
   "./pwa.css",
   "./pwa.js",
   "./icons/icon.svg",
-  "./icons/app-icon-180-v2.png",
-  "./icons/app-icon-192-v2.png",
-  "./icons/app-icon-512-v2.png",
+  "./icons/app-icon-180-v3.png",
+  "./icons/app-icon-192-v3.png",
+  "./icons/app-icon-512-v3.png",
+  "./icons/app-icon-maskable-512-v3.png",
   "./icons/winterfest-logo-2026.png",
   "./js/current-procurement-plan.mjs",
   "./styles/codex.css",

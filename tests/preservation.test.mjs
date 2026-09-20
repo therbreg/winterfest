@@ -34,5 +34,5 @@ test('App identity and installation logic survive icon replacement',()=>{
  const old=JSON.parse(before('manifest.webmanifest')),current=JSON.parse(after('manifest.webmanifest'));
  for(const key of Object.keys(old).filter(key=>key!=='icons'))assert.deepEqual(current[key],old[key]);
  for(const icon of current.icons){const bytes=readFileSync(icon.src);const size=Number(icon.sizes.split('x')[0]);assert.equal(bytes.readUInt32BE(16),size);assert.equal(bytes.readUInt32BE(20),size);}
- assert.equal(after('pwa.js').replaceAll('./icons/app-icon-192.png','./icons/icon.svg'),before('pwa.js'));
+ assert.equal(after('pwa.js').replaceAll('./icons/app-icon-192-v3.png','./icons/icon.svg'),before('pwa.js').replaceAll('./icons/app-icon-192.png','./icons/icon.svg'));
 });
