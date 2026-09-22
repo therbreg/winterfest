@@ -62,7 +62,7 @@ test('Procurement migration writes individual records and leaves the version mar
 });
 
 test('Current totals include the revised food plan while keeping the photo pillory optional',()=>{
- assert.equal(coreTotal(),3680);
+ assert.equal(coreTotal(),3766);
  assert.equal(optionalTotal(),205);
 });
 
@@ -78,4 +78,17 @@ test('Previously planned potion bottles become one paid 45 EUR item, with no ope
  assert.equal(writes['budget/flaschenBudget'].planned,45);
  assert.equal(writes['shopping/flaschenShop'].bought,true);
  assert.equal(writes['budget/plan_zauberflaschen'],undefined);
+});
+
+test('LED lanterns and tealights are one paid 86 EUR item without a purchase task',async()=>{
+ const existing={assetMeta:{},assets:{laternen:{planned:0,actual:0,status:'Vorhanden',budgetKey:'lightBudget'}},budget:{lightBudget:{planned:0,actual:0}},shopping:{}};
+ const at=path=>path.split('/').filter(Boolean).reduce((value,key)=>value?.[key],existing);
+ const writes={};
+ await ensureCurrentProcurementPlan({get:async path=>({val:()=>at(path)}),ref:(_db,path)=>path,update:async(path,value)=>{writes[path]=value;},db:{},dbPath:path=>path});
+ assert.equal(writes['assets/laternen'].planned,86);
+ assert.equal(writes['assets/laternen'].actual,86);
+ assert.equal(writes['assets/laternen'].status,'Gekauft');
+ assert.equal(writes['budget/lightBudget'].planned,86);
+ assert.equal(writes['budget/lightBudget'].actual,86);
+ assert.equal(writes['shopping/plan_laternen'],undefined);
 });

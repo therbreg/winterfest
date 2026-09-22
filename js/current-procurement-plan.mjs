@@ -1,4 +1,4 @@
-export const PLAN_VERSION='2026-09-22-alchemie-flaschen-v12';
+export const PLAN_VERSION='2026-09-22-led-deko-v13';
 const core=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Geplant',budgetClass:'core',...extra});
 const optional=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Optional',budgetClass:'optional',...extra});
 
@@ -40,7 +40,7 @@ export const CURRENT_ASSETS={
   druckmaterial:core('Programm','Programm- und Druckmaterial',40,{type:'Verbrauch',status:'Geplant',qty:'nach finalem Ablauf- und LARP-Plan',next:'Einladungen, Lage- und Ablaufpläne sowie benötigtes Quest- und Kartenmaterial festlegen',note:'Papier, Karton, Druck und nötige Laminierung für Einladungen, Ablauf-/Lagepläne, Questzettel und Schicksalskarten. Gelände-Beschilderung ist separat kalkuliert.'}),
   eingangstor:core('Deko','Modulares Eingangstor und ergänzendes Baumaterial',60,{type:'DIY',status:'Geplant',qty:'Fehlbedarf nach Holz-Inventur',next:'Vorhandenes Holz prüfen, Eingang vermessen und Konstruktion festlegen',note:'Nur fehlende Latten, Farbe, Beschläge und sichere Verankerung kaufen. Pfosten und allgemeines Befestigungsmaterial bleiben separat kalkuliert.'}),
   beschaffungsreserve:core('Reserve','Allgemeine notwendige Beschaffungsreserve',50,{type:'Entscheidung',status:'Geplant',qty:'Budgetpuffer',next:'Nur bei zwingenden kurzfristigen Fehl- oder Ersatzkäufen freigeben',note:'Kein Einkaufsartikel und keine frei verfügbare Deko-Reserve. Ausschließlich für notwendige unvorhergesehene Fehlteile.'}),
-  laternen:core('Beleuchtung','Acht vorhandene LED-Laternen',0,{type:'Vorhanden',status:'Vorhanden',qty:'8'}),
+  laternen:core('Beleuchtung','LED-Laternengehäuse und LED-Teelichter',86,{actual:86,type:'Vorhanden',status:'Gekauft',qty:'8 Laternen; LED-Teelichter vorhanden',note:'Zusammen für 86 EUR gekauft und vollständig dem Geburtstagsprojekt zugerechnet. Gemeinsamer Kaufpreis ohne Aufteilung auf Gehäuse und Teelichter. Der separate Beleuchtungsposten von 100 EUR betrifft noch fehlendes Funktions- und Zusatzlicht.'}),
   oa_feuerkoerbe:core('Beleuchtung','Feuerkörbe',20,{type:'Mieten',status:'Später bestätigen'}),
   banner_wimpel:core('Deko','Eigenbau-Wimpelketten und Banner',60,{type:'DIY',status:'Zu basteln'}),
   verbrauchsmaterial:core('Verbrauchsmaterial','Servietten, Küchenrolle und Müllmaterial',25,{type:'Verbrauch',status:'Zu kaufen',note:'Große Müllbeutel sind enthalten und werden nicht doppelt berechnet.'}),
@@ -94,14 +94,14 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
   for(const [key,spec] of Object.entries(CURRENT_ASSETS)){
     const {budgetClass:assetBudgetClass,...assetSpec}=spec;
     const old=existing[key]||{}, budgetKey=old.budgetKey||`plan_${key}`, needsShopping=spec.status!=='Vorhanden'&&!['DIY','Entscheidung'].includes(spec.type);
-    const shoppingKey=needsShopping?(old.shoppingKey||`plan_${key}`):old.shoppingKey;
-    const assetActual=key==='baldachin_kauf'?600:key==='zauberflaschen'?45:preservedNumber(old.actual,spec.actual||0);
-    const oldBudget=budgets[budgetKey]||{}, budgetActual=key==='baldachin_kauf'?600:key==='zauberflaschen'?45:preservedNumber(oldBudget.actual,assetActual);
+    const shoppingKey=needsShopping&&key!=='laternen'?(old.shoppingKey||`plan_${key}`):old.shoppingKey;
+    const assetActual=key==='baldachin_kauf'?600:key==='zauberflaschen'?45:key==='laternen'?86:preservedNumber(old.actual,spec.actual||0);
+    const oldBudget=budgets[budgetKey]||{}, budgetActual=key==='baldachin_kauf'?600:key==='zauberflaschen'?45:key==='laternen'?86:preservedNumber(oldBudget.actual,assetActual);
     const oldShopping=shopping[shoppingKey]||{};
     const foodKey=['essen_gesamt','grillwerkzeug','food_drinks','food_tools','food_consumables'].includes(key);
-    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:foodKey||key==='zauberflaschen'?spec.note:limitedNote(old.note,spec.note,700),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
-    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:foodKey||key==='zauberflaschen'?spec.note:limitedNote(oldBudget.note,spec.note,300),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
-    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:foodKey||key==='zauberflaschen'?spec.note:limitedNote(oldShopping.note,spec.note||spec.next,300),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'||key==='zauberflaschen'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:foodKey||key==='zauberflaschen'||key==='laternen'?spec.note:limitedNote(old.note,spec.note,700),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:foodKey||key==='zauberflaschen'||key==='laternen'?spec.note:limitedNote(oldBudget.note,spec.note,300),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:foodKey||key==='zauberflaschen'||key==='laternen'?spec.note:limitedNote(oldShopping.note,spec.note||spec.next,300),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'||key==='zauberflaschen'||key==='laternen'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
   }
   for(const [key,row] of Object.entries(existing))if(supersededKeys.has(key)||retired.test([key,row.item,row.source,row.note].join(' '))){patch[`assets/${key}/archived`]=true;patch[`assets/${key}/status`]='Verworfen';if(row.budgetKey)patch[`budget/${row.budgetKey}/archived`]=true;if(row.shoppingKey)patch[`shopping/${row.shoppingKey}/archived`]=true;}
   for(const [key,row] of Object.entries(budgets))if(retired.test([key,row.title,row.category,row.note].join(' ')))patch[`budget/${key}/archived`]=true;
