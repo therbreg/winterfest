@@ -24,7 +24,7 @@
 .toplink{color:var(--gold)}.toplink:hover,.btn:hover{background:var(--gold);color:var(--ink)}.sync{font-family:'JetBrains Mono',monospace;font-size:.56rem;color:#ffffff77}.sync.ok{color:#8fc78f}.sync.err{color:#e59b8a}
 .wrap{max-width:1260px;margin:0 auto;padding:1.2rem 1rem 5rem}.hero{background:var(--ink);color:var(--parchment);border:1px solid var(--gold);padding:1.25rem 1.35rem;margin-bottom:1rem}
 .eyebrow{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:.6rem;letter-spacing:.18em;text-transform:uppercase}.hero h1{font-family:'Cinzel',serif;font-size:clamp(1.45rem,3vw,2.15rem);margin:.15rem 0 .3rem}.hero p{margin:0;color:#ffffffaa;max-width:900px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:.5rem;margin:1rem 0}.stat{background:var(--parch2);border:1px solid var(--rule);padding:.72rem;text-align:center}.stat strong{display:block;color:var(--ember);font-family:'Cinzel',serif;font-size:1.04rem}.stat span{display:block;color:var(--ash);font-family:'JetBrains Mono',monospace;font-size:.52rem;text-transform:uppercase;letter-spacing:.06em}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:.5rem;margin:1rem 0}.stat{background:var(--parch2);border:1px solid var(--rule);padding:.72rem;text-align:center}.stat strong{display:block;color:var(--ember);font-family:'Cinzel',serif;font-size:1.04rem}.stat span{display:block;color:var(--ash);font-family:'JetBrains Mono',monospace;font-size:.52rem;text-transform:uppercase;letter-spacing:.06em}.stat-action{width:100%;font:inherit;color:inherit;cursor:pointer}.stat-action:hover,.stat-action:focus-visible,.stat-action.active{border-color:var(--ember);background:#8b3a0f0d;outline:none}.stat-action:focus-visible{box-shadow:0 0 0 2px #8b3a0f33}.stat-action span::after{content:" ↓"}.stat-action.active span::after{content:" · Filter aktiv"}
 .toolbar,.addbox{background:var(--parch2);border:1px solid var(--rule);padding:.75rem;margin-bottom:.8rem}.toolbar{display:grid;grid-template-columns:1.5fr repeat(3,.8fr) auto;gap:.45rem}
 .toolbar input,.toolbar select,.addgrid input,.addgrid select,.addgrid textarea,.editgrid input,.editgrid select,.editgrid textarea{width:100%;background:var(--parchment);border:1px solid var(--rule);color:var(--ink);padding:.5rem .55rem;outline:none;border-radius:2px;font:inherit}
 .toolbar input:focus,.toolbar select:focus,.addgrid input:focus,.addgrid select:focus,.addgrid textarea:focus,.editgrid input:focus,.editgrid select:focus,.editgrid textarea:focus{border-color:var(--gold)}
@@ -1210,6 +1210,8 @@ function card(i){
   </article>`;
 }
 
+let quickFilter="";
+
 function render(){
   const rows=Object.entries(assets).filter(([key,v])=>{
     const text=[v?.item,v?.source].join(" ").toLowerCase();
@@ -1251,13 +1253,13 @@ function render(){
     i=>!COMPLETE.has(i.status)&&!OPTIONAL.has(i.status)
   ).length;
 
-  const unpriced=activeRows.filter(
-    i=>
+  const isUnpriced=i=>
       !COMPLETE.has(i.status) &&
       !OPTIONAL.has(i.status) &&
       num(i.planned)===0 &&
-      !["Entscheidung","DIY"].includes(i.type)
-  ).length;
+      !["Entscheidung","DIY"].includes(i.type);
+
+  const unpriced=activeRows.filter(isUnpriced).length;
 
   const fallbacks=rows.filter(
     i=>i.status==="Fallback"
@@ -1310,10 +1312,10 @@ function render(){
       <span>Puffer bis Obergrenze</span>
     </div>
 
-    <div class="stat">
+    <button class="stat stat-action ${quickFilter==="unpriced"?"active":""}" type="button" data-quick-filter="unpriced" aria-pressed="${quickFilter==="unpriced"}" title="Posten ohne eingetragenen Planpreis anzeigen">
       <strong>${unpriced}</strong>
       <span>Kosten noch offen</span>
-    </div>
+    </button>
 
     <div class="stat">
       <strong>${fallbacks}</strong>
@@ -1331,6 +1333,7 @@ function render(){
   const ft=document.getElementById("filterType").value;
 
   const filtered=rows.filter(i=>
+    (!quickFilter||quickFilter!=="unpriced"||isUnpriced(i)) &&
     (!fa||i.area===fa) &&
     (!fs||i.status===fs) &&
     (!ft||i.type===ft) &&
@@ -1511,7 +1514,16 @@ document.getElementById("add").onclick=()=>{
 };
 
 ["search","filterArea","filterStatus","filterType"].forEach(id=>document.getElementById(id).addEventListener(id==="search"?"input":"change",render));
-document.getElementById("reset").onclick=()=>{["search","filterArea","filterStatus","filterType"].forEach(id=>document.getElementById(id).value="");render();};
+document.getElementById("stats").addEventListener("click",event=>{
+  const button=event.target.closest("[data-quick-filter]");
+  if(!button)return;
+  const requested=button.dataset.quickFilter;
+  quickFilter=quickFilter===requested?"":requested;
+  ["search","filterArea","filterStatus","filterType"].forEach(id=>document.getElementById(id).value="");
+  render();
+  document.getElementById("groups").scrollIntoView({behavior:"smooth",block:"start"});
+});
+document.getElementById("reset").onclick=()=>{quickFilter="";["search","filterArea","filterStatus","filterType"].forEach(id=>document.getElementById(id).value="");render();};
 
 onValue(ref(db,dbPath("assets")),s=>{assets=s.val()||{};render();sync("Firebase verbunden","ok");},e=>sync("Firebase-Fehler: "+e.message,"err"));
 onValue(ref(db,dbPath("budget")),s=>{budget=s.val()||{};render();});

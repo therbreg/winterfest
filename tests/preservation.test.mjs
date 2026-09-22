@@ -23,6 +23,12 @@ test('Existing form controls and event root remain available',()=>{
   assert.ok(after(file).includes('events/${EVENT_ID}/'));
  }
 });
+test('Open-cost summary is an interactive filter',()=>{
+ const source=after('ausstattung.html');
+ assert.match(source,/data-quick-filter="unpriced"/);
+ assert.match(source,/quickFilter===requested\?"":requested/);
+ assert.match(source,/!quickFilter\|\|quickFilter!=="unpriced"\|\|isUnpriced\(i\)/);
+});
 test('Procurement workflow keeps its manual implementation',()=>{
  const file='.github/workflows/sync-procurement.yml';assert.equal(after(file).slice(after(file).indexOf('permissions:')),before(file).slice(before(file).indexOf('permissions:')));assert.ok(!/^\s+push:/m.test(after(file)));
 });
