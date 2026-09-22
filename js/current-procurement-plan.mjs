@@ -1,4 +1,4 @@
-export const PLAN_VERSION='2026-09-20-grounds-plan-v11';
+export const PLAN_VERSION='2026-09-22-alchemie-flaschen-v12';
 const core=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Geplant',budgetClass:'core',...extra});
 const optional=(area,item,planned,extra={})=>({area,item,planned,actual:0,status:'Optional',budgetClass:'optional',...extra});
 
@@ -32,7 +32,7 @@ export const CURRENT_ASSETS={
   food_tools:core('Verpflegung','Fehlendes Küchenequipment',45,{type:'Kaufen',note:'Nur tatsächliche Fehlteile nach Inventur; Plananteil im Rahmen 35–85 EUR für Equipment und Verbrauch.'}),
   food_consumables:core('Verpflegung','Küchenverbrauchsmaterial',20,{type:'Verbrauch',note:'Küchenpapier, Müllbeutel und weitere Fehlteile; mit bestehendem Verbrauchsmaterialposten abgleichen.'}),
   alchemie:core('Alchemistenstation','Aufbau und zwei Getränkespender',40,{type:'DIY',qty:'2 Spender',note:'Nur roter Hibiskustrank und blauer Butterfly-Pea-Trank. Alkohol, Bier und Wein gehören nicht zur Alchemistenstation.'}),
-  zauberflaschen:core('Alchemistenstation','Kleine runde Heiltrankfläschchen mit Korkverschluss',50,{type:'Kaufen',status:'Zu kaufen',qty:'20',note:'Nur einzelne dekorative Etiketten, keine vollständige Etikettierung.'}),
+  zauberflaschen:core('Alchemistenstation','Glasflaschen für die Alchemistenstation',45,{actual:45,type:'Kaufen',status:'Gekauft',qty:'bereits gekauft',note:'Ausstattung und Dekoration · Alchemistenstation. Vollständig mit 45 EUR dem Geburtstagsprojekt zugerechnet; für weitere Fantasy-Veranstaltungen wiederverwendbar. Kein weiterer Flaschenkauf eingeplant.'}),
   alchemie_zutaten:core('Alchemistenstation','Zutaten für Hibiskus- und Butterfly-Pea-Trank',35,{type:'Verbrauch',status:'Zu kaufen',note:'Planbereich 30–40 EUR für zwei farbige alkoholfreie Getränke.'}),
   getraenke_gesamt:core('Getränke','Bier, Wein, abgefülltes Wasser und alkoholfreie Getränke',185,{type:'Verbrauch',status:'Zu kaufen',note:'Separate Getränkeversorgung unter dem zweiten Pavillon; Planbereich 180–190 EUR.'}),
   beleuchtung:core('Beleuchtung','Funktionale Beleuchtung und zusätzliche warme LED-/Fackeloptik',100,{type:'Kaufen',note:'Sicherheits- und Arbeitslicht getrennt von warmer Atmosphäre planen.'}),
@@ -95,13 +95,13 @@ export async function ensureCurrentProcurementPlan({get,ref,update,db,dbPath}){
     const {budgetClass:assetBudgetClass,...assetSpec}=spec;
     const old=existing[key]||{}, budgetKey=old.budgetKey||`plan_${key}`, needsShopping=spec.status!=='Vorhanden'&&!['DIY','Entscheidung'].includes(spec.type);
     const shoppingKey=needsShopping?(old.shoppingKey||`plan_${key}`):old.shoppingKey;
-    const assetActual=key==='baldachin_kauf'?600:preservedNumber(old.actual,spec.actual||0);
-    const oldBudget=budgets[budgetKey]||{}, budgetActual=key==='baldachin_kauf'?600:preservedNumber(oldBudget.actual,assetActual);
+    const assetActual=key==='baldachin_kauf'?600:key==='zauberflaschen'?45:preservedNumber(old.actual,spec.actual||0);
+    const oldBudget=budgets[budgetKey]||{}, budgetActual=key==='baldachin_kauf'?600:key==='zauberflaschen'?45:preservedNumber(oldBudget.actual,assetActual);
     const oldShopping=shopping[shoppingKey]||{};
     const foodKey=['essen_gesamt','grillwerkzeug','food_drinks','food_tools','food_consumables'].includes(key);
-    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:foodKey?spec.note:limitedNote(old.note,spec.note,700),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
-    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:foodKey?spec.note:limitedNote(oldBudget.note,spec.note,300),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
-    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:foodKey?spec.note:limitedNote(oldShopping.note,spec.note||spec.next,300),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    patch[`assets/${key}`]={...old,...assetSpec,actual:assetActual,note:foodKey||key==='zauberflaschen'?spec.note:limitedNote(old.note,spec.note,700),budgetKey,...(shoppingKey?{shoppingKey}:{}),updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    patch[`budget/${budgetKey}`]={...oldBudget,title:spec.item,category:spec.area,planned:spec.planned,actual:budgetActual,budgetClass:spec.budgetClass,note:foodKey||key==='zauberflaschen'?spec.note:limitedNote(oldBudget.note,spec.note,300),archived:false,by:oldBudget.by||'System',ts:oldBudget.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
+    if(shoppingKey)patch[`shopping/${shoppingKey}`]={...oldShopping,item:spec.item,qty:spec.qty||oldShopping.qty||'Menge gemäß Planung',category:spec.area,responsible:oldShopping.responsible||'',note:foodKey||key==='zauberflaschen'?spec.note:limitedNote(oldShopping.note,spec.note||spec.next,300),budgetKey,budgetClass:spec.budgetClass,bought:key==='baldachin_kauf'||key==='zauberflaschen'?true:(typeof oldShopping.bought==='boolean'?oldShopping.bought:['Gekauft','Erledigt'].includes(spec.status)),archived:false,by:oldShopping.by||'System',ts:oldShopping.ts||now,updatedAt:now,updatedBy:'Verpflegungsplan 17.09.2026'};
   }
   for(const [key,row] of Object.entries(existing))if(supersededKeys.has(key)||retired.test([key,row.item,row.source,row.note].join(' '))){patch[`assets/${key}/archived`]=true;patch[`assets/${key}/status`]='Verworfen';if(row.budgetKey)patch[`budget/${row.budgetKey}/archived`]=true;if(row.shoppingKey)patch[`shopping/${row.shoppingKey}/archived`]=true;}
   for(const [key,row] of Object.entries(budgets))if(retired.test([key,row.title,row.category,row.note].join(' ')))patch[`budget/${key}/archived`]=true;

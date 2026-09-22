@@ -62,6 +62,20 @@ test('Procurement migration writes individual records and leaves the version mar
 });
 
 test('Current totals include the revised food plan while keeping the photo pillory optional',()=>{
- assert.equal(coreTotal(),3685);
+ assert.equal(coreTotal(),3680);
  assert.equal(optionalTotal(),205);
+});
+
+test('Previously planned potion bottles become one paid 45 EUR item, with no open purchase',async()=>{
+ const existing={assetMeta:{},assets:{zauberflaschen:{planned:50,actual:0,status:'Zu kaufen',budgetKey:'flaschenBudget',shoppingKey:'flaschenShop'}},budget:{flaschenBudget:{planned:50,actual:0}},shopping:{flaschenShop:{bought:false}}};
+ const at=path=>path.split('/').filter(Boolean).reduce((value,key)=>value?.[key],existing);
+ const writes={};
+ await ensureCurrentProcurementPlan({get:async path=>({val:()=>at(path)}),ref:(_db,path)=>path,update:async(path,value)=>{writes[path]=value;},db:{},dbPath:path=>path});
+ assert.equal(writes['assets/zauberflaschen'].actual,45);
+ assert.equal(writes['assets/zauberflaschen'].planned,45);
+ assert.equal(writes['assets/zauberflaschen'].status,'Gekauft');
+ assert.equal(writes['budget/flaschenBudget'].actual,45);
+ assert.equal(writes['budget/flaschenBudget'].planned,45);
+ assert.equal(writes['shopping/flaschenShop'].bought,true);
+ assert.equal(writes['budget/plan_zauberflaschen'],undefined);
 });
