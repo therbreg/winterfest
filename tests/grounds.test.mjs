@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {groundsTasks,groundsAssets,groundsSeedPatch,GROUNDS_VERSION,integrateGrounds} from '../js/grounds-plan.mjs';
+import {groundsTasks,groundsAssets,groundsSeedPatch,GROUNDS_VERSION,integrateGrounds,firstCutRange} from '../js/grounds-plan.mjs';
 import {budgetSummary} from '../js/hub-model.mjs';
 test('Grünschnitt is accepted by the main view switcher',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
@@ -13,19 +13,21 @@ test('Grounds initialization preserves existing rows, is repeatable, and never r
  const old={grounds_machines:{planned:470,actual:430,note:'Angebot bestätigt',status:'Reserviert',extra:true},other:{planned:50}};
  const before=structuredClone(old),patch=groundsSeedPatch(old,null);
  assert.deepEqual(old,before);assert.equal(patch['assets/grounds_machines'],undefined);
- assert.equal(patch['assets/grounds_machines/planned'],500);
- assert.equal(patch['assets/grounds_machines/actual'],undefined);
- assert.equal(patch['assets/grounds_machines/status'],undefined);
+ assert.equal(patch['assets/grounds_machines/planned'],300);
+ assert.equal(patch['assets/grounds_machines/actual'],0);
+ assert.equal(patch['assets/grounds_machines/status'],'Reservierung wird angepasst');
+ assert.equal(patch['assets/grounds_motorsenses'].actual,364.24);
  assert.equal(patch['assets/grounds_fuel'].planned,50);
  assert.equal(patch['assets/grounds_transport'].planned,0);
- assert.equal(groundsSeedPatch({grounds_machines:{status:'Angebot vorhanden'}},null)['assets/grounds_machines/status'],'Zugesagt / Bestätigung ausstehend');
+ assert.equal(groundsSeedPatch({grounds_machines:{status:'Angebot vorhanden'}},null)['assets/grounds_machines/status'],'Reservierung wird angepasst');
  assert.deepEqual(groundsSeedPatch({},GROUNDS_VERSION),{});
 });
 test('Budget counts single necessary costs; frames are not costs',()=>{
  const summary=budgetSummary(groundsAssets);
- assert.equal(summary.planned,1300);assert.equal(summary.actual,0);assert.equal(summary.unpriced,1);
+ assert.equal(summary.planned,1414.24);assert.equal(summary.actual,364.24);assert.equal(summary.unpriced,1);
  const cut=Object.entries(groundsAssets).filter(([key])=>!['grounds_sanitary','grounds_care'].includes(key)).map(([,row])=>row);
- assert.equal(cut.reduce((n,r)=>n+r.rangeMin,0),700);assert.equal(cut.reduce((n,r)=>n+r.rangeMax,0),800);
+ assert.equal(cut.reduce((n,r)=>n+r.rangeMin,0),814.24);assert.equal(cut.reduce((n,r)=>n+r.rangeMax,0),914.24);
+ assert.deepEqual(firstCutRange,{min:814.24,max:914.24});
  assert.equal(groundsAssets.grounds_sanitary.status,'Zu reservieren');
 });
 test('Ground tasks are distributed by their actual dates without changing existing categories',()=>{
@@ -49,4 +51,6 @@ test('Ground tasks are distributed by their actual dates without changing existi
  const saturday=groundsTasks.find(task=>task.id==='grounds_saturday');
  assert.ok(saturday.sections.flatMap(section=>section.items).some(item=>item.text.includes('Einfahrt freischneiden')));
  assert.ok(saturday.sections.flatMap(section=>section.items).some(item=>/08:00 Uhr AS 901/.test(item.text)));
+ assert.ok(saturday.sections.flatMap(section=>section.items).some(item=>/eigenen Einhell-Motorsensen/.test(item.text)));
+ assert.equal(groundsTasks.find(task=>task.id==='grounds_monday').text,'Schlegelmäher zurückgeben');
 });

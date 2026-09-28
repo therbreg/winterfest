@@ -66,7 +66,7 @@ const server=http.createServer((req,res)=>{let p=decodeURIComponent(new URL(req.
  await toolTask.locator('[data-check-id="s0_i0"]').check();
  await page.waitForFunction(()=>window.__fixture.tasks.grounds_tools.checklist.s0_i0===true);
  await page.evaluate(()=>APP.switchView('budget'));
- assert.ok((await page.locator('#groundsBudgetFrame').innerText()).includes('1.355'));
+ assert.ok((await page.locator('#groundsBudgetFrame').innerText()).includes('914,24'));
  const machineCard=page.locator('.budget-card').filter({hasText:'Grünschnitt · Maschinen / Transport / Kraftstoff'});
  await machineCard.locator('summary').click();
  await machineCard.locator('input').nth(1).fill('480');

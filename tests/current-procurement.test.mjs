@@ -61,9 +61,38 @@ test('Procurement migration writes individual records and leaves the version mar
  assert.equal(calls.some(path=>path.startsWith('assetMeta/')),false);
 });
 
-test('Current totals include the revised food plan while keeping the photo pillory optional',()=>{
- assert.equal(coreTotal(),3766);
+test('Current totals include the revised food and grounds plans while keeping the photo pillory optional',()=>{
+ assert.equal(coreTotal(),3880.24);
  assert.equal(optionalTotal(),205);
+});
+
+test('Grounds procurement migration updates the rental and creates one paid motorsense purchase',async()=>{
+ const data={assetMeta:{},assets:{grounds_machines:{planned:500,actual:480,status:'Reserviert',budgetKey:'machineBudget',shoppingKey:'machineShop'},grounds_shopping:{planned:150,budgetKey:'materialBudget'}},budget:{machineBudget:{planned:500,actual:480},materialBudget:{planned:150,actual:0}},shopping:{machineShop:{bought:false}},decisions:{}};
+ const at=path=>path.split('/').filter(Boolean).reduce((value,key)=>value?.[key],data);
+ const writes={};
+ await ensureCurrentProcurementPlan({get:async path=>({val:()=>at(path)}),ref:(_db,path)=>path,update:async(path,value)=>{writes[path]=value;},db:{},dbPath:path=>path});
+ assert.equal(writes['assets/grounds_machines'].planned,300);
+ assert.equal(writes['assets/grounds_machines'].actual,0);
+ assert.equal(writes['budget/machineBudget'].planned,300);
+ assert.equal(writes['budget/machineBudget'].actual,0);
+ assert.equal(writes['assets/grounds_motorsenses'].actual,364.24);
+ assert.equal(writes['budget/plan_grounds_motorsenses'].actual,364.24);
+ assert.equal(writes['shopping/plan_grounds_motorsenses'].bought,true);
+ assert.equal(writes['assets/grounds_shopping'].planned,100);
+ assert.equal(writes['budget/materialBudget'].planned,100);
+ assert.equal(writes['budget/plan_grounds_machines'],undefined);
+});
+
+test('Motorsense migration preserves a later positive actual and reuses linked records',async()=>{
+ const data={assetMeta:{},assets:{grounds_motorsenses:{actual:327.82,budgetKey:'motorsenseBudget',shoppingKey:'motorsenseShop'}},budget:{motorsenseBudget:{actual:327.82}},shopping:{motorsenseShop:{bought:true}},decisions:{}};
+ const at=path=>path.split('/').filter(Boolean).reduce((value,key)=>value?.[key],data);
+ const writes={};
+ await ensureCurrentProcurementPlan({get:async path=>({val:()=>at(path)}),ref:(_db,path)=>path,update:async(path,value)=>{writes[path]=value;},db:{},dbPath:path=>path});
+ assert.equal(writes['assets/grounds_motorsenses'].actual,327.82);
+ assert.equal(writes['budget/motorsenseBudget'].actual,327.82);
+ assert.equal(writes['shopping/motorsenseShop'].bought,true);
+ assert.equal(writes['budget/plan_grounds_motorsenses'],undefined);
+ assert.equal(writes['shopping/plan_grounds_motorsenses'],undefined);
 });
 
 test('Previously planned potion bottles become one paid 45 EUR item, with no open purchase',async()=>{
